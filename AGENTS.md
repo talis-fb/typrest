@@ -60,24 +60,14 @@ templates/
 ```
 
 ### `schema.json` — formato
+A especificação oficial do schema encontra-se em:
 
-```json
-{
-  "fields": [
-    { "key": "name",     "type": "string",  "required": true  },
-    { "key": "amount",   "type": "number",  "required": true  },
-    { "key": "currency", "type": "enum",    "required": false,
-      "values": ["BRL", "USD"], "default": "BRL" },
-    { "key": "items",    "type": "array",   "required": true,
-      "item": { "type": "object", "fields": [
-        { "key": "label",  "type": "string", "required": true },
-        { "key": "value",  "type": "number", "required": true }
-      ]}}
-  ]
-}
-```
+- docs/schema-v1.md
 
-Tipos suportados: `string`, `number`, `boolean`, `enum`, `array`, `object`
+Sempre consulte este documento antes de implementar qualquer funcionalidade relacionada à validação.
+
+As implementações devem seguir rigorosamente a especificação.
+Não introduza novos campos ou altere o comportamento da DSL sem atualizar primeiro a especificação.
 
 ### Como o Typst recebe os dados
 

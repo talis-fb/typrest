@@ -5,6 +5,7 @@ Este arquivo existe para dar contexto à LLM sobre a API do Typst — não clona
 
 Fonte principal: https://typst.app/blog/2025/automated-generation/
 Repositório de exemplo: https://github.com/tfachmann/typst-as-library
+Repositório de exemplo 2: https://github.com/Relacibo/typst-as-lib
 
 ---
 

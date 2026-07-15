@@ -25,7 +25,7 @@ Adicionar uma entrada sempre que uma decisão não-óbvia for tomada.
 - Compila em milissegundos
 - Escrito em Rust — integração nativa sem overhead de FFI ou processo filho
 - Suporte nativo a JSON via `sys.inputs`
-- Crescimento rápido (2ª linguagem mais crescida no GitHub em 2025)
+- Crescimento rápido
 
 **Consequências:** A integração com a crate `typst` tem API não-trivial (projetada para o editor web). Reservar tempo extra na Fase 2 do roadmap.
 
@@ -93,6 +93,19 @@ Adicionar uma entrada sempre que uma decisão não-óbvia for tomada.
 **Por que sys.inputs:** Sem I/O de disco por render (exceto o PDF de saída), mais limpo, e o compilador Typst via crate suporta inputs em memória diretamente.
 
 **Consequência para o usuário:** Todo template deve começar com `#let data = json(bytes(sys.inputs.data))`. Documentar claramente no README e no boilerplate gerado pelo `papelon init`.
+
+---
+
+## DEC-006 — Nomes de template usam identificadores ASCII seguros
+
+**Data:** 2026-06
+**Status:** Aceita
+
+**Decisão:** `TemplateName` deve ser não vazio, começar com um caractere ASCII alfanumérico e conter apenas caracteres ASCII alfanuméricos, hífen (`-`) ou underscore (`_`).
+
+**Contexto:** O mesmo identificador será recebido em rotas HTTP e usado pelo `FilesystemResolver` para localizar diretórios. Aceitar separadores, segmentos relativos ou espaços criaria ambiguidades e risco de path traversal.
+
+**Consequências:** Nomes como `invoice`, `invoice-v2` e `invoice_v2` são válidos. Nomes como `_shared`, `../invoice`, `invoice/v2` e nomes com caracteres não ASCII são rejeitados na construção do tipo.
 
 ---
 

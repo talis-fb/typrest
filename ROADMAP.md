@@ -16,9 +16,9 @@ Critério de sucesso: `docker run` sobe o servidor, `curl POST /render/invoice` 
 
 **Objetivo:** workspace funcionando, tipos do domínio definidos, leitura de templates do filesystem.
 
-- [ ] Criar workspace Cargo com três crates: `papelon-core`, `papelon-server`, `papelon-cli`
+- [x] Criar workspace Cargo com três crates: `papelon-core`, `papelon-server`, `papelon-cli`
 - [ ] Definir tipos do domínio em `papelon-core`:
-  - [ ] `TemplateName` (newtype sobre String com validação)
+  - [x] `TemplateName` (newtype sobre String com validação)
   - [ ] `Schema` e `SchemaField` (parseados do schema.json)
   - [ ] `TemplateSource` (mapa de caminho → bytes)
   - [ ] `ResolvedTemplate` (TemplateSource + Schema)
