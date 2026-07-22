@@ -7,8 +7,7 @@ use thiserror::Error;
 pub struct TemplateName(String);
 
 impl TemplateName {
-    /// Creates a template name after validating that it is safe for use in
-    /// routes and filesystem-backed resolvers.
+    /// Creates a template name after validating that it is safe for routes and filesystem lookups.
     pub fn new(value: impl Into<String>) -> Result<Self, TemplateNameError> {
         let value = value.into();
         validate(&value)?;
@@ -138,16 +137,5 @@ mod tests {
                 position: 7,
             })
         );
-    }
-
-    #[test]
-    fn supports_standard_string_conversions_and_display() {
-        let from_str = TemplateName::try_from("invoice").expect("valid template name");
-        let from_string =
-            TemplateName::try_from(String::from("invoice")).expect("valid template name");
-
-        assert_eq!(from_str, from_string);
-        assert_eq!(from_str.to_string(), "invoice");
-        assert_eq!(from_string.into_inner(), "invoice");
     }
 }

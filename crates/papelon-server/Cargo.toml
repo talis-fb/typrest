@@ -5,3 +5,11 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+async-trait.workspace = true
+bytes.workspace = true
+papelon-core = { path = "../papelon-core" }
+thiserror.workspace = true
+
+[dev-dependencies]
+futures-executor.workspace = true
+tempfile.workspace = true
