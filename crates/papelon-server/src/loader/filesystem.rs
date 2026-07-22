@@ -5,16 +5,16 @@ use std::path::{Path, PathBuf};
 use async_trait::async_trait;
 use bytes::Bytes;
 use papelon_core::{
-    ResolvedTemplate, ResolverError, Schema, TemplateName, TemplateResolver, TemplateSource,
+    LoaderError, Schema, TemplateBundle, TemplateLoader, TemplateName, TemplateSource,
 };
 use thiserror::Error;
 
 #[derive(Clone, Debug)]
-pub struct FilesystemResolver {
+pub struct FilesystemLoader {
     root: PathBuf,
 }
 
-impl FilesystemResolver {
+impl FilesystemLoader {
     pub fn new(root: impl Into<PathBuf>) -> Self {
         Self { root: root.into() }
     }
@@ -23,27 +23,26 @@ impl FilesystemResolver {
         &self.root
     }
 
-    fn resolve_sync(&self, name: &TemplateName) -> Result<ResolvedTemplate, ResolverError> {
+    fn load_sync(&self, name: &TemplateName) -> Result<TemplateBundle, LoaderError> {
         let template_dir = self.root.join(name.as_str());
 
         if !template_dir.is_dir() {
-            return Err(ResolverError::TemplateNotFound(name.clone()));
+            return Err(LoaderError::TemplateNotFound(name.clone()));
         }
 
         let main_path = template_dir.join("main.typ");
         if !main_path.is_file() {
-            return Err(FilesystemResolverError::MissingMain {
+            return Err(FilesystemLoaderError::MissingMain {
                 template: name.clone(),
             }
             .into());
         }
 
         let schema_path = template_dir.join("schema.json");
-        let schema_bytes =
-            fs::read(&schema_path).map_err(|error| FilesystemResolverError::Read {
-                path: schema_path.clone(),
-                error,
-            })?;
+        let schema_bytes = fs::read(&schema_path).map_err(|error| FilesystemLoaderError::Read {
+            path: schema_path.clone(),
+            error,
+        })?;
         let schema = Schema::parse(&schema_bytes)?;
 
         let mut files = BTreeMap::new();
@@ -54,26 +53,25 @@ impl FilesystemResolver {
             read_tree(&shared_dir, &shared_dir, "_shared", &mut files)?;
         }
 
-        Ok(ResolvedTemplate::new(TemplateSource::new(files), schema))
+        Ok(TemplateBundle::new(TemplateSource::new(files), schema))
     }
 
-    fn list_sync(&self) -> Result<Vec<TemplateName>, ResolverError> {
-        let entries =
-            fs::read_dir(&self.root).map_err(|error| FilesystemResolverError::ReadDir {
-                path: self.root.clone(),
-                error,
-            })?;
+    fn list_sync(&self) -> Result<Vec<TemplateName>, LoaderError> {
+        let entries = fs::read_dir(&self.root).map_err(|error| FilesystemLoaderError::ReadDir {
+            path: self.root.clone(),
+            error,
+        })?;
         let mut names = Vec::new();
 
         for entry in entries {
-            let entry = entry.map_err(|error| FilesystemResolverError::ReadDir {
+            let entry = entry.map_err(|error| FilesystemLoaderError::ReadDir {
                 path: self.root.clone(),
                 error,
             })?;
 
             if !entry
                 .file_type()
-                .map_err(|error| FilesystemResolverError::ReadDir {
+                .map_err(|error| FilesystemLoaderError::ReadDir {
                     path: entry.path(),
                     error,
                 })?
@@ -99,18 +97,18 @@ impl FilesystemResolver {
 }
 
 #[async_trait]
-impl TemplateResolver for FilesystemResolver {
-    async fn resolve(&self, name: &TemplateName) -> Result<ResolvedTemplate, ResolverError> {
-        self.resolve_sync(name)
+impl TemplateLoader for FilesystemLoader {
+    async fn load(&self, name: &TemplateName) -> Result<TemplateBundle, LoaderError> {
+        self.load_sync(name)
     }
 
-    async fn list(&self) -> Result<Vec<TemplateName>, ResolverError> {
+    async fn list(&self) -> Result<Vec<TemplateName>, LoaderError> {
         self.list_sync()
     }
 }
 
 #[derive(Debug, Error)]
-enum FilesystemResolverError {
+enum FilesystemLoaderError {
     #[error("template '{template}' is missing main.typ")]
     MissingMain { template: TemplateName },
 
@@ -132,9 +130,9 @@ enum FilesystemResolverError {
     NonUtf8Path { path: PathBuf },
 }
 
-impl From<FilesystemResolverError> for ResolverError {
-    fn from(error: FilesystemResolverError) -> Self {
-        Self::Source(error.to_string())
+impl From<FilesystemLoaderError> for LoaderError {
+    fn from(error: FilesystemLoaderError) -> Self {
+        Self::IoError(error.to_string())
     }
 }
 
@@ -143,21 +141,21 @@ fn read_tree(
     current_dir: &Path,
     prefix: &str,
     files: &mut BTreeMap<String, Bytes>,
-) -> Result<(), ResolverError> {
-    let entries = fs::read_dir(current_dir).map_err(|error| FilesystemResolverError::ReadDir {
+) -> Result<(), LoaderError> {
+    let entries = fs::read_dir(current_dir).map_err(|error| FilesystemLoaderError::ReadDir {
         path: current_dir.to_owned(),
         error,
     })?;
 
     for entry in entries {
-        let entry = entry.map_err(|error| FilesystemResolverError::ReadDir {
+        let entry = entry.map_err(|error| FilesystemLoaderError::ReadDir {
             path: current_dir.to_owned(),
             error,
         })?;
         let path = entry.path();
         let file_type = entry
             .file_type()
-            .map_err(|error| FilesystemResolverError::ReadDir {
+            .map_err(|error| FilesystemLoaderError::ReadDir {
                 path: path.clone(),
                 error,
             })?;
@@ -173,9 +171,9 @@ fn read_tree(
 
         let relative_path = path
             .strip_prefix(base_dir)
-            .map_err(|_| FilesystemResolverError::NonUtf8Path { path: path.clone() })?;
+            .map_err(|_| FilesystemLoaderError::NonUtf8Path { path: path.clone() })?;
         let render_path = render_path(prefix, relative_path)?;
-        let bytes = fs::read(&path).map_err(|error| FilesystemResolverError::Read {
+        let bytes = fs::read(&path).map_err(|error| FilesystemLoaderError::Read {
             path: path.clone(),
             error,
         })?;
@@ -186,7 +184,7 @@ fn read_tree(
     Ok(())
 }
 
-fn render_path(prefix: &str, relative_path: &Path) -> Result<String, ResolverError> {
+fn render_path(prefix: &str, relative_path: &Path) -> Result<String, LoaderError> {
     let mut segments = Vec::new();
     if !prefix.is_empty() {
         segments.push(prefix.to_owned());
@@ -197,7 +195,7 @@ fn render_path(prefix: &str, relative_path: &Path) -> Result<String, ResolverErr
             component
                 .as_os_str()
                 .to_str()
-                .ok_or_else(|| FilesystemResolverError::NonUtf8Path {
+                .ok_or_else(|| FilesystemLoaderError::NonUtf8Path {
                     path: relative_path.to_owned(),
                 })?;
         segments.push(value.to_owned());
@@ -213,9 +211,9 @@ mod tests {
     use futures_executor::block_on;
     use tempfile::tempdir;
 
-    use papelon_core::{TemplateName, TemplateResolver};
+    use papelon_core::{TemplateLoader, TemplateName};
 
-    use super::FilesystemResolver;
+    use super::FilesystemLoader;
 
     fn write(path: &std::path::Path, contents: &str) {
         fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -236,14 +234,14 @@ mod tests {
         write(&root.path().join("invoice/assets/item.typ"), "item");
         write(&root.path().join("_shared/brand.typ"), "brand");
 
-        let resolver = FilesystemResolver::new(root.path());
-        let resolved = block_on(resolver.resolve(&TemplateName::new("invoice").unwrap())).unwrap();
+        let loader = FilesystemLoader::new(root.path());
+        let bundle = block_on(loader.load(&TemplateName::new("invoice").unwrap())).unwrap();
 
-        assert!(resolved.source.files().contains_key("main.typ"));
-        assert!(resolved.source.files().contains_key("schema.json"));
-        assert!(resolved.source.files().contains_key("assets/item.typ"));
-        assert!(resolved.source.files().contains_key("_shared/brand.typ"));
-        assert_eq!(resolved.schema.schema_version, "v1");
+        assert!(bundle.source.files().contains_key("main.typ"));
+        assert!(bundle.source.files().contains_key("schema.json"));
+        assert!(bundle.source.files().contains_key("assets/item.typ"));
+        assert!(bundle.source.files().contains_key("_shared/brand.typ"));
+        assert_eq!(bundle.schema.schema_version, "v1");
     }
 
     #[test]
@@ -261,8 +259,8 @@ mod tests {
         );
         write(&root.path().join("_shared/brand.typ"), "");
 
-        let resolver = FilesystemResolver::new(root.path());
-        let names = block_on(resolver.list()).unwrap();
+        let loader = FilesystemLoader::new(root.path());
+        let names = block_on(loader.list()).unwrap();
 
         assert_eq!(
             names.iter().map(|name| name.as_str()).collect::<Vec<_>>(),

@@ -1,12 +1,18 @@
 //! Core domain and rendering abstractions for Papelon.
 
-pub mod domain;
-pub mod resolver;
+mod errors;
+pub mod loader;
+mod render_request;
 pub mod schema;
+mod template;
+mod template_name;
 
-pub use domain::{
-    CompilationError, Document, RenderRequest, ResolvedTemplate, TemplateName, TemplateNameError,
-    TemplateSource, ValidationError,
+pub use errors::{CompilationError, ValidationError};
+pub use loader::{LoaderError, TemplateLoader};
+pub use render_request::RenderRequest;
+pub use schema::{
+    Schema, SchemaError, SchemaField, SchemaType, SchemaVersionError, validate,
+    validate_with_defaults,
 };
-pub use resolver::{MemoryResolver, ResolverError, TemplateResolver};
-pub use schema::{Schema, SchemaError, SchemaField, SchemaType, validate, validate_with_defaults};
+pub use template::{Document, TemplateBundle, TemplateSource};
+pub use template_name::{TemplateName, TemplateNameError};

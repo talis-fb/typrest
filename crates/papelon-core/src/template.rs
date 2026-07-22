@@ -24,12 +24,12 @@ impl TemplateSource {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct ResolvedTemplate {
+pub struct TemplateBundle {
     pub source: TemplateSource,
     pub schema: Schema,
 }
 
-impl ResolvedTemplate {
+impl TemplateBundle {
     pub fn new(source: TemplateSource, schema: Schema) -> Self {
         Self { source, schema }
     }

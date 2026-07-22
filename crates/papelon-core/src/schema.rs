@@ -4,7 +4,8 @@ use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 use thiserror::Error;
 
-use crate::domain::ValidationError;
+use crate::ValidationError;
+use crate::loader::LoaderError;
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -14,12 +15,25 @@ pub struct Schema {
 }
 
 impl Schema {
-    pub fn parse(bytes: &[u8]) -> Result<Self, SchemaError> {
-        let schema: Self = serde_json::from_slice(bytes)?;
+    pub fn parse(bytes: &[u8]) -> Result<Self, LoaderError> {
+        let value: Value = serde_json::from_slice(bytes).map_err(SchemaError::from)?;
 
-        if schema.schema_version != "v1" {
-            return Err(SchemaError::UnsupportedVersion(schema.schema_version));
+        match value.get("schemaVersion") {
+            None => return Err(SchemaVersionError::Missing.into()),
+            Some(Value::String(version)) if version == "v1" => {}
+            Some(Value::String(version)) => {
+                return Err(SchemaVersionError::Unsupported(version.clone()).into());
+            }
+            Some(_) => {
+                return Err(SchemaError::InvalidStructure {
+                    path: "$.schemaVersion".to_owned(),
+                    message: "schemaVersion must be a string".to_owned(),
+                }
+                .into());
+            }
         }
+
+        let schema: Self = serde_json::from_value(value).map_err(SchemaError::from)?;
 
         schema.request.body.ensure_consistent("$")?;
 
@@ -163,12 +177,18 @@ impl std::fmt::Display for SchemaType {
 }
 
 #[derive(Debug, Error)]
+pub enum SchemaVersionError {
+    #[error("schemaVersion is missing")]
+    Missing,
+
+    #[error("unsupported schema version '{0}'")]
+    Unsupported(String),
+}
+
+#[derive(Debug, Error)]
 pub enum SchemaError {
     #[error("invalid schema JSON: {0}")]
     Json(#[from] serde_json::Error),
-
-    #[error("unsupported schema version '{0}'")]
-    UnsupportedVersion(String),
 
     #[error("invalid schema at {path}: {message}")]
     InvalidStructure { path: String, message: String },
@@ -296,7 +316,9 @@ where
 mod tests {
     use serde_json::json;
 
-    use super::{Schema, SchemaError, validate, validate_with_defaults};
+    use crate::loader::LoaderError;
+
+    use super::{Schema, SchemaError, SchemaVersionError, validate, validate_with_defaults};
 
     fn parse(schema: serde_json::Value) -> Schema {
         Schema::parse(schema.to_string().as_bytes()).expect("schema should parse")
@@ -381,7 +403,10 @@ mod tests {
         )
         .unwrap_err();
 
-        assert!(matches!(error, SchemaError::InvalidStructure { .. }));
+        assert!(matches!(
+            error,
+            LoaderError::SchemaError(SchemaError::InvalidStructure { .. })
+        ));
     }
 
     #[test]
@@ -398,6 +423,49 @@ mod tests {
         )
         .unwrap_err();
 
-        assert!(matches!(error, SchemaError::InvalidStructure { .. }));
+        assert!(matches!(
+            error,
+            LoaderError::SchemaError(SchemaError::InvalidStructure { .. })
+        ));
+    }
+
+    #[test]
+    fn rejects_missing_schema_version_during_parse() {
+        let error = Schema::parse(
+            json!({
+                "request": {
+                    "body": {}
+                }
+            })
+            .to_string()
+            .as_bytes(),
+        )
+        .unwrap_err();
+
+        assert!(matches!(
+            error,
+            LoaderError::SchemaVersionError(SchemaVersionError::Missing)
+        ));
+    }
+
+    #[test]
+    fn rejects_unsupported_schema_version_during_parse() {
+        let error = Schema::parse(
+            json!({
+                "schemaVersion": "v2",
+                "request": {
+                    "body": {}
+                }
+            })
+            .to_string()
+            .as_bytes(),
+        )
+        .unwrap_err();
+
+        assert!(matches!(
+            error,
+            LoaderError::SchemaVersionError(SchemaVersionError::Unsupported(version))
+                if version == "v2"
+        ));
     }
 }

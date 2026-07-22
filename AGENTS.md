@@ -25,7 +25,7 @@ papelon serve --templates ./templates 8080
 - Templates ficam dentro do container — atualizar template = rebuild + redeploy
 - **Sem store, sem tags, sem versionamento**
 - Rotas: `POST /render/:template` (sem tag)
-- Este é o modo que está sendo desenvolvido agora
+- **Este é o único modo sendo desenvolvido agora**
 
 ### Modo 2 — Store (versão futura, NÃO implementar agora)
 
@@ -85,35 +85,145 @@ Usar **exatamente** estes nomes no código (structs, variáveis, funções, come
 
 | Termo | O que é |
 |---|---|
-| `TemplateName` | identificador de um template. ex: `"invoice"` |
-| `TemplateSource` | arquivos locais antes de qualquer processamento |
-| `Schema` | contrato de dados parseado do `schema.json` |
-| `ResolvedTemplate` | template pronto para compilar: arquivos + schema |
-| `RenderRequest` | nome do template + payload JSON |
-| `Document` | bytes do PDF resultante |
-| `RenderContext` | mapa de arquivos montado para o compilador Typst |
-| `ValidationError` | erro de validação do payload contra o schema |
-| `CompilationError` | erro do compilador Typst |
+| `TemplateName` | newtype sobre String. Identificador de um template. Invariante: não vazio, somente ASCII alfanumérico, hífen (`-`) e underscore (`_`). |
+| `Schema` | Estrutura recursiva parseada do `schema.json`. Contém as regras de validação do payload. |
+| `TemplateSource` | Mapa de `caminho relativo → bytes`. Arquivos brutos do template lidos pelo loader. |
+| `TemplateBundle` | `TemplateSource` + `Schema`. Tudo que o compilador precisa — autocontido. Retorno do `TemplateLoader`. |
+| `RenderRequest` | `TemplateName` + `serde_json::Value` (payload). Input do `RenderService`. |
+| `Document` | `Vec<u8>` (bytes do PDF) + `TemplateName` que o gerou. Output do `RenderService`. |
+| `SchemaVersionError` | Erro de carregamento: `schemaVersion` ausente ou não suportado. |
+| `SchemaError` | Erro de carregamento: schema estruturalmente inválido (properties sem object, enum com tipos mistos, etc). |
+| `ValidationError` | Erro de render: payload não satisfaz o schema (campo obrigatório ausente, tipo errado, enum inválido). |
+| `CompilationError` | Erro de render: compilador Typst falhou. Contém mensagem e linha do erro. |
+| `LoaderError` | Enum que unifica erros do `TemplateLoader`: `TemplateNotFound`, `SchemaVersionError`, `SchemaError`, `IoError`. |
+| `RenderError` | Enum que unifica erros do `RenderService`: `TemplateNotFound`, `ValidationError`, `CompilationError`. |
+
+### Distinção crítica: erro de carregamento vs erro de render
+
+- **Erros de carregamento** (`SchemaVersionError`, `SchemaError`) são detectados quando o template é lido do disco — no startup ou no `--watch`. Nunca chegam ao render.
+- **Erros de render** (`ValidationError`, `CompilationError`) são detectados em runtime, por request.
 
 ---
 
 ## Arquitetura — trait central
 
-O servidor HTTP nunca acessa o filesystem diretamente. Toda resolução de template passa pelo trait `TemplateResolver`:
+O servidor HTTP nunca acessa o filesystem diretamente. Toda leitura de template passa pelo trait `TemplateLoader`:
 
 ```rust
 #[async_trait]
-pub trait TemplateResolver: Send + Sync {
-    async fn resolve(&self, name: &TemplateName) -> Result<ResolvedTemplate, ResolverError>;
-    async fn list(&self) -> Result<Vec<TemplateName>, ResolverError>;
+pub trait TemplateLoader: Send + Sync {
+    async fn load(&self, name: &TemplateName) -> Result<TemplateBundle, LoaderError>;
+    async fn list(&self) -> Result<Vec<TemplateName>, LoaderError>;
 }
 ```
 
 Implementações:
-- `FilesystemResolver` — lê do filesystem (Modo 1, implementar agora)
-- `StoreResolver` — lê da Store (Modo 2, NÃO implementar agora)
+- `FilesystemLoader` — lê do filesystem (Modo 1, implementar agora)
+- `StoreLoader` — lê da Store (Modo 2, **NÃO implementar agora**)
 
-O `RenderService` recebe um `Arc<dyn TemplateResolver>`. Os handlers HTTP recebem o `RenderService`. Nada no servidor HTTP conhece filesystem ou store diretamente.
+O `RenderService` recebe um `Arc<dyn TemplateLoader>`. Os handlers HTTP recebem o `RenderService`. Nada no servidor HTTP conhece filesystem ou store diretamente.
+
+---
+
+## Arquitetura do compilador Typst — Anti-Corruption Layer
+
+A crate `typst` tem API instável entre versões minor. Para proteger o resto da aplicação dessas mudanças, o módulo `compiler/` é um **Anti-Corruption Layer (ACL)**: nenhum outro módulo importa `typst::*` diretamente.
+
+### Regra absoluta
+
+> Se qualquer arquivo fora de `crates/papelon-core/src/compiler/` contiver `use typst::` ou `use typst_pdf::`, a arquitetura foi violada.
+
+O compilador Rust reforça isso: `world.rs` e `fonts.rs` são `pub(super)` — invisíveis fora do módulo.
+
+### Interface pública — estável, nunca muda
+
+Definida no módulo `compiler`. É tudo que o `RenderService` e os testes conhecem:
+
+```rust
+// O único erro de compilação que o mundo externo conhece
+// Não contém nenhum tipo de typst::*
+#[derive(Debug, thiserror::Error)]
+pub enum CompilationError {
+    #[error("compilation failed: {message}")]
+    Failed { message: String, line: Option<u32> },
+
+    #[error("pdf export failed: {0}")]
+    ExportFailed(String),
+}
+
+// O único trait que o RenderService usa
+// Nunca expõe typst::* na assinatura
+#[async_trait::async_trait]
+pub trait PdfCompiler: Send + Sync {
+    async fn compile(
+        &self,
+        source: &TemplateSource,
+        payload: &serde_json::Value,
+    ) -> Result<Document, CompilationError>;
+}
+
+// A única struct concreta exportada
+pub struct TypstCompiler { /* internals privados */ }
+
+impl TypstCompiler {
+    pub fn new() -> Self { ... }
+}
+```
+
+### Arquivos internos — podem mudar com o Typst
+
+Todos `pub(super)` — invisíveis fora de `compiler/`:
+
+```
+compiler/
+  compiler.rs  ← interface pública: PdfCompiler, CompilationError, TypstCompiler
+  world.rs     ← implementa typst::World. ÚNICO arquivo que importa typst::*
+  fonts.rs     ← FontRegistry: carrega typst-assets + fontes do template
+```
+
+**`world.rs`** contém:
+- `struct TemplateWorld` que implementa `typst::World`
+- `fn compile(source, payload, fonts) -> Result<Vec<u8>, CompilationError>` — função privada que orquestra a compilação e converte erros do Typst para `CompilationError`
+- `fn map_errors(Vec<SourceDiagnostic>) -> CompilationError` — único lugar que conhece `SourceDiagnostic`
+- `fn build_inputs(payload: &serde_json::Value) -> typst::foundations::Dict` — converte o payload para o formato do Typst
+
+**`fonts.rs`** contém:
+- `struct FontRegistry` — carregada uma vez no startup, compartilhada entre compilações via `Arc`
+- Carrega fontes padrão de `typst-assets`
+- Carrega fontes customizadas do template (arquivos `.ttf`, `.otf` em `assets/`)
+
+### Quando o Typst mudar a API
+
+O impacto fica **100% dentro de `world.rs` e `fonts.rs`**. Exemplo de mudanças históricas e onde seriam absorvidas:
+
+| Mudança do Typst | Onde absorver |
+|---|---|
+| `PdfOptions` ganhou novos campos | `world.rs` — só `fn compile()` |
+| `compile()` mudou o tipo de retorno | `world.rs` — só `fn compile()` |
+| `SourceDiagnostic` ganhou/perdeu campos | `world.rs` — só `fn map_errors()` |
+| `FileId`/`VirtualPath` mudaram de módulo | `world.rs` — imports no topo |
+| `FontBook` mudou de API | `fonts.rs` — só `FontRegistry` |
+
+### MockCompiler para testes
+
+O `RenderService` e os handlers HTTP são testados com `MockCompiler` — sem Typst, sem compilação real:
+
+```rust
+// Em testes — nunca em produção
+struct MockCompiler;
+
+#[async_trait]
+impl PdfCompiler for MockCompiler {
+    async fn compile(&self, _: &TemplateSource, _: &serde_json::Value)
+        -> Result<Document, CompilationError>
+    {
+        // %PDF é o magic byte — válido o suficiente para testes de integração HTTP
+        Ok(Document::new(b"%PDF-1.4 mock".to_vec()))
+    }
+}
+```
+
+Testes reais de compilação Typst ficam em `compiler/world.rs` como testes de módulo (`#[cfg(test)]`) — isolados, mais lentos, e não bloqueiam os testes de domínio.
 
 ---
 
@@ -124,15 +234,24 @@ papelon/
   Cargo.toml              ← workspace root
   CLAUDE.md               ← este arquivo
   DECISIONS.md            ← log de decisões arquiteturais
+  ROADMAP.md              ← tarefas por fase com checkboxes
+  docs/
+    schema-v1.md          ← referência schema.json
+    typst-integration.md  ← referência da API da crate typst
   crates/
-    papelon-core/         ← domínio + tipos + traits (sem HTTP, sem filesystem)
+    papelon-core/         ← domínio + tipos + traits (sem HTTP, sem filesystem direto)
       src/
         lib.rs
-        domain/           ← tipos do domínio
-        resolver/         ← trait TemplateResolver
-        schema/           ← parser e validação do schema.json
-        compiler/         ← integração com Typst
-        render/           ← RenderService
+        template_name.rs  ← TemplateName
+        template.rs       ← TemplateSource, TemplateBundle, Document
+        render_request.rs ← RenderRequest
+        errors.rs         ← ValidationError, CompilationError
+        loader.rs         ← trait TemplateLoader + LoaderError
+        loader/           ← MemoryLoader (testes)
+        schema.rs         ← parser, validador, Schema, SchemaField, erros de schema
+        compiler.rs       ← ACL do Typst: interface pública
+        compiler/         ← world.rs e fonts.rs privados
+        render/           ← RenderService, RenderError
     papelon-server/       ← servidor HTTP (axum)
       src/
         main.rs
@@ -143,7 +262,9 @@ papelon/
         main.rs
 ```
 
-**Regra:** `papelon-core` não tem dependências de HTTP, filesystem, ou IO. É testável em isolamento com `MemoryResolver` nos testes.
+**Regra:** `papelon-core` não tem dependências de HTTP. É testável em isolamento com `MemoryLoader` nos testes.
+
+**Nota:** o módulo dentro de `papelon-core/src/` para o trait e implementações é `loader`, não `resolver` — acompanha a renomeação do trait.
 
 ---
 
@@ -223,23 +344,29 @@ Response:
 
 ## Regras de código
 
+- **Nenhum arquivo fora de `compiler/` importa `typst::*` ou `typst_pdf::*`** — violação do ACL
 - Erros de domínio são sempre tipados com `thiserror` — sem `unwrap()` fora de testes
 - Handlers HTTP nunca retornam erros genéricos — sempre mapeiam para o formato JSON acima
-- Testes de integração usam `MemoryResolver` — sem dependência de filesystem nos testes de core
+- Testes de integração usam `MemoryLoader` — sem dependência de filesystem nos testes de core
 - `_shared/` é incluído no contexto de compilação de qualquer template automaticamente
-- Subpastas dentro de um template são permitidas — o caminho relativo é preservado no `RenderContext`
-- O `schema.json` é validado no momento da leitura do template (startup ou watch), não só no render
+- Subpastas dentro de um template são permitidas — o caminho relativo é preservado no `TemplateSource`
+- Erros de schema são detectados no carregamento do template, nunca no render
+- Campos desconhecidos na raiz do `schema.json` são ignorados com warning — não rejeitados
+- Usar organização de módulos Rust moderna (edição 2018+): preferir `foo.rs` + `foo/` para submódulos e não criar novos arquivos `mod.rs`. Ao tocar módulos existentes, migrar gradualmente para esse padrão quando estiver no escopo da mudança.
+- Não criar `pub use` apenas como alias/conveniência de importação entre módulos. Prefira expor o submódulo real (`pub mod memory;`, `pub mod filesystem;`) e importar pelo caminho explícito.
 
 ---
 
 ## O que NÃO fazer neste MVP
 
 - Não implementar Store (blobs, manifests, refs, tags)
+- Não implementar `StoreLoader`
 - Não implementar protocolo de push CLI→servidor
 - Não implementar autenticação (token, OAuth)
 - Não implementar SDKs para outras linguagens
 - Não implementar cache de compilação
 - Não implementar `papelon gc`
 - Não implementar S3 backend
+- Não suportar pacotes do Typst Universe (`@preview/...`) — retornar erro claro
 
 Se surgir a necessidade de algum desses durante o desenvolvimento, registrar em `DECISIONS.md` e discutir antes de implementar.

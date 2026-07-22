@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-use super::TemplateName;
+use crate::TemplateName;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct RenderRequest {

@@ -17,28 +17,28 @@ Critério de sucesso: `docker run` sobe o servidor, `curl POST /render/invoice` 
 **Objetivo:** workspace funcionando, tipos do domínio definidos, leitura de templates do filesystem.
 
 - [x] Criar workspace Cargo com três crates: `papelon-core`, `papelon-server`, `papelon-cli`
-- [ ] Definir tipos do domínio em `papelon-core`:
+- [x] Definir tipos do domínio em `papelon-core`:
   - [x] `TemplateName` (newtype sobre String com validação)
-  - [ ] `Schema` e `SchemaField` (parseados do schema.json)
-  - [ ] `TemplateSource` (mapa de caminho → bytes)
-  - [ ] `ResolvedTemplate` (TemplateSource + Schema)
-  - [ ] `RenderRequest` (TemplateName + serde_json::Value)
-  - [ ] `Document` (Bytes do PDF)
-  - [ ] `ValidationError` e `CompilationError` (com thiserror)
-- [ ] Definir trait `TemplateResolver` em `papelon-core`
-- [ ] Implementar `FilesystemResolver`:
-  - [ ] Escanear pasta de templates recursivamente
-  - [ ] Parsear `schema.json` de cada template
-  - [ ] Incluir arquivos do `_shared/` no contexto de cada template
-  - [ ] Preservar estrutura de subpastas no mapa de arquivos
-- [ ] Implementar `MemoryResolver` para testes (recebe mapa em memória)
-- [ ] Parser e validador do `schema.json`:
-  - [ ] Tipos: string, number, boolean, enum, array, object
-  - [ ] Campos obrigatórios vs opcionais
-  - [ ] Defaults para campos opcionais
-  - [ ] `validate(schema, payload) → Result<(), Vec<ValidationError>>`
-- [ ] Testes unitários: FilesystemResolver lê templates corretamente, validação de schema
-- [ ] CI: GitHub Actions com `cargo fmt`, `cargo clippy`, `cargo test`
+  - [x] `Schema` e `SchemaField` (parseados do schema.json)
+  - [x] `TemplateSource` (mapa de caminho → bytes)
+  - [x] `ResolvedTemplate` (TemplateSource + Schema)
+  - [x] `RenderRequest` (TemplateName + serde_json::Value)
+  - [x] `Document` (Bytes do PDF)
+  - [x] `ValidationError` e `CompilationError` (com thiserror)
+- [x] Definir trait `TemplateResolver` em `papelon-core`
+- [x] Implementar `FilesystemResolver`:
+  - [x] Escanear pasta de templates recursivamente
+  - [x] Parsear `schema.json` de cada template
+  - [x] Incluir arquivos do `_shared/` no contexto de cada template
+  - [x] Preservar estrutura de subpastas no mapa de arquivos
+- [x] Implementar `MemoryResolver` para testes (recebe mapa em memória)
+- [x] Parser e validador do `schema.json`:
+  - [x] Tipos: string, number, boolean, enum, array, object
+  - [x] Campos obrigatórios vs opcionais
+  - [x] Defaults para campos opcionais
+  - [x] `validate(schema, payload) → Result<(), Vec<ValidationError>>`
+- [x] Testes unitários: FilesystemResolver lê templates corretamente, validação de schema
+- [x] CI: GitHub Actions com `cargo fmt`, `cargo clippy`, `cargo test`
 
 **Critério de saída:** consigo criar um `FilesystemResolver` apontando para uma pasta com templates, chamar `resolve("invoice")` e receber os arquivos e o schema parseado.
 
