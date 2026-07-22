@@ -1,5 +1,7 @@
 use thiserror::Error;
 
+use crate::TemplateName;
+
 #[derive(Clone, Debug, Eq, Error, PartialEq)]
 #[error("{field}: {issue}")]
 pub struct ValidationError {
@@ -17,15 +19,22 @@ impl ValidationError {
 }
 
 #[derive(Clone, Debug, Error, PartialEq)]
-#[error("{message}")]
-pub struct CompilationError {
-    pub message: String,
+pub enum CompilationError {
+    #[error("compilation failed: {message}")]
+    Failed { message: String, line: Option<u32> },
+
+    #[error("pdf export failed: {0}")]
+    ExportFailed(String),
 }
 
-impl CompilationError {
-    pub fn new(message: impl Into<String>) -> Self {
-        Self {
-            message: message.into(),
-        }
-    }
+#[derive(Clone, Debug, Error, PartialEq)]
+pub enum RenderError {
+    #[error("template '{0}' was not found")]
+    TemplateNotFound(TemplateName),
+
+    #[error("payload validation failed")]
+    ValidationError(Vec<ValidationError>),
+
+    #[error("{0}")]
+    CompilationError(#[from] CompilationError),
 }

@@ -91,7 +91,7 @@ Use **exactly** these names in code (structs, variables, functions, comments):
 | `TemplateSource` | Map of `relative path -> bytes`. Raw template files read by the loader. |
 | `TemplateBundle` | `TemplateSource` + `Schema`. Everything the compiler needs; self-contained. Return value of `TemplateLoader`. |
 | `RenderRequest` | `TemplateName` + `serde_json::Value` (payload). Input of `RenderService`. |
-| `Document` | `Vec<u8>` (PDF bytes) + the `TemplateName` that generated it. Output of `RenderService`. |
+| `Document` | PDF bytes. Output of `RenderService`. |
 | `SchemaVersionError` | Load error: missing or unsupported `schemaVersion`. |
 | `SchemaError` | Load error: structurally invalid schema (`properties` without object, enum with mixed types, etc.). |
 | `ValidationError` | Render error: payload does not satisfy the schema (missing required field, wrong type, invalid enum). |

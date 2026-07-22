@@ -48,22 +48,22 @@ Success criterion: `docker run` starts the server, `curl POST /render/invoice` w
 
 **Goal:** given a template and a payload, compile and obtain PDF bytes.
 
-- [ ] Add `typst` and `typst-pdf` dependencies to `papelon-core`
-- [ ] Implement `TypstCompiler`:
-  - [ ] Receives `TemplateSource` (path -> bytes map) + JSON payload
-  - [ ] Injects payload through `sys.inputs.data`
-  - [ ] Returns `Document` (PDF bytes) or `CompilationError`
-  - [ ] Map Typst errors to `CompilationError` with a useful message
-- [ ] Implement `RenderService`:
-  - [ ] Receives `Arc<dyn TemplateLoader>` in the constructor
-  - [ ] `render(request: RenderRequest) -> Result<Document, RenderError>`
-  - [ ] Validates payload against the schema before compiling
-  - [ ] Uses the files from the `TemplateBundle`
-  - [ ] Calls `TypstCompiler::compile`
-- [ ] Integration tests:
-  - [ ] Minimal template (only `#let data = json(bytes(sys.inputs.data))`) compiles
-  - [ ] Invalid payload returns `ValidationError` before calling the compiler
-  - [ ] Syntax error in .typ returns `CompilationError` with line and message
+- [x] Add `typst` and `typst-pdf` dependencies to `papelon-core`
+- [x] Implement `TypstCompiler`:
+  - [x] Receives `TemplateSource` (path -> bytes map) + JSON payload
+  - [x] Injects payload through `sys.inputs.data`
+  - [x] Returns `Document` (PDF bytes) or `CompilationError`
+  - [x] Map Typst errors to `CompilationError` with a useful message
+- [x] Implement `RenderService`:
+  - [x] Receives `Arc<dyn TemplateLoader>` in the constructor
+  - [x] `render(request: RenderRequest) -> Result<Document, RenderError>`
+  - [x] Validates payload against the schema before compiling
+  - [x] Uses the files from the `TemplateBundle`
+  - [x] Calls `TypstCompiler::compile`
+- [x] Integration tests:
+  - [x] Minimal template (only `#let data = json(bytes(sys.inputs.data))`) compiles
+  - [x] Invalid payload returns `ValidationError` before calling the compiler
+  - [x] Syntax error in .typ returns `CompilationError` with line and message
 
 **Exit criterion:** a test receives a real .typ template and JSON and produces valid PDF bytes (magic bytes `%PDF`).
 
