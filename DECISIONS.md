@@ -1,131 +1,131 @@
-# DECISIONS.md — Log de Decisões Arquiteturais
+# DECISIONS.md - Architectural Decision Log
 
-Registro de decisões importantes com contexto e alternativas consideradas.
-Adicionar uma entrada sempre que uma decisão não-óbvia for tomada.
-
----
-
-## DEC-001 — Typst como engine de compilação
-
-**Data:** 2025-11  
-**Status:** Aceita
-
-**Decisão:** Usar Typst como engine de geração de PDF, integrado via crate Rust (`typst` + `typst-pdf`), não como binário externo.
-
-**Contexto:** O mercado de geração de PDF server-side tem dois problemas principais: soluções browser-based (Puppeteer) são pesadas e complexas de escalar; libs específicas por linguagem (pdfmake, ReportLab) criam lock-in de ecossistema.
-
-**Alternativas consideradas:**
-- Puppeteer/Chrome headless: ~300MB de overhead, complexo para escalar, depende de browser
-- LaTeX: distribuição >1GB, lento, sintaxe hostil
-- wkhtmltopdf: abandonado oficialmente
-- Invocar `typst` como processo filho: mais simples inicialmente, mas cria dependência de binário externo no container e overhead de processo por render
-
-**Por que Typst via crate:**
-- Binário único ~40MB
-- Compila em milissegundos
-- Escrito em Rust — integração nativa sem overhead de FFI ou processo filho
-- Suporte nativo a JSON via `sys.inputs`
-- Crescimento rápido
-
-**Consequências:** A integração com a crate `typst` tem API não-trivial (projetada para o editor web). Reservar tempo extra na Fase 2 do roadmap.
+Record important decisions with context and considered alternatives.
+Add an entry whenever a non-obvious decision is made.
 
 ---
 
-## DEC-002 — Dois modos de operação via trait, não via flag condicional
+## DEC-001 - Typst as the compilation engine
 
-**Data:** 2025-11  
-**Status:** Aceita
+**Date:** 2025-11  
+**Status:** Accepted
 
-**Decisão:** Os dois modos (Filesystem e Store) são implementados como implementações diferentes do trait `TemplateResolver`, não como branches condicionais espalhados pelo código.
+**Decision:** Use Typst as the PDF generation engine, integrated through the Rust crate (`typst` + `typst-pdf`), not as an external binary.
 
-**Contexto:** O MVP implementa apenas o Modo 1 (Filesystem). O Modo 2 (Store) é planejado para a versão seguinte. A separação precisa estar no código desde o início para não exigir refatoração pesada depois.
+**Context:** The server-side PDF generation market has two main problems: browser-based solutions (Puppeteer) are heavy and complex to scale; language-specific libraries (pdfmake, ReportLab) create ecosystem lock-in.
 
-**Alternativas consideradas:**
-- Feature flags Cargo: mais explícito em compile time, mas cria build separados
-- Enum com variantes: mais simples, mas torna o código do servidor ciente dos modos
-- Trait (escolhida): o servidor HTTP conhece apenas `Arc<dyn TemplateResolver>`, qualquer implementação funciona
+**Alternatives considered:**
+- Puppeteer/Chrome headless: ~300MB overhead, complex to scale, depends on a browser
+- LaTeX: distribution >1GB, slow, hostile syntax
+- wkhtmltopdf: officially abandoned
+- Invoke `typst` as a child process: simpler initially, but creates an external binary dependency in the container and per-render process overhead
 
-**Consequências:** `papelon-core` tem o trait `TemplateResolver`. `papelon-server` recebe a implementação concreta via injeção na inicialização. Testes de core usam `MemoryResolver`.
+**Why Typst through the crate:**
+- Single binary ~40MB
+- Compiles in milliseconds
+- Written in Rust: native integration without FFI or child-process overhead
+- Native JSON support through `sys.inputs`
+- Fast growth
 
----
-
-## DEC-003 — Templates como parte do container no Modo 1
-
-**Data:** 2025-11  
-**Status:** Aceita
-
-**Decisão:** No Modo 1, templates são copiados para dentro da imagem Docker via `COPY templates/`. Atualizar um template implica rebuild e redeploy do container.
-
-**Contexto:** Esse é o trade-off central do Modo 1 vs Modo 2.
-
-**Por que é aceitável no MVP:**
-- É o mesmo modelo de qualquer aplicação com arquivos estáticos (migrations, configs, assets)
-- Elimina toda a complexidade de Store, push, e versionamento
-- Para a maioria dos casos de uso iniciais (equipes pequenas, poucos templates), o ciclo de deploy já existe e é aceitável
-- A dor de "atualizar template sem redeploy" só aparece quando o usuário já está convencido do produto
-
-**Quando o Modo 2 faz sentido:** templates que mudam com frequência independente do código, times com múltiplos ambientes (staging/prod) que precisam de rollback sem redeploy, microserviços que precisam compartilhar templates.
+**Consequences:** Integration with the `typst` crate has a non-trivial API (designed for the web editor). Reserve extra time in Phase 2 of the roadmap.
 
 ---
 
-## DEC-004 — `_shared/` é resolvido em tempo de leitura, não de compilação
+## DEC-002 - Two operation modes through a trait, not a conditional flag
 
-**Data:** 2025-11  
-**Status:** Aceita
+**Date:** 2025-11  
+**Status:** Accepted
 
-**Decisão:** O `FilesystemResolver` inclui os arquivos do `_shared/` no `ResolvedTemplate` de cada template durante a leitura/watch, não durante a compilação.
+**Decision:** The two modes (Filesystem and Store) are implemented as different implementations of the `TemplateLoader` trait, not as conditional branches spread through the code.
 
-**Por que:** O `RenderContext` montado para o Typst precisa ser autocontido. Se `_shared/` fosse resolvido na compilação, o compilador precisaria conhecer a estrutura de diretórios do projeto — quebrando o isolamento entre modos.
+**Context:** The MVP only implements Mode 1 (Filesystem). Mode 2 (Store) is planned for the next version. This separation needs to exist in the code from the start to avoid a heavy refactor later.
 
-**Consequências:** O `ResolvedTemplate` contém um mapa completo de todos os arquivos necessários, incluindo os do `_shared/`. Mudança em `_shared/` no modo `--watch` força reload de todos os templates que o referenciam.
+**Alternatives considered:**
+- Cargo feature flags: more explicit at compile time, but creates separate builds
+- Enum with variants: simpler, but makes the server code aware of the modes
+- Trait (chosen): the HTTP server only knows `Arc<dyn TemplateLoader>`, any implementation works
 
----
-
-## DEC-005 — Injeção de dados via `sys.inputs`, não via arquivo
-
-**Data:** 2025-11  
-**Status:** Aceita
-
-**Decisão:** O payload JSON é passado para o Typst via `--input data=<json_string>` (mapeado para `sys.inputs.data` no template), não gravando um arquivo `input.json` em disco.
-
-**Alternativa considerada:** Gravar `input.json` no tmpdir e o template faz `#let data = json("input.json")`. Mais familiar para quem conhece Typst, mas exige tmpdir em disco.
-
-**Por que sys.inputs:** Sem I/O de disco por render (exceto o PDF de saída), mais limpo, e o compilador Typst via crate suporta inputs em memória diretamente.
-
-**Consequência para o usuário:** Todo template deve começar com `#let data = json(bytes(sys.inputs.data))`. Documentar claramente no README e no boilerplate gerado pelo `papelon init`.
+**Consequences:** `papelon-core` has the `TemplateLoader` trait. `papelon-server` receives the concrete implementation through initialization injection. Core tests use `MemoryLoader`.
 
 ---
 
-## DEC-006 — Nomes de template usam identificadores ASCII seguros
+## DEC-003 - Templates as part of the container in Mode 1
 
-**Data:** 2026-06
-**Status:** Aceita
+**Date:** 2025-11  
+**Status:** Accepted
 
-**Decisão:** `TemplateName` deve ser não vazio, começar com um caractere ASCII alfanumérico e conter apenas caracteres ASCII alfanuméricos, hífen (`-`) ou underscore (`_`).
+**Decision:** In Mode 1, templates are copied into the Docker image with `COPY templates/`. Updating a template requires rebuilding and redeploying the container.
 
-**Contexto:** O mesmo identificador será recebido em rotas HTTP e usado pelo `FilesystemResolver` para localizar diretórios. Aceitar separadores, segmentos relativos ou espaços criaria ambiguidades e risco de path traversal.
+**Context:** This is the central trade-off of Mode 1 vs Mode 2.
 
-**Consequências:** Nomes como `invoice`, `invoice-v2` e `invoice_v2` são válidos. Nomes como `_shared`, `../invoice`, `invoice/v2` e nomes com caracteres não ASCII são rejeitados na construção do tipo.
+**Why this is acceptable in the MVP:**
+- It is the same model as any application with static files (migrations, configs, assets)
+- It removes all Store, push, and versioning complexity
+- For most early use cases (small teams, few templates), the deploy cycle already exists and is acceptable
+- The pain of "update template without redeploy" only appears after the user is already convinced by the product
+
+**When Mode 2 makes sense:** templates that change frequently independent of code, teams with multiple environments (staging/prod) that need rollback without redeploy, microservices that need to share templates.
 
 ---
 
-## Template para novas decisões
+## DEC-004 - `_shared/` is resolved at load time, not compile time
+
+**Date:** 2025-11  
+**Status:** Accepted
+
+**Decision:** `FilesystemLoader` includes `_shared/` files in each template's `TemplateBundle` during load/watch, not during compilation.
+
+**Why:** The template source assembled for Typst must be self-contained. If `_shared/` were resolved during compilation, the compiler would need to know the project's directory structure, breaking isolation between modes.
+
+**Consequences:** `TemplateBundle` contains a complete map of all required files, including `_shared/`. A change in `_shared/` in `--watch` mode forces a reload of every template that references it.
+
+---
+
+## DEC-005 - Data injection through `sys.inputs`, not through a file
+
+**Date:** 2025-11  
+**Status:** Accepted
+
+**Decision:** The JSON payload is passed to Typst through `--input data=<json_string>` (mapped to `sys.inputs.data` in the template), not by writing an `input.json` file to disk.
+
+**Alternative considered:** Write `input.json` to a tmpdir and let the template use `#let data = json("input.json")`. This is more familiar to people who know Typst, but requires a disk tmpdir.
+
+**Why sys.inputs:** No per-render disk I/O (except the output PDF), cleaner, and the Typst compiler crate supports in-memory inputs directly.
+
+**Consequence for users:** Every template must start with `#let data = json(bytes(sys.inputs.data))`. Document this clearly in the README and in the boilerplate generated by `papelon init`.
+
+---
+
+## DEC-006 - Template names use safe ASCII identifiers
+
+**Date:** 2026-06  
+**Status:** Accepted
+
+**Decision:** `TemplateName` must be non-empty and contain only ASCII alphanumeric characters, hyphen (`-`), or underscore (`_`).
+
+**Context:** The same identifier is received in HTTP routes and used by `FilesystemLoader` to locate directories. Accepting separators, relative segments, spaces, or non-ASCII characters would create ambiguity and path traversal risk.
+
+**Consequences:** Names like `invoice`, `invoice-v2`, `invoice_v2`, `_shared`, and `-invoice` are valid. Names like `../invoice`, `invoice/v2`, names with spaces, and names with non-ASCII characters are rejected when constructing the type.
+
+---
+
+## Template for new decisions
 
 ```
-## DEC-XXX — Título
+## DEC-XXX - Title
 
-**Data:** YYYY-MM  
-**Status:** Aceita | Em discussão | Rejeitada
+**Date:** YYYY-MM  
+**Status:** Accepted | In discussion | Rejected
 
-**Decisão:** O que foi decidido.
+**Decision:** What was decided.
 
-**Contexto:** Por que essa decisão foi necessária.
+**Context:** Why this decision was necessary.
 
-**Alternativas consideradas:**
-- Opção A: ...
-- Opção B: ...
+**Alternatives considered:**
+- Option A: ...
+- Option B: ...
 
-**Por que a escolha feita:** ...
+**Why the chosen option:** ...
 
-**Consequências:** O que muda no código ou no produto.
+**Consequences:** What changes in the code or product.
 ```

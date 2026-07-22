@@ -1,136 +1,136 @@
-# ROADMAP.md — MVP Fase 1 (Modo Filesystem)
+# ROADMAP.md - MVP Phase 1 (Filesystem Mode)
 
-Status atual do desenvolvimento. Atualizar conforme tarefas são concluídas.
-
----
-
-## Objetivo do MVP
-
-Validar tecnicamente a ideia central: **Typst como engine de PDF server-side, acessível via HTTP, language-agnostic**.
-
-Critério de sucesso: `docker run` sobe o servidor, `curl POST /render/invoice` com JSON retorna um PDF válido em menos de 1 segundo.
+Current development status. Update as tasks are completed.
 
 ---
 
-## Fase 1 — Fundação (sem. 1–2)
+## MVP Goal
 
-**Objetivo:** workspace funcionando, tipos do domínio definidos, leitura de templates do filesystem.
+Technically validate the core idea: **Typst as a server-side PDF engine, accessible over HTTP, language-agnostic**.
 
-- [x] Criar workspace Cargo com três crates: `papelon-core`, `papelon-server`, `papelon-cli`
-- [x] Definir tipos do domínio em `papelon-core`:
-  - [x] `TemplateName` (newtype sobre String com validação)
-  - [x] `Schema` e `SchemaField` (parseados do schema.json)
-  - [x] `TemplateSource` (mapa de caminho → bytes)
-  - [x] `ResolvedTemplate` (TemplateSource + Schema)
+Success criterion: `docker run` starts the server, `curl POST /render/invoice` with JSON returns a valid PDF in less than 1 second.
+
+---
+
+## Phase 1 - Foundation (weeks 1-2)
+
+**Goal:** working workspace, domain types defined, filesystem template loading.
+
+- [x] Create a Cargo workspace with three crates: `papelon-core`, `papelon-server`, `papelon-cli`
+- [x] Define domain types in `papelon-core`:
+  - [x] `TemplateName` (newtype over String with validation)
+  - [x] `Schema` and `SchemaField` (parsed from schema.json)
+  - [x] `TemplateSource` (path -> bytes map)
+  - [x] `TemplateBundle` (TemplateSource + Schema)
   - [x] `RenderRequest` (TemplateName + serde_json::Value)
-  - [x] `Document` (Bytes do PDF)
-  - [x] `ValidationError` e `CompilationError` (com thiserror)
-- [x] Definir trait `TemplateResolver` em `papelon-core`
-- [x] Implementar `FilesystemResolver`:
-  - [x] Escanear pasta de templates recursivamente
-  - [x] Parsear `schema.json` de cada template
-  - [x] Incluir arquivos do `_shared/` no contexto de cada template
-  - [x] Preservar estrutura de subpastas no mapa de arquivos
-- [x] Implementar `MemoryResolver` para testes (recebe mapa em memória)
-- [x] Parser e validador do `schema.json`:
-  - [x] Tipos: string, number, boolean, enum, array, object
-  - [x] Campos obrigatórios vs opcionais
-  - [x] Defaults para campos opcionais
-  - [x] `validate(schema, payload) → Result<(), Vec<ValidationError>>`
-- [x] Testes unitários: FilesystemResolver lê templates corretamente, validação de schema
-- [x] CI: GitHub Actions com `cargo fmt`, `cargo clippy`, `cargo test`
+  - [x] `Document` (PDF bytes)
+  - [x] `ValidationError` and `CompilationError` (with thiserror)
+- [x] Define the `TemplateLoader` trait in `papelon-core`
+- [x] Implement `FilesystemLoader`:
+  - [x] Recursively scan the templates directory
+  - [x] Parse each template's `schema.json`
+  - [x] Include `_shared/` files in every template context
+  - [x] Preserve subdirectory structure in the file map
+- [x] Implement `MemoryLoader` for tests (receives an in-memory map)
+- [x] `schema.json` parser and validator:
+  - [x] Types: string, number, boolean, enum, array, object
+  - [x] Required vs optional fields
+  - [x] Defaults for optional fields
+  - [x] `validate(schema, payload) -> Result<(), Vec<ValidationError>>`
+- [x] Unit tests: FilesystemLoader reads templates correctly, schema validation
+- [x] CI: GitHub Actions with `cargo fmt`, `cargo clippy`, `cargo test`
 
-**Critério de saída:** consigo criar um `FilesystemResolver` apontando para uma pasta com templates, chamar `resolve("invoice")` e receber os arquivos e o schema parseado.
-
----
-
-## Fase 2 — Integração Typst (sem. 3–5)
-
-**Objetivo:** dado um template e um payload, compilar e obter bytes de PDF.
-
-- [ ] Adicionar dependências `typst` e `typst-pdf` ao `papelon-core`
-- [ ] Implementar `TypstCompiler`:
-  - [ ] Recebe `RenderContext` (mapa de caminho → bytes) + payload JSON
-  - [ ] Injeta payload via `sys.inputs.data`
-  - [ ] Retorna `Document` (bytes do PDF) ou `CompilationError`
-  - [ ] Mapear erros do Typst para `CompilationError` com mensagem útil
-- [ ] Implementar `RenderService`:
-  - [ ] Recebe `Arc<dyn TemplateResolver>` no construtor
-  - [ ] `render(request: RenderRequest) → Result<Document, RenderError>`
-  - [ ] Valida payload contra schema antes de compilar
-  - [ ] Monta `RenderContext` com os arquivos do `ResolvedTemplate`
-  - [ ] Chama `TypstCompiler::compile`
-- [ ] Testes de integração:
-  - [ ] Template mínimo (só `#let data = json(bytes(sys.inputs.data))`) compila
-  - [ ] Payload inválido retorna `ValidationError` antes de chamar o compilador
-  - [ ] Erro de sintaxe no .typ retorna `CompilationError` com linha e mensagem
-
-**Critério de saída:** teste que recebe um template .typ real e um JSON e produz bytes de PDF válidos (magic bytes `%PDF`).
+**Exit criterion:** I can create a `FilesystemLoader` pointing to a templates directory, call `load("invoice")`, and receive the files and parsed schema.
 
 ---
 
-## Fase 3 — Servidor HTTP (sem. 6–8)
+## Phase 2 - Typst Integration (weeks 3-5)
 
-**Objetivo:** expor o RenderService via HTTP com tratamento correto de erros.
+**Goal:** given a template and a payload, compile and obtain PDF bytes.
 
-- [ ] Criar `papelon-server` com `axum` e `tokio`
-- [ ] Implementar rotas:
-  - [ ] `POST /render/:template` → chama RenderService, retorna PDF ou erro JSON
-  - [ ] `GET /templates` → lista templates disponíveis via TemplateResolver
-  - [ ] `GET /healthz` → retorna `{"status": "ok"}`
-- [ ] Mapeamento de erros de domínio para HTTP:
-  - [ ] `TemplateNotFound` → 404
-  - [ ] `ValidationError` → 422 com lista de violations
-  - [ ] `CompilationError` → 500 com mensagem do Typst
-- [ ] `main.rs` com parsing de argumentos via `clap`:
-  - [ ] `--templates <path>` (obrigatório no Modo 1)
+- [ ] Add `typst` and `typst-pdf` dependencies to `papelon-core`
+- [ ] Implement `TypstCompiler`:
+  - [ ] Receives `TemplateSource` (path -> bytes map) + JSON payload
+  - [ ] Injects payload through `sys.inputs.data`
+  - [ ] Returns `Document` (PDF bytes) or `CompilationError`
+  - [ ] Map Typst errors to `CompilationError` with a useful message
+- [ ] Implement `RenderService`:
+  - [ ] Receives `Arc<dyn TemplateLoader>` in the constructor
+  - [ ] `render(request: RenderRequest) -> Result<Document, RenderError>`
+  - [ ] Validates payload against the schema before compiling
+  - [ ] Uses the files from the `TemplateBundle`
+  - [ ] Calls `TypstCompiler::compile`
+- [ ] Integration tests:
+  - [ ] Minimal template (only `#let data = json(bytes(sys.inputs.data))`) compiles
+  - [ ] Invalid payload returns `ValidationError` before calling the compiler
+  - [ ] Syntax error in .typ returns `CompilationError` with line and message
+
+**Exit criterion:** a test receives a real .typ template and JSON and produces valid PDF bytes (magic bytes `%PDF`).
+
+---
+
+## Phase 3 - HTTP Server (weeks 6-8)
+
+**Goal:** expose RenderService over HTTP with correct error handling.
+
+- [ ] Create `papelon-server` with `axum` and `tokio`
+- [ ] Implement routes:
+  - [ ] `POST /render/:template` -> calls RenderService, returns PDF or JSON error
+  - [ ] `GET /templates` -> lists templates available through TemplateLoader
+  - [ ] `GET /healthz` -> returns `{"status": "ok"}`
+- [ ] Map domain errors to HTTP:
+  - [ ] `TemplateNotFound` -> 404
+  - [ ] `ValidationError` -> 422 with a violations list
+  - [ ] `CompilationError` -> 500 with the Typst message
+- [ ] `main.rs` with argument parsing through `clap`:
+  - [ ] `--templates <path>` (required in Mode 1)
   - [ ] `<port>` (default 8080)
-- [ ] Logs estruturados com `tracing`: cada render loga template, latência, tamanho do PDF
-- [ ] Teste end-to-end: subir servidor em porta aleatória, fazer POST, verificar PDF
+- [ ] Structured logs with `tracing`: each render logs template, latency, PDF size
+- [ ] End-to-end test: start server on a random port, POST, verify PDF
 
-**Critério de saída:** `cargo run -- --templates ./examples/templates 8080` sobe o servidor e `curl -X POST http://localhost:8080/render/invoice -d @payload.json` retorna um PDF.
-
----
-
-## Fase 4 — Deploy + DX (sem. 9–10)
-
-**Objetivo:** qualquer dev consegue usar o projeto em menos de 5 minutos.
-
-- [ ] Dockerfile multi-stage:
-  - [ ] Stage 1: compilar o binário Rust
-  - [ ] Stage 2: imagem final debian:slim com só o binário
-  - [ ] Resultado: imagem < 100MB
-  - [ ] `COPY templates/` no Dockerfile de exemplo
-- [ ] `docker-compose.yml` de exemplo com volume de templates
-- [ ] Modo `--watch` no servidor:
-  - [ ] Usar crate `notify` para detectar mudanças na pasta de templates
-  - [ ] Ao detectar mudança: re-escanear template alterado, atualizar `FilesystemResolver`
-  - [ ] Logar qual template foi recarregado
-- [ ] CLI mínima em `papelon-cli`:
-  - [ ] `papelon init <name>`: cria `name/main.typ` e `name/schema.json` com boilerplate
-  - [ ] Boilerplate do `main.typ` já inclui `#let data = json(bytes(sys.inputs.data))`
-- [ ] README com:
-  - [ ] O que é o projeto (3 parágrafos)
-  - [ ] Quickstart: docker-compose + curl em 5 minutos
-  - [ ] Referência do `schema.json`
-  - [ ] Exemplo completo de template .typ
-  - [ ] Referência da API HTTP
-- [ ] Templates de exemplo no repositório:
-  - [ ] `examples/templates/invoice/` — template completo com itens e totais
-  - [ ] `examples/templates/welcome/` — template simples de boas-vindas
-
-**Critério de saída (= critério do MVP):** README funciona — alguém sem contexto consegue subir o servidor e gerar um PDF seguindo o quickstart.
+**Exit criterion:** `cargo run -- --templates ./examples/templates 8080` starts the server and `curl -X POST http://localhost:8080/render/invoice -d @payload.json` returns a PDF.
 
 ---
 
-## Pós-MVP — Modo 2 (Store)
+## Phase 4 - Deploy + DX (weeks 9-10)
 
-Não implementar até o Modo 1 estar em produção e com feedback de usuários reais.
+**Goal:** any developer can use the project in less than 5 minutes.
 
-- [ ] Definir `StoreBackend` trait
-- [ ] Implementar `FilesystemStore`
-- [ ] Implementar protocolo de push (blobs, manifests, refs)
-- [ ] Implementar `StoreResolver`
-- [ ] Implementar `S3Store`
+- [ ] Multi-stage Dockerfile:
+  - [ ] Stage 1: compile the Rust binary
+  - [ ] Stage 2: final debian:slim image with only the binary
+  - [ ] Result: image < 100MB
+  - [ ] `COPY templates/` in the example Dockerfile
+- [ ] Example `docker-compose.yml` with templates volume
+- [ ] `--watch` mode in the server:
+  - [ ] Use the `notify` crate to detect changes in the templates directory
+  - [ ] On change: rescan the changed template, update `FilesystemLoader`
+  - [ ] Log which template was reloaded
+- [ ] Minimal CLI in `papelon-cli`:
+  - [ ] `papelon init <name>`: creates `name/main.typ` and `name/schema.json` with boilerplate
+  - [ ] `main.typ` boilerplate already includes `#let data = json(bytes(sys.inputs.data))`
+- [ ] README with:
+  - [ ] What the project is (3 paragraphs)
+  - [ ] Quickstart: docker-compose + curl in 5 minutes
+  - [ ] `schema.json` reference
+  - [ ] Complete .typ template example
+  - [ ] HTTP API reference
+- [ ] Example templates in the repository:
+  - [ ] `examples/templates/invoice/` - complete template with items and totals
+  - [ ] `examples/templates/welcome/` - simple welcome template
+
+**Exit criterion (= MVP criterion):** the README works: someone without context can start the server and generate a PDF by following the quickstart.
+
+---
+
+## Post-MVP - Mode 2 (Store)
+
+Do not implement until Mode 1 is in production and has feedback from real users.
+
+- [ ] Define `StoreBackend` trait
+- [ ] Implement `FilesystemStore`
+- [ ] Implement push protocol (blobs, manifests, refs)
+- [ ] Implement `StoreLoader`
+- [ ] Implement `S3Store`
 - [ ] CLI: `papelon push`, `papelon tag`, `papelon ls`
-- [ ] Rotas com tag: `POST /render/:template/:tag`
+- [ ] Tagged routes: `POST /render/:template/:tag`

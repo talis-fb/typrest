@@ -131,9 +131,9 @@ mod tests {
             })
         );
         assert_eq!(
-            TemplateName::new("fatura-á"),
+            TemplateName::new("invoiceλ"),
             Err(TemplateNameError::InvalidCharacter {
-                character: 'á',
+                character: 'λ',
                 position: 8,
             })
         );

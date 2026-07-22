@@ -1,55 +1,56 @@
 # Typst Integration Reference
 
-Referência curada para integração com o compilador Typst via crate Rust.
-Este arquivo existe para dar contexto à LLM sobre a API do Typst — não clonar o repositório inteiro.
+Curated reference for integrating with the Typst compiler through the Rust crate.
+This file exists to give LLMs context about the Typst API; do not clone the entire repository.
 
-Fonte principal: https://typst.app/blog/2025/automated-generation/
-Repositório de exemplo: https://github.com/tfachmann/typst-as-library
-Repositório de exemplo 2: https://github.com/Relacibo/typst-as-lib
+Main source: https://typst.app/blog/2025/automated-generation/
+Example repository: https://github.com/tfachmann/typst-as-library
+Example repository 2: https://github.com/Relacibo/typst-as-lib
 
 ---
 
-## Como o Typst recebe dados externos
+## How Typst Receives External Data
 
-O mecanismo oficial para injetar dados em um template Typst é `sys.inputs`.
-No CLI seria: `typst compile --input data='{"name":"João"}' main.typ`
-Via crate Rust, o mesmo é feito passando um `HashMap<String, String>` de inputs.
+The official mechanism for injecting data into a Typst template is `sys.inputs`.
+In the CLI this would be: `typst compile --input data='{"name":"John"}' main.typ`
+Through the Rust crate, the same thing is done by passing a `HashMap<String, String>` of inputs.
 
-No template, o dado é lido assim:
+In the template, the data is read like this:
+
 ```typst
 #let data = json(bytes(sys.inputs.data))
 ```
 
-`sys.inputs.data` é uma string. `bytes()` converte para bytes. `json()` parseia o JSON.
-Este é o padrão canônico — **todo template neste projeto deve começar com esta linha**.
+`sys.inputs.data` is a string. `bytes()` converts it to bytes. `json()` parses the JSON.
+This is the canonical pattern: **every template in this project must start with this line**.
 
 ---
 
-## Dependências no Cargo.toml
+## Dependencies in Cargo.toml
 
 ```toml
 [dependencies]
-typst = "0.13"        # ou a versão mais recente — verificar crates.io
-typst-pdf = "0.13"    # exportador PDF — versão deve coincidir com typst
+typst = "0.13"        # or the latest version; check crates.io
+typst-pdf = "0.13"    # PDF exporter; version must match typst
 ```
 
-Versão atual estável: verificar https://crates.io/crates/typst
+Current stable version: check https://crates.io/crates/typst
 
 ---
 
-## O trait `World` — conceito central
+## The `World` Trait - Central Concept
 
-A crate `typst` não lê arquivos do filesystem por conta própria.
-O chamador implementa o trait `World` que responde perguntas do compilador:
-- "qual é o conteúdo do arquivo X?"
-- "qual é a fonte Y?"
-- "qual é a data/hora atual?"
+The `typst` crate does not read files from the filesystem by itself.
+The caller implements the `World` trait, which answers compiler questions:
+- "what is the content of file X?"
+- "what is font Y?"
+- "what is the current date/time?"
 
-Este é o ponto de extensão principal. Para este projeto, o `World` recebe
-um `HashMap<PathBuf, Bytes>` com todos os arquivos do template já em memória
-(vindos do `RenderContext`).
+This is the main extension point. For this project, the `World` receives
+a `HashMap<PathBuf, Bytes>` with all template files already in memory
+(coming from `TemplateSource`).
 
-### Interface mínima do trait `World`
+### Minimal `World` Trait Interface
 
 ```rust
 use typst::World;
@@ -62,15 +63,15 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 pub struct PapelonWorld {
-    /// Fonte raiz do documento (main.typ)
+    /// Root document source (main.typ)
     main: Source,
-    /// Todos os arquivos do template: caminho → bytes
+    /// All template files: path -> bytes
     files: HashMap<PathBuf, Bytes>,
-    /// Biblioteca padrão do Typst (funções built-in)
+    /// Typst standard library (built-in functions)
     library: LazyHash<Library>,
-    /// Índice de fontes disponíveis
+    /// Available font index
     book: LazyHash<FontBook>,
-    /// Fontes carregadas
+    /// Loaded fonts
     fonts: Vec<Font>,
 }
 
@@ -88,14 +89,14 @@ impl World for PapelonWorld {
     }
 
     fn source(&self, id: FileId) -> FileResult<Source> {
-        // retorna o source do arquivo pelo FileId
-        // main.typ é o caso principal
-        // imports de outros .typ também passam por aqui
+        // returns the file source by FileId
+        // main.typ is the primary case
+        // imports from other .typ files also pass through here
         todo!()
     }
 
     fn file(&self, id: FileId) -> FileResult<Bytes> {
-        // retorna bytes de arquivos não-typ (imagens, fontes, etc.)
+        // returns bytes for non-typ files (images, fonts, etc.)
         todo!()
     }
 
@@ -104,8 +105,8 @@ impl World for PapelonWorld {
     }
 
     fn today(&self, offset: Option<i64>) -> Option<typst::foundations::Datetime> {
-        // retornar None é aceitável — templates que usam `datetime.today()` vão falhar
-        // para MVP retornar a data atual do sistema
+        // returning None is acceptable; templates using `datetime.today()` will fail
+        // for the MVP, return the current system date
         None
     }
 }
@@ -113,28 +114,28 @@ impl World for PapelonWorld {
 
 ---
 
-## Compilação e exportação para PDF
+## Compilation and PDF Export
 
 ```rust
 use typst::compile;
 use typst_pdf::{pdf, PdfOptions};
 
-// 1. Criar o World com os arquivos do template
+// 1. Create the World with the template files
 let world = PapelonWorld::new(files, input_json);
 
-// 2. Compilar — retorna Result com o documento ou erros
+// 2. Compile: returns Result with the document or errors
 let result = compile(&world);
 
 match result.output {
     Ok(document) => {
-        // 3. Exportar para PDF
+        // 3. Export to PDF
         let options = PdfOptions::default();
         let pdf_bytes = pdf(&document, &options)?;
-        // pdf_bytes: Vec<u8> — os bytes do PDF
+        // pdf_bytes: Vec<u8>, the PDF bytes
     }
     Err(errors) => {
         // errors: Vec<SourceDiagnostic>
-        // cada erro tem: message, span (localização no .typ), severity
+        // each error has: message, span (location in .typ), severity
         for error in &errors {
             eprintln!("Typst error: {}", error.message);
         }
@@ -142,46 +143,46 @@ match result.output {
 }
 ```
 
-**Nota:** `compile()` retorna um `SourceResult` que tem tanto `output` (pode ser Ok mesmo com warnings)
-quanto `warnings`. Sempre verificar `output` — warnings não impedem a geração do PDF.
+**Note:** `compile()` returns a `SourceResult` that has both `output` (it may be Ok even with warnings)
+and `warnings`. Always check `output`; warnings do not prevent PDF generation.
 
 ---
 
-## Passando inputs (sys.inputs) via crate
+## Passing Inputs (sys.inputs) Through the Crate
 
-Os inputs são passados como parte da `Library` na construção do World:
+Inputs are passed as part of the `Library` when building the World:
 
 ```rust
 use typst::Library;
 use typst::foundations::Dict;
 
-// Construir os inputs como Dict do Typst
+// Build inputs as a Typst Dict
 let mut inputs = Dict::new();
 inputs.insert(
     "data".into(),
-    // o payload JSON serializado como string
+    // the JSON payload serialized as a string
     serde_json::to_string(&payload).unwrap().into()
 );
 
-// Criar a biblioteca com os inputs
+// Create the library with the inputs
 let library = Library::builder()
     .with_inputs(inputs)
     .build();
 ```
 
-O template então acessa via `sys.inputs.data`.
+The template then accesses it through `sys.inputs.data`.
 
 ---
 
-## Carregando fontes
+## Loading Fonts
 
-O Typst precisa de fontes para compilar. Sem fontes, textos não renderizam.
+Typst needs fonts to compile. Without fonts, text does not render.
 
 ```rust
 use typst::text::{Font, FontBook};
 
-// Opção A: Embedar fontes padrão (Linux Libertine, etc.)
-// A crate `typst-assets` provê as fontes padrão do Typst
+// Option A: Embed default fonts (Linux Libertine, etc.)
+// The `typst-assets` crate provides Typst's default fonts
 // [dependencies]
 // typst-assets = { version = "0.13", features = ["fonts"] }
 
@@ -202,8 +203,8 @@ fn load_default_fonts() -> (FontBook, Vec<Font>) {
     (book, fonts)
 }
 
-// Opção B: Carregar fontes customizadas do template (assets/)
-// Os bytes da fonte vêm dos blobs do template — já estão em memória
+// Option B: Load custom fonts from the template (assets/)
+// Font bytes come from template blobs; they are already in memory
 fn load_font_from_bytes(data: Bytes, book: &mut FontBook, fonts: &mut Vec<Font>) {
     for font in Font::iter(data) {
         book.push(font.info().clone());
@@ -212,16 +213,16 @@ fn load_font_from_bytes(data: Bytes, book: &mut FontBook, fonts: &mut Vec<Font>)
 }
 ```
 
-**Recomendação para este projeto:**
-- Sempre incluir as fontes padrão do Typst (`typst-assets`)
-- Fontes customizadas do template (em `assets/`) são carregadas dos blobs do RenderContext
+**Recommendation for this project:**
+- Always include Typst's default fonts (`typst-assets`)
+- Custom template fonts (in `assets/`) are loaded from the `TemplateSource` blobs
 
 ---
 
-## Resolvendo imports entre arquivos
+## Resolving Imports Between Files
 
-Quando o template tem `#import "partials/header.typ"`, o Typst chama `World::source()`
-com o `FileId` do arquivo importado. Precisamos mapear esse FileId para o conteúdo correto.
+When a template has `#import "partials/header.typ"`, Typst calls `World::source()`
+with the imported file's `FileId`. We need to map that FileId to the correct content.
 
 ```rust
 use typst::syntax::{FileId, VirtualPath, Source};
@@ -233,7 +234,7 @@ impl World for PapelonWorld {
             return Ok(self.main.clone());
         }
         
-        // Extrair o caminho do FileId e buscar nos arquivos do template
+        // Extract the FileId path and look it up in the template files
         let path = id.vpath().as_rootless_path();
         
         match self.files.get(path) {
@@ -257,26 +258,26 @@ impl World for PapelonWorld {
 
 ---
 
-## Criando o FileId para o main.typ
+## Creating the FileId for main.typ
 
 ```rust
 use typst::syntax::{FileId, VirtualPath};
 
-// O main.typ é sempre a raiz — caminho virtual "/"
+// main.typ is always the root: virtual path "/"
 let main_id = FileId::new(None, VirtualPath::new("/main.typ"));
 
-// Ler o conteúdo do main.typ dos arquivos do template
+// Read main.typ content from the template files
 let main_content = files
     .get(Path::new("main.typ"))
-    .expect("main.typ deve existir no template");
+    .expect("main.typ must exist in the template");
 
-let main_text = std::str::from_utf8(main_content).expect("main.typ deve ser UTF-8");
+let main_text = std::str::from_utf8(main_content).expect("main.typ must be UTF-8");
 let main_source = Source::new(main_id, main_text.to_string());
 ```
 
 ---
 
-## Extraindo erros de compilação para mensagens úteis
+## Extracting Compilation Errors Into Useful Messages
 
 ```rust
 use typst::diag::SourceDiagnostic;
@@ -284,7 +285,7 @@ use typst::diag::SourceDiagnostic;
 fn format_typst_error(error: &SourceDiagnostic, world: &impl World) -> String {
     let message = error.message.to_string();
     
-    // Tentar obter informação de localização
+    // Try to get location information
     if let Some(range) = world.source(error.span.id().unwrap_or(world.main()))
         .ok()
         .and_then(|s| s.range(error.span))
@@ -298,9 +299,9 @@ fn format_typst_error(error: &SourceDiagnostic, world: &impl World) -> String {
 
 ---
 
-## Exemplo mínimo completo — World funcional
+## Complete Minimal Example - Functional World
 
-Este é o exemplo do repositório `typst-as-library` adaptado para o contexto do projeto:
+This is the example from the `typst-as-library` repository adapted to the project context:
 
 ```rust
 use std::collections::HashMap;
@@ -334,7 +335,7 @@ impl TemplateWorld {
             Library::builder().with_inputs(inputs).build()
         );
         
-        // Fontes
+        // Fonts
         let mut book = FontBook::new();
         let mut fonts = Vec::new();
         for data in typst_assets::fonts() {
@@ -384,7 +385,7 @@ impl World for TemplateWorld {
     fn today(&self, _offset: Option<i64>) -> Option<typst::foundations::Datetime> { None }
 }
 
-// Uso:
+// Usage:
 pub fn compile_template(
     files: HashMap<PathBuf, Bytes>,
     payload: &serde_json::Value,
@@ -412,37 +413,37 @@ pub fn compile_template(
 
 ---
 
-## Crates adicionais relevantes
+## Additional Relevant Crates
 
 ```toml
 [dependencies]
 typst = "0.13"
 typst-pdf = "0.13"
-typst-assets = { version = "0.13", features = ["fonts"] }  # fontes padrão embedadas
+typst-assets = { version = "0.13", features = ["fonts"] }  # embedded default fonts
 ```
 
-- `typst-assets`: provê as fontes padrão (Linux Libertine, New Computer Modern, etc.)
-  que o Typst usa quando nenhuma fonte é especificada no template.
-  **Sem isso, templates sem `#set text(font: "...")` explícito não compilam.**
+- `typst-assets`: provides default fonts (Linux Libertine, New Computer Modern, etc.)
+  used by Typst when no font is specified in the template.
+  **Without this, templates without explicit `#set text(font: "...")` do not compile.**
 
 ---
 
-## Armadilhas conhecidas
+## Known Pitfalls
 
-**API instável entre versões:** A crate `typst` não tem garantias de estabilidade semântica.
-Entre versões minor pode haver breaking changes. Fixar a versão exata no `Cargo.toml`.
+**Unstable API across versions:** The `typst` crate does not guarantee semantic stability.
+There may be breaking changes between minor versions. Pin the exact version in `Cargo.toml`.
 
-**`PdfOptions` mudou entre versões:** Em versões antigas era `pdf(&document, None, None)`.
-Em versões mais recentes é `pdf(&document, &PdfOptions::default())`. Verificar a assinatura
-na versão que estiver usando.
+**`PdfOptions` changed between versions:** In older versions it was `pdf(&document, None, None)`.
+In newer versions it is `pdf(&document, &PdfOptions::default())`. Check the signature
+in the version being used.
 
-**Compilação thread-safe:** O `World` precisa implementar `Send + Sync` para uso em
-servidores async. Usar `Arc<RwLock<>>` se houver estado mutável.
+**Thread-safe compilation:** The `World` must implement `Send + Sync` for use in async
+servers. Use `Arc<RwLock<>>` if there is mutable state.
 
-**Sem filesystem access automático:** O Typst via crate não lê nada do disco por conta própria.
-Todo arquivo que o template precisar (imagens, fontes, imports) deve estar no `HashMap` passado
-ao World. Esta é a propriedade que garante isolamento entre compilações.
+**No automatic filesystem access:** Typst through the crate does not read anything from disk by itself.
+Every file the template needs (images, fonts, imports) must be in the `HashMap` passed
+to the World. This property guarantees isolation between compilations.
 
-**Pacotes do Typst Universe:** Templates que usam `#import "@preview/..."` precisam que
-o conteúdo do pacote esteja disponível via `World::file()`. Para o MVP, não suportar
-pacotes externos — retornar `FileError::NotFound` e documentar a limitação.
+**Typst Universe packages:** Templates that use `#import "@preview/..."` require
+the package contents to be available through `World::file()`. For the MVP, do not support
+external packages: return `FileError::NotFound` and document the limitation.
