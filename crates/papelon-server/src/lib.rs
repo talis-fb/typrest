@@ -1,5 +1,7 @@
 pub mod loader;
 
+use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -11,13 +13,53 @@ use axum::http::header::CONTENT_TYPE;
 use axum::http::{HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
+use loader::filesystem::FilesystemLoader;
 use papelon_core::{
     CompilationError, Document, LoaderError, RenderError, RenderRequest, RenderService,
-    TemplateLoader, TemplateName, ValidationError,
+    TemplateLoader, TemplateName, TypstCompiler, ValidationError,
 };
 use serde::Serialize;
 use serde_json::Value;
 use tracing::{info, warn};
+use tracing_subscriber::EnvFilter;
+
+#[derive(Debug, Clone)]
+pub struct ServerConfig {
+    pub templates_dir: PathBuf,
+    pub port: u16,
+    pub host: [u8; 4],
+}
+
+impl ServerConfig {
+    pub fn new(templates_dir: impl Into<PathBuf>, port: u16) -> Self {
+        Self {
+            templates_dir: templates_dir.into(),
+            port,
+            host: [0, 0, 0, 0],
+        }
+    }
+}
+
+pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let loader = Arc::new(FilesystemLoader::new(config.templates_dir));
+    let compiler = Arc::new(TypstCompiler::new());
+    let render_service = RenderService::new(loader.clone(), compiler);
+    let app = router(AppState::new(loader, render_service));
+    let address = SocketAddr::from((config.host, config.port));
+    let listener = tokio::net::TcpListener::bind(address).await?;
+
+    info!(%address, "papelon server listening");
+    axum::serve(listener, app).await?;
+
+    Ok(())
+}
+
+pub fn init_tracing() {
+    let filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("papelon_server=info"));
+
+    tracing_subscriber::fmt().with_env_filter(filter).init();
+}
 
 #[derive(Clone)]
 pub struct AppState {
