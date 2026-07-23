@@ -28,5 +28,5 @@ tower = "0.5.3"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
 typst = "=0.15.1"
-typst-assets = "=0.15.1"
+typst-assets = { version = "=0.15.1", features = ["fonts"] }
 typst-pdf = "=0.15.1"

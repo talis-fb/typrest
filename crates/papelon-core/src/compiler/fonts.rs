@@ -57,3 +57,15 @@ fn load_font(bytes: Bytes, book: &mut FontBook, fonts: &mut Vec<Font>) {
 fn is_template_font(path: &str) -> bool {
     path.starts_with("assets/") && (path.ends_with(".ttf") || path.ends_with(".otf"))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::FontRegistry;
+
+    #[test]
+    fn loads_default_typst_fonts() {
+        let registry = FontRegistry::new();
+
+        assert!(!registry.default_fonts.is_empty());
+    }
+}
