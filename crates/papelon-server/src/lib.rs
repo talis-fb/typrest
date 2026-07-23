@@ -1,46 +1,23 @@
+pub mod errors;
+pub mod handlers;
 pub mod loader;
+pub mod router;
+pub mod server;
 
 use std::net::SocketAddr;
-use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Instant;
 
-use axum::Router;
-use axum::body::Body;
-use axum::extract::rejection::JsonRejection;
-use axum::extract::{Json, Path, State};
-use axum::http::header::CONTENT_TYPE;
-use axum::http::{HeaderValue, StatusCode};
-use axum::response::{IntoResponse, Response};
-use axum::routing::{get, post};
-use loader::filesystem::FilesystemLoader;
-use papelon_core::{
-    CompilationError, Document, LoaderError, RenderError, RenderRequest, RenderService,
-    TemplateLoader, TemplateName, TypstCompiler, ValidationError,
-};
-use serde::Serialize;
-use serde_json::Value;
-use tracing::{info, warn};
+use papelon_core::{RenderService, TypstCompiler};
+use tracing::info;
 use tracing_subscriber::EnvFilter;
 
-#[derive(Debug, Clone)]
-pub struct ServerConfig {
-    pub templates_dir: PathBuf,
-    pub port: u16,
-    pub host: [u8; 4],
-}
-
-impl ServerConfig {
-    pub fn new(templates_dir: impl Into<PathBuf>, port: u16) -> Self {
-        Self {
-            templates_dir: templates_dir.into(),
-            port,
-            host: [0, 0, 0, 0],
-        }
-    }
-}
+use crate::loader::filesystem::FilesystemLoader;
+use crate::router::router;
+use crate::server::{AppState, ServerConfig};
 
 pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    init_tracing();
+
     let loader = Arc::new(FilesystemLoader::new(config.templates_dir));
     let compiler = Arc::new(TypstCompiler::new());
     let render_service = RenderService::new(loader.clone(), compiler);
@@ -54,232 +31,11 @@ pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error
     Ok(())
 }
 
-pub fn init_tracing() {
+fn init_tracing() {
     let filter =
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("papelon_server=info"));
 
     tracing_subscriber::fmt().with_env_filter(filter).init();
-}
-
-#[derive(Clone)]
-pub struct AppState {
-    loader: Arc<dyn TemplateLoader>,
-    render_service: RenderService,
-}
-
-impl AppState {
-    pub fn new(loader: Arc<dyn TemplateLoader>, render_service: RenderService) -> Self {
-        Self {
-            loader,
-            render_service,
-        }
-    }
-}
-
-pub fn router(state: AppState) -> Router {
-    Router::new()
-        .route("/healthz", get(healthz))
-        .route("/templates", get(list_templates))
-        .route("/render/{template}", post(render_template))
-        .with_state(state)
-}
-
-async fn healthz() -> Json<HealthResponse> {
-    Json(HealthResponse { status: "ok" })
-}
-
-async fn list_templates(
-    State(state): State<AppState>,
-) -> Result<Json<TemplatesResponse>, ApiError> {
-    let templates = state
-        .loader
-        .list()
-        .await
-        .map_err(ApiError::from_loader_error)?
-        .into_iter()
-        .map(|name| TemplateResponse {
-            name: name.into_inner(),
-        })
-        .collect();
-
-    Ok(Json(TemplatesResponse { templates }))
-}
-
-async fn render_template(
-    State(state): State<AppState>,
-    Path(template): Path<String>,
-    payload: Result<Json<Value>, JsonRejection>,
-) -> Result<Response, ApiError> {
-    let Json(payload) = payload.map_err(|error| {
-        ApiError::new(StatusCode::BAD_REQUEST, "invalid_json", error.body_text())
-    })?;
-    let template = TemplateName::new(template).map_err(|error| {
-        ApiError::new(
-            StatusCode::BAD_REQUEST,
-            "invalid_template_name",
-            error.to_string(),
-        )
-    })?;
-    let template_for_log = template.clone();
-    let started_at = Instant::now();
-
-    let result = state
-        .render_service
-        .render(RenderRequest::new(template, payload))
-        .await;
-    let elapsed_ms = started_at.elapsed().as_millis();
-
-    match result {
-        Ok(document) => {
-            let pdf_size = document.bytes().len();
-            info!(
-                template = %template_for_log,
-                latency_ms = elapsed_ms,
-                pdf_size,
-                status = "ok",
-                "render completed"
-            );
-            Ok(pdf_response(document))
-        }
-        Err(error) => {
-            warn!(
-                template = %template_for_log,
-                latency_ms = elapsed_ms,
-                status = "error",
-                error = %error,
-                "render failed"
-            );
-            Err(ApiError::from_render_error(error))
-        }
-    }
-}
-
-fn pdf_response(document: Document) -> Response {
-    let mut response = Body::from(document.into_bytes()).into_response();
-    response
-        .headers_mut()
-        .insert(CONTENT_TYPE, HeaderValue::from_static("application/pdf"));
-    response
-}
-
-#[derive(Serialize)]
-struct HealthResponse {
-    status: &'static str,
-}
-
-#[derive(Serialize)]
-struct TemplatesResponse {
-    templates: Vec<TemplateResponse>,
-}
-
-#[derive(Serialize)]
-struct TemplateResponse {
-    name: String,
-}
-
-#[derive(Debug)]
-struct ApiError {
-    status: StatusCode,
-    body: ErrorBody,
-}
-
-impl ApiError {
-    fn new(status: StatusCode, error: impl Into<String>, message: impl Into<String>) -> Self {
-        Self {
-            status,
-            body: ErrorBody {
-                error: error.into(),
-                message: message.into(),
-                violations: Vec::new(),
-                line: None,
-            },
-        }
-    }
-
-    fn from_loader_error(error: LoaderError) -> Self {
-        match error {
-            LoaderError::TemplateNotFound(name) => Self::new(
-                StatusCode::NOT_FOUND,
-                "template_not_found",
-                format!("Template '{name}' was not found"),
-            ),
-            error => Self::new(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "template_loader_failed",
-                error.to_string(),
-            ),
-        }
-    }
-
-    fn from_render_error(error: RenderError) -> Self {
-        match error {
-            RenderError::TemplateNotFound(name) => Self::new(
-                StatusCode::NOT_FOUND,
-                "template_not_found",
-                format!("Template '{name}' was not found"),
-            ),
-            RenderError::ValidationError(violations) => Self {
-                status: StatusCode::UNPROCESSABLE_ENTITY,
-                body: ErrorBody {
-                    error: "schema_validation_failed".to_owned(),
-                    message: "Payload validation failed".to_owned(),
-                    violations: violations.into_iter().map(Into::into).collect(),
-                    line: None,
-                },
-            },
-            RenderError::CompilationError(error) => compilation_error_response(error),
-        }
-    }
-}
-
-fn compilation_error_response(error: CompilationError) -> ApiError {
-    match error {
-        CompilationError::Failed { message, line } => ApiError {
-            status: StatusCode::INTERNAL_SERVER_ERROR,
-            body: ErrorBody {
-                error: "compilation_failed".to_owned(),
-                message,
-                violations: Vec::new(),
-                line,
-            },
-        },
-        CompilationError::ExportFailed(message) => ApiError::new(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "compilation_failed",
-            message,
-        ),
-    }
-}
-
-impl IntoResponse for ApiError {
-    fn into_response(self) -> Response {
-        (self.status, Json(self.body)).into_response()
-    }
-}
-
-#[derive(Debug, Serialize)]
-struct ErrorBody {
-    error: String,
-    message: String,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    violations: Vec<ViolationBody>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    line: Option<u32>,
-}
-
-#[derive(Debug, Serialize)]
-struct ViolationBody {
-    field: String,
-    issue: String,
-}
-
-impl From<ValidationError> for ViolationBody {
-    fn from(error: ValidationError) -> Self {
-        Self {
-            field: error.field,
-            issue: error.issue,
-        }
-    }
 }
 
 #[cfg(test)]
@@ -302,7 +58,8 @@ mod tests {
     use tower::ServiceExt;
 
     use crate::loader::filesystem::FilesystemLoader;
-    use crate::{AppState, router};
+    use crate::router::router;
+    use crate::server::AppState;
 
     #[derive(Clone)]
     struct MockCompiler {
