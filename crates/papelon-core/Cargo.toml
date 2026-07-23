@@ -16,3 +16,5 @@ typst-pdf.workspace = true
 
 [dev-dependencies]
 futures-executor.workspace = true
+insta.workspace = true
+pdf-extract.workspace = true

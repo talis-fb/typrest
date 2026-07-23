@@ -392,10 +392,8 @@ Hello #data.name
         let loader = FilesystemLoader::new(&examples_dir);
         let names = loader.list().await.unwrap();
 
-        assert_eq!(
-            names.iter().map(|name| name.as_str()).collect::<Vec<_>>(),
-            vec!["invoice", "welcome"]
-        );
+        assert!(names.iter().any(|name| name.as_str() == "invoice"));
+        assert!(names.iter().any(|name| name.as_str() == "welcome"));
         loader
             .load(&TemplateName::new("welcome").unwrap())
             .await

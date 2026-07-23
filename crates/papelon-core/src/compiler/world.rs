@@ -177,6 +177,7 @@ mod tests {
     use std::collections::BTreeMap;
 
     use bytes::Bytes as CoreBytes;
+    use insta::assert_snapshot;
     use serde_json::json;
 
     use crate::{CompilationError, TemplateSource};
@@ -209,13 +210,13 @@ Hello
     }
 
     #[test]
-    fn injects_payload_through_sys_inputs_data() {
+    fn snapshots_rendered_pdf_text() {
         let fonts = FontRegistry::new();
         let pdf = compile(
             &source(
                 r#"
 #let data = json(bytes(sys.inputs.data))
-#data.name
+Hello #data.name
 "#,
             ),
             &json!({ "name": "Ada" }),
@@ -224,6 +225,7 @@ Hello
         .unwrap();
 
         assert!(pdf.starts_with(b"%PDF"));
+        assert_snapshot!(normalize_text(&extract_text_from_pdf(&pdf)), @"Hello Ada");
     }
 
     #[test]
@@ -238,5 +240,17 @@ Hello
                 line: Some(_)
             } if !message.is_empty()
         ));
+    }
+
+    fn extract_text_from_pdf(bytes: &[u8]) -> String {
+        pdf_extract::extract_text_from_mem(bytes).unwrap()
+    }
+
+    fn normalize_text(text: &str) -> String {
+        text.lines()
+            .map(str::trim_end)
+            .filter(|line| !line.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 }
