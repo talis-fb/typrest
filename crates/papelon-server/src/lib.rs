@@ -57,7 +57,7 @@ mod tests {
     use papelon_core::loader::memory::MemoryLoader;
     use papelon_core::{
         CompilationError, Document, PdfCompiler, RenderService, Schema, TemplateBundle,
-        TemplateName, TemplateSource,
+        TemplateLoader, TemplateName, TemplateSource,
     };
     use serde_json::{Value, json};
     use tempfile::tempdir;
@@ -386,8 +386,74 @@ Hello #data.name
         assert!(response.contains("%PDF"));
     }
 
+    #[tokio::test]
+    async fn repository_examples_load_and_render_invoice_over_http() {
+        let examples_dir = examples_templates_dir();
+        let loader = FilesystemLoader::new(&examples_dir);
+        let names = loader.list().await.unwrap();
+
+        assert_eq!(
+            names.iter().map(|name| name.as_str()).collect::<Vec<_>>(),
+            vec!["invoice", "welcome"]
+        );
+        loader
+            .load(&TemplateName::new("welcome").unwrap())
+            .await
+            .unwrap();
+
+        let loader = Arc::new(loader);
+        let compiler = Arc::new(papelon_core::TypstCompiler::new());
+        let render_service = RenderService::new(loader.clone(), compiler);
+        let app = router(AppState::new(loader, render_service));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let payload = fs::read(examples_dir.join("invoice/payload.json")).unwrap();
+        let response = post_json(address, "/render/invoice", &payload).await;
+
+        server.abort();
+
+        let response = String::from_utf8_lossy(&response);
+        assert!(response.starts_with("HTTP/1.1 200 OK"));
+        assert!(response.contains("content-type: application/pdf"));
+        assert!(response.contains("%PDF"));
+    }
+
     fn write(path: &std::path::Path, contents: &str) {
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(path, contents).unwrap();
+    }
+
+    fn examples_templates_dir() -> std::path::PathBuf {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../examples/templates")
+            .canonicalize()
+            .unwrap()
+    }
+
+    async fn post_json(address: std::net::SocketAddr, path: &str, body: &[u8]) -> Vec<u8> {
+        let stream = tokio::net::TcpStream::connect(address).await.unwrap();
+        stream.writable().await.unwrap();
+
+        let request = format!(
+            "POST {path} HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            body.len()
+        );
+        stream.try_write(request.as_bytes()).unwrap();
+        stream.try_write(body).unwrap();
+
+        let mut response = Vec::new();
+        loop {
+            stream.readable().await.unwrap();
+            let mut chunk = [0; 4096];
+            match stream.try_read(&mut chunk) {
+                Ok(0) => break,
+                Ok(n) => response.extend_from_slice(&chunk[..n]),
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => continue,
+                Err(error) => panic!("failed to read response: {error}"),
+            }
+        }
+
+        response
     }
 }
