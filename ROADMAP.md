@@ -73,20 +73,20 @@ Success criterion: `docker run` starts the server, `curl POST /render/invoice` w
 
 **Goal:** expose RenderService over HTTP with correct error handling.
 
-- [ ] Create `papelon-server` with `axum` and `tokio`
-- [ ] Implement routes:
-  - [ ] `POST /render/:template` -> calls RenderService, returns PDF or JSON error
-  - [ ] `GET /templates` -> lists templates available through TemplateLoader
-  - [ ] `GET /healthz` -> returns `{"status": "ok"}`
-- [ ] Map domain errors to HTTP:
-  - [ ] `TemplateNotFound` -> 404
-  - [ ] `ValidationError` -> 422 with a violations list
-  - [ ] `CompilationError` -> 500 with the Typst message
-- [ ] `main.rs` with argument parsing through `clap`:
-  - [ ] `--templates <path>` (required in Mode 1)
-  - [ ] `<port>` (default 8080)
-- [ ] Structured logs with `tracing`: each render logs template, latency, PDF size
-- [ ] End-to-end test: start server on a random port, POST, verify PDF
+- [x] Create `papelon-server` with `axum` and `tokio`
+- [x] Implement routes:
+  - [x] `POST /render/:template` -> calls RenderService, returns PDF or JSON error
+  - [x] `GET /templates` -> lists templates available through TemplateLoader
+  - [x] `GET /healthz` -> returns `{"status": "ok"}`
+- [x] Map domain errors to HTTP:
+  - [x] `TemplateNotFound` -> 404
+  - [x] `ValidationError` -> 422 with a violations list
+  - [x] `CompilationError` -> 500 with the Typst message
+- [x] `main.rs` with argument parsing through `clap`:
+  - [x] `--templates <path>` (required in Mode 1)
+  - [x] `<port>` (default 8080)
+- [x] Structured logs with `tracing`: each render logs template, latency, PDF size
+- [x] End-to-end test: start server on a random port, POST, verify PDF
 
 **Exit criterion:** `cargo run -- --templates ./examples/templates 8080` starts the server and `curl -X POST http://localhost:8080/render/invoice -d @payload.json` returns a PDF.
 
