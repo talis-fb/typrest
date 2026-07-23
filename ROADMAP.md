@@ -82,13 +82,12 @@ Success criterion: `docker run` starts the server, `curl POST /render/invoice` w
   - [x] `TemplateNotFound` -> 404
   - [x] `ValidationError` -> 422 with a violations list
   - [x] `CompilationError` -> 500 with the Typst message
-- [x] `main.rs` with argument parsing through `clap`:
-  - [x] `--templates <path>` (required in Mode 1)
-  - [x] `<port>` (default 8080)
 - [x] Structured logs with `tracing`: each render logs template, latency, PDF size
-- [x] End-to-end test: start server on a random port, POST, verify PDF
+- [x] Create `papelon-cli` with `main.rs` with argument parsing through `clap`:
+  - [x] `serve <templates>` (required in Mode 1)
+  - [x] `<port>` (default 8080)
 
-**Exit criterion:** `cargo run -- --templates ./examples/templates 8080` starts the server and `curl -X POST http://localhost:8080/render/invoice -d @payload.json` returns a PDF.
+**Exit criterion:** `cargo run -- serve ./examples/templates 8080` starts the server and `curl -X POST http://localhost:8080/render/invoice -d @payload.json` returns a PDF.
 
 ---
 
@@ -99,16 +98,15 @@ Success criterion: `docker run` starts the server, `curl POST /render/invoice` w
 - [ ] Multi-stage Dockerfile:
   - [ ] Stage 1: compile the Rust binary
   - [ ] Stage 2: final debian:slim image with only the binary
-  - [ ] Result: image < 100MB
   - [ ] `COPY templates/` in the example Dockerfile
 - [ ] Example `docker-compose.yml` with templates volume
-- [ ] `--watch` mode in the server:
-  - [ ] Use the `notify` crate to detect changes in the templates directory
-  - [ ] On change: rescan the changed template, update `FilesystemLoader`
-  - [ ] Log which template was reloaded
-- [ ] Minimal CLI in `papelon-cli`:
-  - [ ] `papelon init <name>`: creates `name/main.typ` and `name/schema.json` with boilerplate
-  - [ ] `main.typ` boilerplate already includes `#let data = json(bytes(sys.inputs.data))`
+- [x] `--watch` mode in the server:
+  - [x] Use the `notify` crate to detect changes in the templates directory
+  - [x] On change: rescan the changed template, update `FilesystemLoader`
+  - [x] Log which template was reloaded
+- [x] Minimal CLI in `papelon-cli`:
+  - [x] `papelon init <name>`: creates `name/main.typ` and `name/schema.json` with boilerplate
+  - [x] `main.typ` boilerplate already includes `#let data = json(bytes(sys.inputs.data))`
 - [ ] README with:
   - [ ] What the project is (3 paragraphs)
   - [ ] Quickstart: docker-compose + curl in 5 minutes
@@ -118,6 +116,7 @@ Success criterion: `docker run` starts the server, `curl POST /render/invoice` w
 - [ ] Example templates in the repository:
   - [ ] `examples/templates/invoice/` - complete template with items and totals
   - [ ] `examples/templates/welcome/` - simple welcome template
+- [ ] End-to-end test: start server on a random port, POST, verify PDF
 
 **Exit criterion (= MVP criterion):** the README works: someone without context can start the server and generate a PDF by following the quickstart.
 

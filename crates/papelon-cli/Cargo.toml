@@ -4,4 +4,14 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[[bin]]
+name = "papelon"
+path = "src/main.rs"
+
 [dependencies]
+clap.workspace = true
+papelon-server = { path = "../papelon-server" }
+tokio.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

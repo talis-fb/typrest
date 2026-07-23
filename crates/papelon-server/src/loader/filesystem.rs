@@ -23,7 +23,7 @@ impl FilesystemLoader {
         &self.root
     }
 
-    fn load_sync(&self, name: &TemplateName) -> Result<TemplateBundle, LoaderError> {
+    pub(crate) fn load_sync(&self, name: &TemplateName) -> Result<TemplateBundle, LoaderError> {
         let template_dir = self.root.join(name.as_str());
 
         if !template_dir.is_dir() {
@@ -56,7 +56,7 @@ impl FilesystemLoader {
         Ok(TemplateBundle::new(TemplateSource::new(files), schema))
     }
 
-    fn list_sync(&self) -> Result<Vec<TemplateName>, LoaderError> {
+    pub(crate) fn list_sync(&self) -> Result<Vec<TemplateName>, LoaderError> {
         let entries = fs::read_dir(&self.root).map_err(|error| FilesystemLoaderError::ReadDir {
             path: self.root.clone(),
             error,

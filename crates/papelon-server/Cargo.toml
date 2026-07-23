@@ -8,6 +8,7 @@ license.workspace = true
 async-trait.workspace = true
 axum.workspace = true
 bytes.workspace = true
+notify.workspace = true
 papelon-core = { path = "../papelon-core" }
 serde.workspace = true
 serde_json.workspace = true

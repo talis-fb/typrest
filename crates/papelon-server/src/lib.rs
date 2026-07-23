@@ -12,6 +12,7 @@ use tracing::info;
 use tracing_subscriber::EnvFilter;
 
 use crate::loader::filesystem::FilesystemLoader;
+use crate::loader::watch::start_template_watcher;
 use crate::router::router;
 use crate::server::{AppState, ServerConfig};
 
@@ -19,6 +20,11 @@ pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error
     init_tracing();
 
     let loader = Arc::new(FilesystemLoader::new(config.templates_dir));
+    let _watcher = if config.watch {
+        Some(start_template_watcher(loader.as_ref().clone())?)
+    } else {
+        None
+    };
     let compiler = Arc::new(TypstCompiler::new());
     let render_service = RenderService::new(loader.clone(), compiler);
     let app = router(AppState::new(loader, render_service));

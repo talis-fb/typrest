@@ -8,6 +8,7 @@ pub struct ServerConfig {
     pub templates_dir: PathBuf,
     pub port: u16,
     pub host: [u8; 4],
+    pub watch: bool,
 }
 
 impl ServerConfig {
@@ -16,7 +17,13 @@ impl ServerConfig {
             templates_dir: templates_dir.into(),
             port,
             host: [0, 0, 0, 0],
+            watch: false,
         }
+    }
+
+    pub fn with_watch(mut self, watch: bool) -> Self {
+        self.watch = watch;
+        self
     }
 }
 
