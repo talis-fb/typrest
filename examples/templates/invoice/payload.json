@@ -1,0 +1,26 @@
+{
+  "invoice_number": "INV-1001",
+  "date": "2026-07-23",
+  "due_date": "2026-08-06",
+  "customer": {
+    "name": "Ada Lovelace",
+    "email": "ada@example.com"
+  },
+  "items": [
+    {
+      "description": "PDF rendering service",
+      "quantity": 1,
+      "unit_price": "$120.00",
+      "total": "$120.00"
+    },
+    {
+      "description": "Template design",
+      "quantity": 2,
+      "unit_price": "$80.00",
+      "total": "$160.00"
+    }
+  ],
+  "subtotal": "$280.00",
+  "tax": "$28.00",
+  "total": "$308.00"
+}

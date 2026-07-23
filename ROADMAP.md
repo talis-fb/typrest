@@ -95,11 +95,11 @@ Success criterion: `docker run` starts the server, `curl POST /render/invoice` w
 
 **Goal:** any developer can use the project in less than 5 minutes.
 
-- [ ] Multi-stage Dockerfile:
-  - [ ] Stage 1: compile the Rust binary
-  - [ ] Stage 2: final debian:slim image with only the binary
-  - [ ] `COPY templates/` in the example Dockerfile
-- [ ] Example `docker-compose.yml` with templates volume
+- [x] Multi-stage Dockerfile:
+  - [x] Stage 1: compile the Rust binary
+  - [x] Stage 2: final debian:slim image with only the binary
+  - [x] `COPY templates/` in the example Dockerfile
+- [x] Example `docker-compose.yml` with templates volume
 - [x] `--watch` mode in the server:
   - [x] Use the `notify` crate to detect changes in the templates directory
   - [x] On change: rescan the changed template, update `FilesystemLoader`
@@ -107,16 +107,16 @@ Success criterion: `docker run` starts the server, `curl POST /render/invoice` w
 - [x] Minimal CLI in `papelon-cli`:
   - [x] `papelon init <name>`: creates `name/main.typ` and `name/schema.json` with boilerplate
   - [x] `main.typ` boilerplate already includes `#let data = json(bytes(sys.inputs.data))`
-- [ ] README with:
-  - [ ] What the project is (3 paragraphs)
-  - [ ] Quickstart: docker-compose + curl in 5 minutes
-  - [ ] `schema.json` reference
-  - [ ] Complete .typ template example
-  - [ ] HTTP API reference
-- [ ] Example templates in the repository:
-  - [ ] `examples/templates/invoice/` - complete template with items and totals
-  - [ ] `examples/templates/welcome/` - simple welcome template
-- [ ] End-to-end test: start server on a random port, POST, verify PDF
+- [x] README with:
+  - [x] What the project is (3 paragraphs)
+  - [x] Quickstart: docker-compose + curl in 5 minutes
+  - [x] `schema.json` reference
+  - [x] Complete .typ template example
+  - [x] HTTP API reference
+- [x] Example templates in the repository:
+  - [x] `examples/templates/invoice/` - complete template with items and totals
+  - [x] `examples/templates/welcome/` - simple welcome template
+- [x] End-to-end test: start server on a random port, POST, verify PDF
 
 **Exit criterion (= MVP criterion):** the README works: someone without context can start the server and generate a PDF by following the quickstart.
 

@@ -1,0 +1,151 @@
+# Papelon
+
+Papelon is an HTTP server for server-side PDF generation with Typst. It is built for applications that need reliable PDF output without embedding a PDF library or browser automation runtime into the application itself.
+
+Applications integrate with Papelon through HTTP. A service in any language sends JSON to a template endpoint, and Papelon validates the payload, compiles the matching Typst template, and returns PDF bytes.
+
+The current MVP runs in filesystem mode. Templates live in a directory mounted into the server, and each template contains a `main.typ` file plus a `schema.json` contract.
+
+## Quickstart
+
+Start the server with Docker Compose:
+
+```bash
+docker compose up --build
+```
+
+Render the invoice example:
+
+```bash
+curl -X POST \
+  http://localhost:8080/render/invoice \
+  -H 'Content-Type: application/json' \
+  --data-binary @examples/templates/invoice/payload.json \
+  --output invoice.pdf
+```
+
+List available templates:
+
+```bash
+curl http://localhost:8080/templates
+```
+
+Run without Docker:
+
+```bash
+cargo run -- serve ./examples/templates 8080 --watch
+```
+
+## Template Structure
+
+```text
+templates/
+  invoice/
+    main.typ
+    schema.json
+    assets/
+  welcome/
+    main.typ
+    schema.json
+  _shared/
+    brand.typ
+```
+
+Each template directory must contain `main.typ` and `schema.json`. Files under `_shared/` are available to every template.
+
+## Complete Typst Example
+
+```typst
+#let data = json(bytes(sys.inputs.data))
+
+= Welcome, #data.name
+
+#data.message
+```
+
+The JSON request body is injected into Typst through `sys.inputs.data`.
+
+## schema.json Reference
+
+Papelon supports schema version `v1`. The root object must contain `schemaVersion` and `request.body`.
+
+```json
+{
+  "schemaVersion": "v1",
+  "request": {
+    "body": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "required": true
+        }
+      }
+    }
+  }
+}
+```
+
+Supported field types are `string`, `number`, `boolean`, `object`, `array`, and `null`. Object schemas use `properties`, array schemas use `items`, fields are optional by default, and optional fields can define `default`.
+
+See `docs/schema-v1.md` for the full schema specification.
+
+## HTTP API
+
+### `GET /healthz`
+
+Returns:
+
+```json
+{ "status": "ok" }
+```
+
+### `GET /templates`
+
+Returns:
+
+```json
+{
+  "templates": [
+    { "name": "invoice" },
+    { "name": "welcome" }
+  ]
+}
+```
+
+### `POST /render/:template`
+
+Request:
+
+```bash
+curl -X POST \
+  http://localhost:8080/render/welcome \
+  -H 'Content-Type: application/json' \
+  --data-binary @examples/templates/welcome/payload.json \
+  --output welcome.pdf
+```
+
+Success response:
+
+```text
+200 OK
+Content-Type: application/pdf
+```
+
+Error responses use JSON:
+
+```json
+{
+  "error": "schema_validation_failed",
+  "message": "Payload validation failed",
+  "violations": [
+    { "field": "$.name", "issue": "required field missing" }
+  ]
+}
+```
+
+Status codes:
+
+- `404`: template not found
+- `422`: payload does not match `schema.json`
+- `500`: Typst compilation or PDF export failed
