@@ -11,7 +11,9 @@ path = "src/main.rs"
 [dependencies]
 clap.workspace = true
 papelon-server = { path = "../papelon-server" }
+serde.workspace = true
 tokio.workspace = true
+toml.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
