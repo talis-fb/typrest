@@ -40,9 +40,6 @@ pub async fn render_template(
     Path(template): Path<String>,
     payload: Result<Json<Value>, JsonRejection>,
 ) -> Result<Response, ApiError> {
-    let Json(payload) = payload.map_err(|error| {
-        ApiError::new(StatusCode::BAD_REQUEST, "invalid_json", error.body_text())
-    })?;
     let template = TemplateName::new(template).map_err(|error| {
         ApiError::new(
             StatusCode::BAD_REQUEST,
@@ -51,6 +48,11 @@ pub async fn render_template(
         )
     })?;
     let template_for_log = template.clone();
+
+    let Json(payload) = payload.map_err(|error| {
+        ApiError::new(StatusCode::BAD_REQUEST, "invalid_json", error.body_text())
+    })?;
+
     let started_at = Instant::now();
 
     let result = state
