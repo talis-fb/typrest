@@ -90,19 +90,22 @@ Use **exactly** these names in code (structs, variables, functions, comments):
 | `Schema` | Recursive structure parsed from `schema.json`. Contains payload validation rules. |
 | `TemplateSource` | Map of `relative path -> bytes`. Raw template files read by the loader. |
 | `TemplateBundle` | `TemplateSource` + `Schema`. Everything the compiler needs; self-contained. Return value of `TemplateLoader`. |
+| `PreparedTemplate` | Compiler ACL-owned prepared template state. Opaque outside `compiler/`; contains no public `typst::*` type. |
+| `TemplateRegistry` | In-memory map of `TemplateName` to prepared template state plus `Schema`. Built at startup from a `TemplateLoader`. |
 | `RenderRequest` | `TemplateName` + `serde_json::Value` (payload). Input of `RenderService`. |
 | `Document` | PDF bytes. Output of `RenderService`. |
 | `SchemaVersionError` | Load error: missing or unsupported `schemaVersion`. |
 | `SchemaError` | Load error: structurally invalid schema (`properties` without object, enum with mixed types, etc.). |
 | `ValidationError` | Render error: payload does not satisfy the schema (missing required field, wrong type, invalid enum). |
-| `CompilationError` | Render error: Typst compiler failed. Contains message and error line. |
+| `CompilationError` | Typst compiler failed during startup warmup or request rendering. Contains message and error line. |
 | `LoaderError` | Enum that unifies `TemplateLoader` errors: `TemplateNotFound`, `SchemaVersionError`, `SchemaError`, `IoError`. |
 | `RenderError` | Enum that unifies `RenderService` errors: `TemplateNotFound`, `ValidationError`, `CompilationError`. |
 
 ### Critical Distinction: Load Error vs Render Error
 
 - **Load errors** (`SchemaVersionError`, `SchemaError`) are detected when the template is read from disk: at startup or under `--watch`. They never reach render.
-- **Render errors** (`ValidationError`, `CompilationError`) are detected at request time.
+- **Startup compilation errors** are detected while building `TemplateRegistry`. They must be shown during `papelon serve` startup before the server listens.
+- **Render errors** (`ValidationError`, `CompilationError`) are detected at request time. Request-time `CompilationError` remains possible for payload-dependent template behavior.
 
 ---
 
@@ -122,7 +125,13 @@ Implementations:
 - `FilesystemLoader` reads from the filesystem (Mode 1, implement now)
 - `StoreLoader` reads from the Store (Mode 2, **DO NOT implement now**)
 
-`RenderService` receives an `Arc<dyn TemplateLoader>`. HTTP handlers receive the `RenderService`. Nothing in the HTTP server knows about filesystem or store directly.
+At server startup, the selected `TemplateLoader` is used to build a `TemplateRegistry`. Startup must list templates, load every `TemplateBundle`, prepare compiler state, run a real warmup compile/export for every template, and fail before listening if any template is broken.
+
+`RenderService` receives the prepared `TemplateRegistry`, not an `Arc<dyn TemplateLoader>`. HTTP handlers receive the `RenderService`. Normal render requests never read templates from disk and never call `TemplateLoader::load()`.
+
+`GET /templates` lists names from the prepared `TemplateRegistry`, not from a live filesystem scan.
+
+See `docs/startup-template-compilation.md` before implementing startup compilation, registry behavior, request lifecycle changes, or watch-mode reload behavior.
 
 ---
 
@@ -156,12 +165,20 @@ pub enum CompilationError {
 // Never exposes typst::* in the signature.
 #[async_trait::async_trait]
 pub trait PdfCompiler: Send + Sync {
-    async fn compile(
+    async fn prepare(
         &self,
         source: &TemplateSource,
+    ) -> Result<PreparedTemplate, CompilationError>;
+
+    async fn compile_prepared(
+        &self,
+        template: &PreparedTemplate,
         payload: &serde_json::Value,
     ) -> Result<Document, CompilationError>;
 }
+
+// Opaque prepared template state. Contains no public typst::* type.
+pub struct PreparedTemplate { /* private internals */ }
 
 // The only concrete exported struct.
 pub struct TypstCompiler { /* private internals */ }
@@ -184,7 +201,8 @@ compiler/
 
 **`world.rs`** contains:
 - `struct TemplateWorld` implementing `typst::World`
-- `fn compile(source, payload, fonts) -> Result<Vec<u8>, CompilationError>`: private function that orchestrates compilation and converts Typst errors to `CompilationError`
+- `fn prepare(source, fonts) -> Result<PreparedTemplate, CompilationError>`: private function that builds reusable template-invariant state
+- `fn compile_prepared(template, payload) -> Result<Vec<u8>, CompilationError>`: private function that builds request-specific inputs, orchestrates compilation, and converts Typst errors to `CompilationError`
 - `fn map_errors(Vec<SourceDiagnostic>) -> CompilationError`: the only place that knows `SourceDiagnostic`
 - `fn build_inputs(payload: &serde_json::Value) -> typst::foundations::Dict`: converts the payload to Typst's format
 
@@ -199,15 +217,15 @@ The impact stays **100% inside `world.rs` and `fonts.rs`**. Examples of historic
 
 | Typst change | Where to absorb |
 |---|---|
-| `PdfOptions` gained new fields | `world.rs`: only `fn compile()` |
-| `compile()` changed return type | `world.rs`: only `fn compile()` |
+| `PdfOptions` gained new fields | `world.rs`: only PDF export inside `compile_prepared()` |
+| `compile()` changed return type | `world.rs`: only Typst orchestration inside `compile_prepared()` |
 | `SourceDiagnostic` gained/lost fields | `world.rs`: only `fn map_errors()` |
 | `FileId`/`VirtualPath` changed module | `world.rs`: imports at the top |
 | `FontBook` changed API | `fonts.rs`: only `FontRegistry` |
 
 ### MockCompiler for Tests
 
-`RenderService` and HTTP handlers are tested with `MockCompiler`: no Typst, no real compilation:
+`RenderService` and HTTP handlers are tested with `MockCompiler` and prepared test entries: no Typst, no real compilation:
 
 ```rust
 // In tests; never in production.
@@ -215,7 +233,13 @@ struct MockCompiler;
 
 #[async_trait]
 impl PdfCompiler for MockCompiler {
-    async fn compile(&self, _: &TemplateSource, _: &serde_json::Value)
+    async fn prepare(&self, _: &TemplateSource)
+        -> Result<PreparedTemplate, CompilationError>
+    {
+        Ok(PreparedTemplate::for_test())
+    }
+
+    async fn compile_prepared(&self, _: &PreparedTemplate, _: &serde_json::Value)
         -> Result<Document, CompilationError>
     {
         // %PDF is the magic byte sequence: valid enough for HTTP integration tests.
@@ -238,6 +262,7 @@ papelon/
   ROADMAP.md              ← phase tasks with checkboxes
   docs/
     schema-v1.md          ← schema.json reference
+    startup-template-compilation.md ← startup compilation + prepared runtime design
     typst-integration.md  ← typst crate API reference
   crates/
     papelon-core/         ← domain + types + traits (no HTTP, no direct filesystem access)

@@ -55,11 +55,11 @@ Success criterion: `docker run` starts the server, `curl POST /render/invoice` w
   - [x] Returns `Document` (PDF bytes) or `CompilationError`
   - [x] Map Typst errors to `CompilationError` with a useful message
 - [x] Implement `RenderService`:
-  - [x] Receives `Arc<dyn TemplateLoader>` in the constructor
+  - [x] Initial loader-backed constructor
   - [x] `render(request: RenderRequest) -> Result<Document, RenderError>`
   - [x] Validates payload against the schema before compiling
   - [x] Uses the files from the `TemplateBundle`
-  - [x] Calls `TypstCompiler::compile`
+  - [x] Calls the initial single-step compiler API
 - [x] Integration tests:
   - [x] Minimal template (only `#let data = json(bytes(sys.inputs.data))`) compiles
   - [x] Invalid payload returns `ValidationError` before calling the compiler
@@ -76,7 +76,7 @@ Success criterion: `docker run` starts the server, `curl POST /render/invoice` w
 - [x] Create `papelon-server` with `axum` and `tokio`
 - [x] Implement routes:
   - [x] `POST /render/:template` -> calls RenderService, returns PDF or JSON error
-  - [x] `GET /templates` -> lists templates available through TemplateLoader
+  - [x] `GET /templates` -> lists available templates
   - [x] `GET /healthz` -> returns `{"status": "ok"}`
 - [x] Map domain errors to HTTP:
   - [x] `TemplateNotFound` -> 404
@@ -119,6 +119,34 @@ Success criterion: `docker run` starts the server, `curl POST /render/invoice` w
 - [x] End-to-end test: start server on a random port, POST, verify PDF
 
 **Exit criterion (= MVP criterion):** the README works: someone without context can start the server and generate a PDF by following the quickstart.
+
+---
+
+## Phase 5 - Startup Compilation + Prepared Runtime
+
+**Goal:** fail fast on broken templates and avoid rebuilding template-invariant Typst state on every request.
+
+- [ ] Document the startup compilation architecture in `docs/startup-template-compilation.md`
+- [ ] Add `PreparedTemplate` inside the compiler ACL with no public `typst::*` exposure
+- [ ] Split `TypstCompiler` into:
+  - [ ] `prepare(&TemplateSource) -> Result<PreparedTemplate, CompilationError>`
+  - [ ] `compile_prepared(&PreparedTemplate, &serde_json::Value) -> Result<Document, CompilationError>`
+- [ ] Generate minimal valid startup payloads from `Schema`
+- [ ] Build `TemplateRegistry` at server startup from the selected `TemplateLoader`
+- [ ] Warm-compile and PDF-export every template before binding the server socket
+- [ ] Fail startup with clear template-specific errors when load, schema, compile, or export fails
+- [ ] Refactor `RenderService` to use `TemplateRegistry` instead of `TemplateLoader`
+- [ ] Refactor `GET /templates` to list names from `TemplateRegistry`
+- [ ] Ensure normal render requests do not call `TemplateLoader::load()` or rebuild template fonts/source maps
+- [ ] Update `--watch` mode:
+  - [ ] Rebuild affected prepared entries on template changes
+  - [ ] Rebuild all prepared entries on `_shared/` changes
+  - [ ] Keep the last known good prepared entry active when reload fails
+- [ ] Add core tests for registry-backed rendering and sample payload generation
+- [ ] Add compiler tests for prepare, warmup compilation, and dynamic `sys.inputs.data`
+- [ ] Add server tests for startup failure, successful prepared rendering, `/templates`, and watch reload behavior
+
+**Exit criterion:** `papelon serve ./examples/templates 8080` compiles all templates before listening, reports broken templates during startup, and render requests reuse prepared template state while still producing payload-specific PDFs.
 
 ---
 
