@@ -126,25 +126,25 @@ Success criterion: `docker run` starts the server, `curl POST /render/invoice` w
 
 **Goal:** fail fast on broken templates and avoid rebuilding template-invariant Typst state on every request.
 
-- [ ] Document the startup compilation architecture in `docs/startup-template-compilation.md`
-- [ ] Add `PreparedTemplate` inside the compiler ACL with no public `typst::*` exposure
-- [ ] Split `TypstCompiler` into:
-  - [ ] `prepare(&TemplateSource) -> Result<PreparedTemplate, CompilationError>`
-  - [ ] `compile_prepared(&PreparedTemplate, &serde_json::Value) -> Result<Document, CompilationError>`
-- [ ] Generate minimal valid startup payloads from `Schema`
-- [ ] Build `TemplateRegistry` at server startup from the selected `TemplateLoader`
-- [ ] Warm-compile and PDF-export every template before binding the server socket
-- [ ] Fail startup with clear template-specific errors when load, schema, compile, or export fails
-- [ ] Refactor `RenderService` to use `TemplateRegistry` instead of `TemplateLoader`
-- [ ] Refactor `GET /templates` to list names from `TemplateRegistry`
-- [ ] Ensure normal render requests do not call `TemplateLoader::load()` or rebuild template fonts/source maps
-- [ ] Update `--watch` mode:
-  - [ ] Rebuild affected prepared entries on template changes
-  - [ ] Rebuild all prepared entries on `_shared/` changes
-  - [ ] Keep the last known good prepared entry active when reload fails
-- [ ] Add core tests for registry-backed rendering and sample payload generation
-- [ ] Add compiler tests for prepare, warmup compilation, and dynamic `sys.inputs.data`
-- [ ] Add server tests for startup failure, successful prepared rendering, `/templates`, and watch reload behavior
+- [x] Document the startup compilation architecture in `docs/startup-template-compilation.md`
+- [x] Add `PreparedTemplate` inside the compiler ACL with no public `typst::*` exposure
+- [x] Split `TypstCompiler` into:
+  - [x] `prepare(&TemplateSource) -> Result<PreparedTemplate, CompilationError>`
+  - [x] `compile_prepared(&PreparedTemplate, &serde_json::Value) -> Result<Document, CompilationError>`
+- [x] Generate minimal valid startup payloads from `Schema`
+- [x] Build `TemplateRegistry` at server startup from the selected `TemplateLoader`
+- [x] Warm-compile and PDF-export every template before binding the server socket
+- [x] Fail startup with clear template-specific errors when load, schema, compile, or export fails
+- [x] Refactor `RenderService` to use `TemplateRegistry` instead of `TemplateLoader`
+- [x] Refactor `GET /templates` to list names from `TemplateRegistry`
+- [x] Ensure normal render requests do not call `TemplateLoader::load()` or rebuild template fonts/source maps
+- [x] Update `--watch` mode:
+  - [x] Rebuild affected prepared entries on template changes
+  - [x] Rebuild all prepared entries on `_shared/` changes
+  - [x] Keep the last known good prepared entry active when reload fails
+- [x] Add core tests for registry-backed rendering and sample payload generation
+- [x] Add compiler tests for prepare, warmup compilation, and dynamic `sys.inputs.data`
+- [x] Add server tests for startup failure, successful prepared rendering, `/templates`, and watch reload behavior
 
 **Exit criterion:** `papelon serve ./examples/templates 8080` compiles all templates before listening, reports broken templates during startup, and render requests reuse prepared template state while still producing payload-specific PDFs.
 

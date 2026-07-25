@@ -45,7 +45,10 @@ Add an entry whenever a non-obvious decision is made.
 - Enum with variants: simpler, but makes the server code aware of the modes
 - Trait (chosen): the HTTP server only knows `Arc<dyn TemplateLoader>`, any implementation works
 
-**Consequences:** `papelon-core` has the `TemplateLoader` trait. `papelon-server` receives the concrete implementation through initialization injection. Core tests use `MemoryLoader`.
+**Consequences:** `papelon-core` has the `TemplateLoader` trait. Server startup and watch mode
+receive the concrete implementation through initialization injection and use it to build prepared
+`TemplateRegistry` entries. HTTP handlers and normal render requests receive the registry and never
+access the loader. Core tests use `MemoryLoader`.
 
 ---
 

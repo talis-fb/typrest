@@ -1,26 +1,62 @@
 use std::path::Path;
+use std::sync::Arc;
 
 use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
-use papelon_core::TemplateName;
+use papelon_core::{PdfCompiler, TemplateLoader, TemplateName, TemplateRegistry};
+use tokio::sync::mpsc;
 use tracing::{error, info, warn};
 
 use crate::loader::filesystem::FilesystemLoader;
 
-pub fn start_template_watcher(loader: FilesystemLoader) -> notify::Result<RecommendedWatcher> {
+pub struct TemplateWatcher {
+    _watcher: RecommendedWatcher,
+    worker: tokio::task::JoinHandle<()>,
+}
+
+impl Drop for TemplateWatcher {
+    fn drop(&mut self) {
+        self.worker.abort();
+    }
+}
+
+pub fn start_template_watcher(
+    loader: Arc<FilesystemLoader>,
+    registry: TemplateRegistry,
+    compiler: Arc<dyn PdfCompiler>,
+) -> notify::Result<TemplateWatcher> {
     let root = loader.root().to_owned();
     let watch_root = root.clone();
+    let (sender, mut receiver) = mpsc::unbounded_channel();
     let mut watcher = RecommendedWatcher::new(
-        move |result| handle_event(result, &root, &loader),
+        move |result| {
+            if sender.send(result).is_err() {
+                warn!("template watch worker stopped");
+            }
+        },
         Config::default(),
     )?;
 
     watcher.watch(&watch_root, RecursiveMode::Recursive)?;
+    let worker = tokio::spawn(async move {
+        while let Some(result) = receiver.recv().await {
+            handle_event(result, &root, loader.as_ref(), &registry, compiler.as_ref()).await;
+        }
+    });
     info!(templates_dir = %watch_root.display(), "template watch mode enabled");
 
-    Ok(watcher)
+    Ok(TemplateWatcher {
+        _watcher: watcher,
+        worker,
+    })
 }
 
-fn handle_event(result: notify::Result<Event>, root: &Path, loader: &FilesystemLoader) {
+async fn handle_event(
+    result: notify::Result<Event>,
+    root: &Path,
+    loader: &FilesystemLoader,
+    registry: &TemplateRegistry,
+    compiler: &dyn PdfCompiler,
+) {
     let event = match result {
         Ok(event) => event,
         Err(error) => {
@@ -47,11 +83,12 @@ fn handle_event(result: notify::Result<Event>, root: &Path, loader: &FilesystemL
     }
 
     if saw_shared {
-        reload_shared(loader);
+        reload_shared(loader, registry, compiler).await;
+        return;
     }
 
     for template in templates {
-        reload_template(loader, &template);
+        reload_template(loader, registry, compiler, &template).await;
     }
 }
 
@@ -62,11 +99,15 @@ fn is_relevant_event(event: &Event) -> bool {
     )
 }
 
-fn reload_shared(loader: &FilesystemLoader) {
-    match loader.list_sync() {
+async fn reload_shared(
+    loader: &FilesystemLoader,
+    registry: &TemplateRegistry,
+    compiler: &dyn PdfCompiler,
+) {
+    match loader.list().await {
         Ok(templates) => {
             for template in templates {
-                reload_template(loader, &template);
+                reload_template(loader, registry, compiler, &template).await;
             }
             info!("shared template files changed");
         }
@@ -74,9 +115,14 @@ fn reload_shared(loader: &FilesystemLoader) {
     }
 }
 
-fn reload_template(loader: &FilesystemLoader, template: &TemplateName) {
-    match loader.load_sync(template) {
-        Ok(_) => info!(template = %template, "template reloaded"),
+async fn reload_template(
+    loader: &FilesystemLoader,
+    registry: &TemplateRegistry,
+    compiler: &dyn PdfCompiler,
+    template: &TemplateName,
+) {
+    match registry.reload(loader, compiler, template).await {
+        Ok(()) => info!(template = %template, "template reloaded"),
         Err(error) => warn!(template = %template, error = %error, "template reload failed"),
     }
 }
@@ -102,11 +148,60 @@ pub(crate) fn changed_template(root: &Path, path: &Path) -> Option<ChangedTempla
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
     use std::path::Path;
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
-    use papelon_core::TemplateName;
+    use async_trait::async_trait;
+    use bytes::Bytes;
+    use papelon_core::{
+        CompilationError, Document, PdfCompiler, PreparedTemplate, TemplateName, TemplateRegistry,
+        TemplateSource,
+    };
+    use tempfile::tempdir;
 
-    use super::{ChangedTemplate, changed_template};
+    use crate::loader::filesystem::FilesystemLoader;
+
+    use super::{ChangedTemplate, changed_template, reload_shared, reload_template};
+
+    struct MockCompiler {
+        fail: AtomicBool,
+        prepares: AtomicUsize,
+    }
+
+    #[async_trait]
+    impl PdfCompiler for MockCompiler {
+        async fn prepare(&self, _: &TemplateSource) -> Result<PreparedTemplate, CompilationError> {
+            self.prepares.fetch_add(1, Ordering::SeqCst);
+            Ok(PreparedTemplate::for_test())
+        }
+
+        async fn compile_prepared(
+            &self,
+            _: &PreparedTemplate,
+            _: &serde_json::Value,
+        ) -> Result<Document, CompilationError> {
+            if self.fail.load(Ordering::SeqCst) {
+                Err(CompilationError::Failed {
+                    message: "broken reload".to_owned(),
+                    line: Some(2),
+                })
+            } else {
+                Ok(Document::new(Bytes::from_static(b"%PDF-1.4 mock")))
+            }
+        }
+    }
+
+    fn write_template(root: &Path, name: &str, main: &str) {
+        let template = root.join(name);
+        fs::create_dir_all(&template).unwrap();
+        fs::write(template.join("main.typ"), main).unwrap();
+        fs::write(
+            template.join("schema.json"),
+            r#"{"schemaVersion":"v1","request":{"body":{"type":"object"}}}"#,
+        )
+        .unwrap();
+    }
 
     #[test]
     fn resolves_template_path() {
@@ -149,5 +244,53 @@ mod tests {
             ),
             None
         );
+    }
+
+    #[tokio::test]
+    async fn successful_reload_replaces_entry_and_failure_keeps_last_good() {
+        let root = tempdir().unwrap();
+        write_template(root.path(), "invoice", "first");
+        let loader = FilesystemLoader::new(root.path());
+        let registry = TemplateRegistry::default();
+        let compiler = MockCompiler {
+            fail: AtomicBool::new(false),
+            prepares: AtomicUsize::new(0),
+        };
+        let name = TemplateName::new("invoice").unwrap();
+
+        reload_template(&loader, &registry, &compiler, &name).await;
+        let first = registry.get(&name).unwrap();
+
+        fs::write(root.path().join("invoice/main.typ"), "second").unwrap();
+        reload_template(&loader, &registry, &compiler, &name).await;
+        let second = registry.get(&name).unwrap();
+        assert!(!std::sync::Arc::ptr_eq(&first, &second));
+
+        compiler.fail.store(true, Ordering::SeqCst);
+        fs::write(root.path().join("invoice/main.typ"), "#let broken =").unwrap();
+        reload_template(&loader, &registry, &compiler, &name).await;
+        let after_failure = registry.get(&name).unwrap();
+
+        assert!(std::sync::Arc::ptr_eq(&second, &after_failure));
+    }
+
+    #[tokio::test]
+    async fn shared_reload_rebuilds_every_template() {
+        let root = tempdir().unwrap();
+        write_template(root.path(), "invoice", "invoice");
+        write_template(root.path(), "welcome", "welcome");
+        let loader = FilesystemLoader::new(root.path());
+        let registry = TemplateRegistry::default();
+        let compiler = MockCompiler {
+            fail: AtomicBool::new(false),
+            prepares: AtomicUsize::new(0),
+        };
+
+        reload_shared(&loader, &registry, &compiler).await;
+        let first_count = compiler.prepares.load(Ordering::SeqCst);
+        reload_shared(&loader, &registry, &compiler).await;
+
+        assert_eq!(first_count, 2);
+        assert_eq!(compiler.prepares.load(Ordering::SeqCst), 4);
     }
 }

@@ -106,6 +106,16 @@ pub struct PreparedTemplateEntry {
 
 The exact fields may stay private if helper methods make `RenderService` and handlers simpler.
 
+The registry stores immutable entries behind `Arc` and protects only the name-to-entry map with a
+short-held `RwLock`. Lookups clone the entry `Arc` before request compilation begins. Reloads load,
+prepare, and warm-compile a candidate without holding the registry lock, then replace the entry with
+one write operation after every step succeeds.
+
+`TemplateRegistry::build()` performs the startup lifecycle in the sorted order returned by the
+loader. `TemplateRegistry::reload()` performs the same load, prepare, generated-payload validation,
+and warmup lifecycle for one template. Registry errors retain the template name and distinguish
+listing, loading, preparation, invalid generated samples, and warmup failures.
+
 `RenderService` should receive the registry and compiler. It should not receive `Arc<dyn TemplateLoader>` for normal rendering. The loader remains the abstraction for raw template reads, but startup and watch mode are responsible for translating loader output into prepared registry entries.
 
 `GET /templates` should list names from `TemplateRegistry`, not from a live filesystem scan.
@@ -119,6 +129,11 @@ When a template-specific file changes, the watcher should reload that template t
 When a file under `_shared/` changes, the watcher should rebuild every template because shared files are included in every template context.
 
 If a watch reload fails, the server should log a warning with the template name and error, keep the last successfully prepared version active, and continue serving requests. This is intentionally different from startup, where the first invalid template aborts the process before the server listens.
+
+Filesystem notifications are processed by one asynchronous worker. This serializes reloads so an
+older, slower reload cannot finish after a newer one and overwrite it. If one event includes a
+`_shared/` path, the worker rebuilds all current templates once and does not also process the
+template-specific paths from that event.
 
 ## Test plan
 
@@ -150,3 +165,6 @@ Server tests should cover:
 - Store mode, tags, versioning, S3, and compilation cache remain out of scope.
 - Startup compilation uses a generated schema-valid sample payload, not a required `payload.json`.
 - A startup warmup compile catches syntax, import, font, and many data-access failures, but request-time compilation errors remain possible for payload-dependent Typst branches.
+- Warmup is mandatory in the current filesystem MVP. A lazy/disabled warmup policy remains a future
+  extension and does not add a CLI or schema option in this phase.
+- An empty templates directory produces an empty registry and may start successfully.

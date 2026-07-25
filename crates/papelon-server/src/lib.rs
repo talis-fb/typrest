@@ -7,7 +7,7 @@ pub mod server;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use papelon_core::{RenderService, TypstCompiler};
+use papelon_core::{PdfCompiler, RenderService, TemplateRegistry, TypstCompiler};
 use tracing::info;
 use tracing_subscriber::EnvFilter;
 
@@ -20,14 +20,19 @@ pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error
     init_tracing();
 
     let loader = Arc::new(FilesystemLoader::new(config.templates_dir));
+    let compiler: Arc<dyn PdfCompiler> = Arc::new(TypstCompiler::new());
+    let registry = TemplateRegistry::build(loader.as_ref(), compiler.as_ref()).await?;
     let _watcher = if config.watch {
-        Some(start_template_watcher(loader.as_ref().clone())?)
+        Some(start_template_watcher(
+            loader,
+            registry.clone(),
+            compiler.clone(),
+        )?)
     } else {
         None
     };
-    let compiler = Arc::new(TypstCompiler::new());
-    let render_service = RenderService::new(loader.clone(), compiler);
-    let app = router(AppState::new(loader, render_service));
+    let render_service = RenderService::new(registry.clone(), compiler);
+    let app = router(AppState::new(registry, render_service));
     let address = SocketAddr::from((config.host, config.port));
     let listener = tokio::net::TcpListener::bind(address).await?;
 
@@ -56,8 +61,9 @@ mod tests {
     use bytes::Bytes;
     use papelon_core::loader::memory::MemoryLoader;
     use papelon_core::{
-        CompilationError, Document, PdfCompiler, RenderService, Schema, TemplateBundle,
-        TemplateLoader, TemplateName, TemplateSource,
+        CompilationError, Document, PdfCompiler, PreparedTemplate, PreparedTemplateEntry,
+        RenderService, Schema, TemplateBundle, TemplateLoader, TemplateName, TemplateRegistry,
+        TemplateRegistryError, TemplateSource,
     };
     use serde_json::{Value, json};
     use tempfile::tempdir;
@@ -74,9 +80,13 @@ mod tests {
 
     #[async_trait]
     impl PdfCompiler for MockCompiler {
-        async fn compile(
+        async fn prepare(&self, _: &TemplateSource) -> Result<PreparedTemplate, CompilationError> {
+            Ok(PreparedTemplate::for_test())
+        }
+
+        async fn compile_prepared(
             &self,
-            _: &TemplateSource,
+            _: &PreparedTemplate,
             _: &Value,
         ) -> Result<Document, CompilationError> {
             self.result.clone()
@@ -85,8 +95,24 @@ mod tests {
 
     fn app(loader: Arc<MemoryLoader>, result: Result<Document, CompilationError>) -> axum::Router {
         let compiler = Arc::new(MockCompiler { result });
-        let render_service = RenderService::new(loader.clone(), compiler);
-        router(AppState::new(loader, render_service))
+        let registry = registry_from_loader(loader.as_ref());
+        let render_service = RenderService::new(registry.clone(), compiler);
+        router(AppState::new(registry, render_service))
+    }
+
+    fn registry_from_loader(loader: &MemoryLoader) -> TemplateRegistry {
+        let registry = TemplateRegistry::default();
+        let names = futures_executor::block_on(loader.list()).unwrap();
+
+        for name in names {
+            let bundle = futures_executor::block_on(loader.load(&name)).unwrap();
+            registry.insert_for_test(
+                name,
+                PreparedTemplateEntry::new(bundle.schema, PreparedTemplate::for_test()),
+            );
+        }
+
+        registry
     }
 
     fn schema(body: Value) -> Schema {
@@ -336,6 +362,50 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn startup_registry_reports_template_load_and_compilation_failures() {
+        let missing_schema = tempdir().unwrap();
+        write(
+            &missing_schema.path().join("invoice/main.typ"),
+            "Missing schema",
+        );
+        let compiler = papelon_core::TypstCompiler::new();
+        let loader = FilesystemLoader::new(missing_schema.path());
+
+        let load_error = match TemplateRegistry::build(&loader, &compiler).await {
+            Ok(_) => panic!("missing schema should fail startup"),
+            Err(error) => error,
+        };
+        assert!(matches!(
+            load_error,
+            TemplateRegistryError::Load { template, .. }
+                if template.as_str() == "invoice"
+        ));
+
+        let broken_typst = tempdir().unwrap();
+        write(
+            &broken_typst.path().join("invoice/schema.json"),
+            r#"{"schemaVersion":"v1","request":{"body":{}}}"#,
+        );
+        write(
+            &broken_typst.path().join("invoice/main.typ"),
+            "#let broken =",
+        );
+        let loader = FilesystemLoader::new(broken_typst.path());
+
+        let compile_error = match TemplateRegistry::build(&loader, &compiler).await {
+            Ok(_) => panic!("broken Typst should fail startup"),
+            Err(error) => error,
+        };
+        assert!(matches!(
+            compile_error,
+            TemplateRegistryError::Warmup {
+                template,
+                source: CompilationError::Failed { line: Some(_), .. }
+            } if template.as_str() == "invoice"
+        ));
+    }
+
+    #[tokio::test]
     async fn render_real_template_over_http() {
         let root = tempdir().unwrap();
         write(
@@ -351,9 +421,12 @@ Hello #data.name
         );
 
         let loader = Arc::new(FilesystemLoader::new(root.path()));
-        let compiler = Arc::new(papelon_core::TypstCompiler::new());
-        let render_service = RenderService::new(loader.clone(), compiler);
-        let app = router(AppState::new(loader, render_service));
+        let compiler: Arc<dyn PdfCompiler> = Arc::new(papelon_core::TypstCompiler::new());
+        let registry = TemplateRegistry::build(loader.as_ref(), compiler.as_ref())
+            .await
+            .unwrap();
+        let render_service = RenderService::new(registry.clone(), compiler);
+        let app = router(AppState::new(registry, render_service));
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
@@ -400,9 +473,12 @@ Hello #data.name
             .unwrap();
 
         let loader = Arc::new(loader);
-        let compiler = Arc::new(papelon_core::TypstCompiler::new());
-        let render_service = RenderService::new(loader.clone(), compiler);
-        let app = router(AppState::new(loader, render_service));
+        let compiler: Arc<dyn PdfCompiler> = Arc::new(papelon_core::TypstCompiler::new());
+        let registry = TemplateRegistry::build(loader.as_ref(), compiler.as_ref())
+            .await
+            .unwrap();
+        let render_service = RenderService::new(registry.clone(), compiler);
+        let app = router(AppState::new(registry, render_service));
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });

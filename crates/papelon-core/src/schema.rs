@@ -43,6 +43,10 @@ impl Schema {
     pub fn body(&self) -> &SchemaField {
         &self.request.body
     }
+
+    pub fn sample_payload(&self) -> Value {
+        sample_value(self.body())
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -209,6 +213,40 @@ pub fn validate_with_defaults(
         Ok(value.unwrap_or(Value::Null))
     } else {
         Err(violations)
+    }
+}
+
+fn sample_value(schema: &SchemaField) -> Value {
+    if let Some(default) = &schema.default {
+        return default.clone();
+    }
+
+    if let Some(value) = schema
+        .enum_values
+        .as_ref()
+        .and_then(|values| values.first())
+    {
+        return value.clone();
+    }
+
+    match schema.field_type {
+        Some(SchemaType::String) => Value::String(String::new()),
+        Some(SchemaType::Number) => Value::from(0),
+        Some(SchemaType::Boolean) => Value::Bool(false),
+        Some(SchemaType::Object) => Value::Object(
+            schema
+                .properties
+                .as_ref()
+                .map(|properties| {
+                    properties
+                        .iter()
+                        .map(|(name, property)| (name.clone(), sample_value(property)))
+                        .collect()
+                })
+                .unwrap_or_default(),
+        ),
+        Some(SchemaType::Array) => Value::Array(Vec::new()),
+        Some(SchemaType::Null) | None => Value::Null,
     }
 }
 
@@ -467,5 +505,55 @@ mod tests {
             LoaderError::SchemaVersionError(SchemaVersionError::Unsupported(version))
                 if version == "v2"
         ));
+    }
+
+    #[test]
+    fn generates_deterministic_valid_startup_payload() {
+        let schema = parse(json!({
+            "schemaVersion": "v1",
+            "request": {
+                "body": {
+                    "type": "object",
+                    "properties": {
+                        "active": { "type": "boolean" },
+                        "count": { "type": "number" },
+                        "items": {
+                            "type": "array",
+                            "items": { "type": "string" }
+                        },
+                        "metadata": {
+                            "type": "object",
+                            "required": true,
+                            "properties": {
+                                "code": { "type": "string", "required": true },
+                                "note": {}
+                            }
+                        },
+                        "name": { "type": "string", "default": "anonymous" },
+                        "nullable": { "type": "null" },
+                        "status": { "type": "string", "enum": ["draft", "final"] }
+                    }
+                }
+            }
+        }));
+
+        let payload = schema.sample_payload();
+
+        assert_eq!(
+            payload,
+            json!({
+                "active": false,
+                "count": 0,
+                "items": [],
+                "metadata": {
+                    "code": "",
+                    "note": null
+                },
+                "name": "anonymous",
+                "nullable": null,
+                "status": "draft"
+            })
+        );
+        assert!(validate(&schema, &payload).is_ok());
     }
 }

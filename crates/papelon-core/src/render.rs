@@ -1,49 +1,35 @@
 use std::sync::Arc;
 
-use crate::{
-    LoaderError, PdfCompiler, RenderError, RenderRequest, TemplateLoader, validate_with_defaults,
-};
+use crate::{PdfCompiler, RenderError, RenderRequest, TemplateRegistry, validate_with_defaults};
 
 #[derive(Clone)]
 pub struct RenderService {
-    loader: Arc<dyn TemplateLoader>,
+    registry: TemplateRegistry,
     compiler: Arc<dyn PdfCompiler>,
 }
 
 impl RenderService {
-    pub fn new(loader: Arc<dyn TemplateLoader>, compiler: Arc<dyn PdfCompiler>) -> Self {
-        Self { loader, compiler }
+    pub fn new(registry: TemplateRegistry, compiler: Arc<dyn PdfCompiler>) -> Self {
+        Self { registry, compiler }
     }
 
     pub async fn render(&self, request: RenderRequest) -> Result<crate::Document, RenderError> {
-        let bundle = self
-            .loader
-            .load(&request.template)
-            .await
-            .map_err(map_loader_error)?;
-        let payload = validate_with_defaults(&bundle.schema, &request.payload)
+        let entry = self
+            .registry
+            .get(&request.template)
+            .ok_or_else(|| RenderError::TemplateNotFound(request.template.clone()))?;
+        let payload = validate_with_defaults(entry.schema(), &request.payload)
             .map_err(RenderError::ValidationError)?;
 
         self.compiler
-            .compile(&bundle.source, &payload)
+            .compile_prepared(entry.prepared(), &payload)
             .await
             .map_err(RenderError::CompilationError)
     }
 }
 
-fn map_loader_error(error: LoaderError) -> RenderError {
-    match error {
-        LoaderError::TemplateNotFound(name) => RenderError::TemplateNotFound(name),
-        error => RenderError::CompilationError(crate::CompilationError::Failed {
-            message: error.to_string(),
-            line: None,
-        }),
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -51,10 +37,9 @@ mod tests {
     use bytes::Bytes;
     use serde_json::json;
 
-    use crate::loader::memory::MemoryLoader;
     use crate::{
-        CompilationError, Document, PdfCompiler, RenderError, RenderRequest, Schema,
-        TemplateBundle, TemplateName, TemplateSource,
+        CompilationError, Document, PdfCompiler, PreparedTemplate, PreparedTemplateEntry,
+        RenderError, RenderRequest, Schema, TemplateName, TemplateRegistry, TemplateSource,
     };
 
     use super::RenderService;
@@ -79,9 +64,13 @@ mod tests {
 
     #[async_trait]
     impl PdfCompiler for MockCompiler {
-        async fn compile(
+        async fn prepare(&self, _: &TemplateSource) -> Result<PreparedTemplate, CompilationError> {
+            Ok(PreparedTemplate::for_test())
+        }
+
+        async fn compile_prepared(
             &self,
-            _: &TemplateSource,
+            _: &PreparedTemplate,
             _: &serde_json::Value,
         ) -> Result<Document, CompilationError> {
             self.called.store(true, Ordering::SeqCst);
@@ -101,21 +90,13 @@ mod tests {
         .unwrap()
     }
 
-    fn template(schema: Schema) -> TemplateBundle {
-        TemplateBundle::new(
-            TemplateSource::new(BTreeMap::from([(
-                "main.typ".to_owned(),
-                Bytes::from_static(b"Hello"),
-            )])),
-            schema,
-        )
-    }
-
-    fn loader(bundle: TemplateBundle) -> Arc<MemoryLoader> {
-        Arc::new(MemoryLoader::new(BTreeMap::from([(
+    fn registry(schema: Schema) -> TemplateRegistry {
+        let registry = TemplateRegistry::default();
+        registry.insert_for_test(
             TemplateName::new("invoice").unwrap(),
-            bundle,
-        )])))
+            PreparedTemplateEntry::new(schema, PreparedTemplate::for_test()),
+        );
+        registry
     }
 
     #[test]
@@ -123,7 +104,7 @@ mod tests {
         let compiler = Arc::new(MockCompiler::new(Ok(Document::new(Bytes::from_static(
             b"%PDF-1.4 mock",
         )))));
-        let service = RenderService::new(loader(template(schema(json!({})))), compiler);
+        let service = RenderService::new(registry(schema(json!({}))), compiler);
 
         let document = futures_executor::block_on(service.render(RenderRequest::new(
             TemplateName::new("invoice").unwrap(),
@@ -140,12 +121,12 @@ mod tests {
             b"%PDF-1.4 mock",
         )))));
         let service = RenderService::new(
-            loader(template(schema(json!({
+            registry(schema(json!({
                 "type": "object",
                 "properties": {
                     "name": { "type": "string", "required": true }
                 }
-            })))),
+            }))),
             compiler.clone(),
         );
 
@@ -164,7 +145,7 @@ mod tests {
         let compiler = Arc::new(MockCompiler::new(Ok(Document::new(Bytes::from_static(
             b"%PDF-1.4 mock",
         )))));
-        let service = RenderService::new(Arc::new(MemoryLoader::default()), compiler);
+        let service = RenderService::new(TemplateRegistry::default(), compiler);
 
         let error = futures_executor::block_on(service.render(RenderRequest::new(
             TemplateName::new("missing").unwrap(),
@@ -181,7 +162,7 @@ mod tests {
             message: "boom".to_owned(),
             line: Some(1),
         })));
-        let service = RenderService::new(loader(template(schema(json!({})))), compiler);
+        let service = RenderService::new(registry(schema(json!({}))), compiler);
 
         let error = futures_executor::block_on(service.render(RenderRequest::new(
             TemplateName::new("invoice").unwrap(),

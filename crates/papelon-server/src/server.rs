@@ -1,7 +1,6 @@
 use std::path::PathBuf;
-use std::sync::Arc;
 
-use papelon_core::{RenderService, TemplateLoader};
+use papelon_core::{RenderService, TemplateRegistry};
 
 #[derive(Debug, Clone)]
 pub struct ServerConfig {
@@ -29,14 +28,14 @@ impl ServerConfig {
 
 #[derive(Clone)]
 pub struct AppState {
-    pub loader: Arc<dyn TemplateLoader>,
+    pub registry: TemplateRegistry,
     pub render_service: RenderService,
 }
 
 impl AppState {
-    pub fn new(loader: Arc<dyn TemplateLoader>, render_service: RenderService) -> Self {
+    pub fn new(registry: TemplateRegistry, render_service: RenderService) -> Self {
         Self {
-            loader,
+            registry,
             render_service,
         }
     }

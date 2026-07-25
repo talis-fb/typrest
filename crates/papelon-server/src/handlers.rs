@@ -22,10 +22,8 @@ pub async fn list_templates(
     State(state): State<AppState>,
 ) -> Result<Json<TemplatesResponse>, ApiError> {
     let templates = state
-        .loader
-        .list()
-        .await
-        .map_err(ApiError::from_loader_error)?
+        .registry
+        .names()
         .into_iter()
         .map(|name| TemplateResponse {
             name: name.into_inner(),

@@ -11,11 +11,25 @@ use self::fonts::FontRegistry;
 
 #[async_trait]
 pub trait PdfCompiler: Send + Sync {
-    async fn compile(
+    async fn prepare(&self, source: &TemplateSource) -> Result<PreparedTemplate, CompilationError>;
+
+    async fn compile_prepared(
         &self,
-        source: &TemplateSource,
+        template: &PreparedTemplate,
         payload: &serde_json::Value,
     ) -> Result<Document, CompilationError>;
+}
+
+pub struct PreparedTemplate {
+    state: Option<world::PreparedTemplateState>,
+}
+
+impl PreparedTemplate {
+    #[cfg(any(test, feature = "test-util"))]
+    #[doc(hidden)]
+    pub fn for_test() -> Self {
+        Self { state: None }
+    }
 }
 
 #[derive(Clone)]
@@ -39,12 +53,25 @@ impl Default for TypstCompiler {
 
 #[async_trait]
 impl PdfCompiler for TypstCompiler {
-    async fn compile(
+    async fn prepare(&self, source: &TemplateSource) -> Result<PreparedTemplate, CompilationError> {
+        Ok(PreparedTemplate {
+            state: Some(world::prepare(source, &self.fonts)?),
+        })
+    }
+
+    async fn compile_prepared(
         &self,
-        source: &TemplateSource,
+        template: &PreparedTemplate,
         payload: &serde_json::Value,
     ) -> Result<Document, CompilationError> {
-        let bytes = world::compile(source, payload, &self.fonts)?;
+        let state = template
+            .state
+            .as_ref()
+            .ok_or_else(|| CompilationError::Failed {
+                message: "test prepared template cannot be compiled by TypstCompiler".to_owned(),
+                line: None,
+            })?;
+        let bytes = world::compile_prepared(state, payload)?;
         Ok(Document::new(bytes.into()))
     }
 }

@@ -19,5 +19,6 @@ tracing-subscriber.workspace = true
 
 [dev-dependencies]
 futures-executor.workspace = true
+papelon-core = { path = "../papelon-core", features = ["test-util"] }
 tempfile.workspace = true
 tower.workspace = true
