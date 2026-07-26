@@ -16,14 +16,15 @@ This document defines the intended CLI contract going forward. If the implementa
 ## Command Summary
 
 ```text
-papelon init
+papelon init [path]
 papelon serve [--port <port>] [--watch]
 ```
 
 Notes:
 
 - `papelon init` creates a starter hello-world template example.
-- `papelon init` operates on the current working directory.
+- `papelon init` operates on the current working directory when no path is provided.
+- `papelon init path` initializes the provided target directory, relative or absolute.
 - `papelon serve` resolves the templates root from `papelon.toml` by default.
 
 ---
@@ -64,22 +65,22 @@ my-project/
 
 ### Purpose
 
-Initialize the current directory as a Papelon project.
+Initialize the current directory or a target directory as a Papelon project.
 
 ### Syntax
 
 ```text
-papelon init
+papelon init [path]
 ```
 
 ### Behavior
 
 When executed, the command creates:
 
-- `./papelon.toml`
-- `./templates/`
-- `./templates/hello-world/main.typ`
-- `./templates/hello-world/schema.json`
+- `papelon.toml` in the chosen target root
+- `templates/` in the chosen target root
+- `templates/hello-world/main.typ`
+- `templates/hello-world/schema.json`
 
 Default `papelon.toml` content:
 
@@ -117,15 +118,16 @@ Default `templates/hello-world/main.typ` content:
 
 ### Rules
 
-- The command uses the current working directory as the target project root.
+- The command uses the current working directory as the target project root when no path is provided.
+- When a path is provided, the command uses that path as the target project root. Relative paths resolve from the current working directory, and absolute paths are used as-is.
 - The command must create a starter hello-world template by default.
-- The command must fail if `papelon.toml` already exists in the current directory.
-- The command must fail if the configured default templates directory already exists as a non-directory path.
-- The command may succeed if `templates/` already exists as a directory and is empty or already usable, but this behavior should be explicit in implementation and error messaging. If stricter behavior is preferred, the implementation should fail whenever either target already exists.
+- The command must fail if `papelon.toml` already exists in the target root.
+- The command must fail if `templates/` already exists in the target root.
+- The command must fail if the target root already exists as a non-directory path.
 
 ### Result
 
-After success, the current directory is a valid Papelon project root.
+After success, the chosen target root is a valid Papelon project root.
 
 ---
 

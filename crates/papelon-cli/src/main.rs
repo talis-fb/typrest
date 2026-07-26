@@ -20,9 +20,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             papelon_server::serve(ServerConfig::new(config.templates_root, port).with_watch(watch))
                 .await
         }
-        Command::Init => {
+        Command::Init { path } => {
             let project_root = std::env::current_dir()?;
-            init_project(&project_root)?;
+            init_project(&project_root, path.as_deref())?;
             Ok(())
         }
     }
