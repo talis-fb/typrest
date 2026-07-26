@@ -55,6 +55,23 @@ pub fn load_project_config(project_root: &Path) -> std::io::Result<ProjectConfig
     Ok(ProjectConfig { templates_root })
 }
 
+pub fn find_project_root(start_dir: &Path) -> std::io::Result<PathBuf> {
+    for dir in start_dir.ancestors() {
+        if dir.join(CONFIG_FILE).is_file() {
+            return Ok(dir.to_path_buf());
+        }
+    }
+
+    Err(std::io::Error::new(
+        std::io::ErrorKind::NotFound,
+        format!(
+            "{} not found in {} or any parent directory",
+            CONFIG_FILE,
+            start_dir.display()
+        ),
+    ))
+}
+
 fn parse_project_config(content: &str) -> std::io::Result<RawProjectConfig> {
     let config = toml::from_str::<RawProjectConfig>(content).map_err(|error| {
         std::io::Error::new(
@@ -114,7 +131,7 @@ fn invalid_config<T>(message: String) -> std::io::Result<T> {
 
 #[cfg(test)]
 mod tests {
-    use super::{load_project_config, parse_project_config};
+    use super::{find_project_root, load_project_config, parse_project_config};
 
     #[test]
     fn load_project_config_resolves_templates_root() {
@@ -215,5 +232,54 @@ mod tests {
         let error = load_project_config(root.path()).unwrap_err();
 
         assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+    }
+
+    #[test]
+    fn find_project_root_returns_nearest_ancestor_with_config() {
+        let root = tempfile::tempdir().unwrap();
+        let nested = root.path().join("workspace/project/subfolder");
+        std::fs::create_dir_all(&nested).unwrap();
+        std::fs::write(
+            root.path().join("papelon.toml"),
+            "schema_version = \"v1\"\ntemplates_root = \"templates\"\n",
+        )
+        .unwrap();
+
+        let found = find_project_root(&nested).unwrap();
+
+        assert_eq!(found, root.path());
+    }
+
+    #[test]
+    fn find_project_root_prefers_nearest_config() {
+        let root = tempfile::tempdir().unwrap();
+        let project = root.path().join("outer/project");
+        let nested = project.join("child/grandchild");
+        std::fs::create_dir_all(&nested).unwrap();
+        std::fs::write(
+            root.path().join("papelon.toml"),
+            "schema_version = \"v1\"\ntemplates_root = \"templates\"\n",
+        )
+        .unwrap();
+        std::fs::write(
+            project.join("papelon.toml"),
+            "schema_version = \"v1\"\ntemplates_root = \"templates\"\n",
+        )
+        .unwrap();
+
+        let found = find_project_root(&nested).unwrap();
+
+        assert_eq!(found, project);
+    }
+
+    #[test]
+    fn find_project_root_rejects_missing_config_in_ancestors() {
+        let root = tempfile::tempdir().unwrap();
+        let nested = root.path().join("workspace/project/subfolder");
+        std::fs::create_dir_all(&nested).unwrap();
+
+        let error = find_project_root(&nested).unwrap_err();
+
+        assert_eq!(error.kind(), std::io::ErrorKind::NotFound);
     }
 }

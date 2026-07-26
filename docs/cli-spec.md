@@ -25,7 +25,7 @@ Notes:
 - `papelon init` creates a starter hello-world template example.
 - `papelon init` operates on the current working directory when no path is provided.
 - `papelon init path` initializes the provided target directory, relative or absolute.
-- `papelon serve` resolves the templates root from `papelon.toml` by default.
+- `papelon serve` resolves the nearest ancestor `papelon.toml` from the current working directory.
 
 ---
 
@@ -163,7 +163,7 @@ Optional flag that enables template reload on filesystem changes.
 
 `papelon serve` must:
 
-1. determine the project root
+1. determine the nearest project root by walking upward from the current working directory
 2. read `papelon.toml`
 3. resolve `templates_root` relative to the project root
 4. start the server using that resolved directory
@@ -211,7 +211,6 @@ This document does not define:
 - store mode commands
 - template publishing workflows
 - remote registries
-- project discovery above the current directory
 - environment-variable overrides
 
 Those can be specified later if needed.

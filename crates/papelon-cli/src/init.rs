@@ -12,7 +12,10 @@ pub fn init_project(project_root: &Path, target_root: Option<&Path>) -> std::io:
     if project_root.exists() && !project_root.is_dir() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::AlreadyExists,
-            format!("{} already exists and is not a directory", project_root.display()),
+            format!(
+                "{} already exists and is not a directory",
+                project_root.display()
+            ),
         ));
     }
 
@@ -46,7 +49,10 @@ pub fn init_project(project_root: &Path, target_root: Option<&Path>) -> std::io:
     Ok(())
 }
 
-fn resolve_target_root(project_root: &Path, target_root: Option<&Path>) -> std::io::Result<PathBuf> {
+fn resolve_target_root(
+    project_root: &Path,
+    target_root: Option<&Path>,
+) -> std::io::Result<PathBuf> {
     match target_root {
         Some(target_root) if target_root.is_absolute() => Ok(target_root.to_path_buf()),
         Some(target_root) => Ok(project_root.join(target_root)),
