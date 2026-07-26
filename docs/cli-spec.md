@@ -7,6 +7,7 @@ The Papelon CLI is the local entrypoint for creating and running a filesystem-mo
 In the MVP, the CLI has two responsibilities:
 
 - bootstrap a project layout with `papelon init`
+- validate every template with `papelon check`
 - start the HTTP server with `papelon serve`
 
 This document defines the intended CLI contract going forward. If the implementation differs, this file is the source of truth for the next change.
@@ -17,6 +18,7 @@ This document defines the intended CLI contract going forward. If the implementa
 
 ```text
 papelon init [path]
+papelon check [--log-format <pretty|json>] [--color <auto|always|never>]
 papelon serve [--port <port>] [--watch]
 ```
 
@@ -25,6 +27,7 @@ Notes:
 - `papelon init` creates a starter hello-world template example.
 - `papelon init` operates on the current working directory when no path is provided.
 - `papelon init path` initializes the provided target directory, relative or absolute.
+- `papelon check` uses the same project discovery and warmup compilation as `papelon serve`.
 - `papelon serve` resolves the nearest ancestor `papelon.toml` from the current working directory.
 
 ---
@@ -211,6 +214,29 @@ then the server must read templates from:
 - `papelon.toml` is invalid
 - `templates_root` does not exist
 - `templates_root` is not a directory
+
+---
+
+## `papelon check`
+
+### Purpose
+
+Validate all templates without starting the HTTP server.
+
+### Behavior
+
+`papelon check` resolves the nearest project exactly like `papelon serve`, then loads, prepares,
+warm-compiles, and PDF-exports every template. It reports all template failures in deterministic
+name order rather than stopping at the first failure.
+
+Warnings are displayed but return exit status `0`. Configuration, load, schema, compilation, and
+export failures return exit status `1`.
+
+### Global Output Options
+
+- `--log-format pretty|json`: annotated human output by default, or JSON Lines for automation.
+- `--color auto|always|never`: controls pretty output; JSON output never contains ANSI codes.
+- `RUST_LOG`: controls operational log verbosity.
 
 ---
 

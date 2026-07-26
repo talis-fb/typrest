@@ -1,12 +1,20 @@
 use std::net::Ipv4Addr;
 use std::path::PathBuf;
 
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 
 #[derive(Debug, Parser)]
 #[command(name = "papelon")]
 #[command(about = "HTTP server for server-side PDF generation with Typst")]
 pub struct Args {
+    /// Output format for diagnostics and operational logs.
+    #[arg(long, global = true, value_enum, default_value_t = LogFormat::Pretty)]
+    pub log_format: LogFormat,
+
+    /// Control ANSI colors in pretty output.
+    #[arg(long, global = true, value_enum, default_value_t = ColorChoice::Auto)]
+    pub color: ColorChoice,
+
     #[command(subcommand)]
     pub command: Command,
 }
@@ -30,12 +38,28 @@ pub enum Command {
         watch: bool,
     },
 
+    /// Compile and validate every template without starting the server.
+    Check,
+
     /// Create a new template directory with boilerplate files.
     Init {
         /// Target directory to initialize.
         #[arg(value_name = "PATH")]
         path: Option<PathBuf>,
     },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+pub enum LogFormat {
+    Pretty,
+    Json,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+pub enum ColorChoice {
+    Auto,
+    Always,
+    Never,
 }
 
 #[cfg(test)]
@@ -115,6 +139,22 @@ mod tests {
         };
 
         assert!(path.is_none());
+    }
+
+    #[test]
+    fn parses_check_command_and_global_output_options() {
+        let args = Args::parse_from([
+            "papelon",
+            "check",
+            "--log-format",
+            "json",
+            "--color",
+            "never",
+        ]);
+
+        assert!(matches!(args.command, Command::Check));
+        assert_eq!(args.log_format, super::LogFormat::Json);
+        assert_eq!(args.color, super::ColorChoice::Never);
     }
 
     #[test]

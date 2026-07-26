@@ -17,6 +17,7 @@ async-trait = "0.1"
 axum = "0.8.9"
 bytes = "1"
 clap = { version = "4.6.4", features = ["derive"] }
+codespan-reporting = "0.13"
 futures-executor = "0.3"
 notify = "8"
 pdf-extract = "0.9"
@@ -28,7 +29,7 @@ tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread", "net", "s
 toml = "0.8.23"
 tower = "0.5.3"
 tracing = "0.1.44"
-tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
+tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt", "json"] }
 typst = "=0.15.1"
 typst-assets = { version = "=0.15.1", features = ["fonts"] }
 typst-pdf = "=0.15.1"

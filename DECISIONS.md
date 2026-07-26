@@ -112,6 +112,34 @@ access the loader. Core tests use `MemoryLoader`.
 
 ---
 
+## DEC-007 - Stable Papelon diagnostics over Typst internals
+
+**Date:** 2026-07
+
+**Status:** Accepted
+
+**Decision:** Convert every Typst error and warning immediately into a Papelon-owned diagnostic
+model. Human output may render source excerpts, while JSON logs and HTTP responses expose only
+virtual paths, ranges, messages, hints, and traces.
+
+**Context:** Typst's diagnostic, span, world, font, and PDF APIs may change between pinned releases.
+Exposing those types would spread upgrade work across the registry, server, CLI, and API.
+
+**Alternatives considered:**
+
+- Keep only the first message and line: stable but loses the information developers need.
+- Expose Typst diagnostics directly: complete but couples every consumer to an unstable API.
+- Store rendered diagnostic strings: visually useful but unsuitable for structured HTTP and logs.
+
+**Why the chosen option:** Papelon retains rich structured information while the unstable conversion
+stays entirely in `compiler/world.rs` and `compiler/fonts.rs`.
+
+**Consequences:** The three Typst crates remain exactly and jointly pinned. Upgrades require reviewing
+the private adapters and diagnostic fixtures. Warnings are visible but non-fatal. Source excerpts
+never cross the HTTP boundary.
+
+---
+
 ## Template for new decisions
 
 ```

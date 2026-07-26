@@ -1,15 +1,19 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 
-use typst::diag::{FileError, FileResult, SourceDiagnostic};
+use typst::diag::{FileError, FileResult, Severity, SourceDiagnostic};
 use typst::foundations::{Bytes, Datetime, Dict, Duration, IntoValue, Str};
-use typst::syntax::{FileId, RootedPath, Source, VirtualPath, VirtualRoot};
+use typst::syntax::{DiagSpan, FileId, RootedPath, Source, VirtualPath, VirtualRoot};
 use typst::text::{Font, FontBook};
 use typst::utils::LazyHash;
 use typst::{Library, LibraryExt, World, WorldExt};
 use typst_pdf::PdfOptions;
 
-use crate::{CompilationError, TemplateSource};
+use crate::{
+    CompilationDiagnostic, CompilationError, CompilationReport, DiagnosticLocation,
+    DiagnosticPosition, DiagnosticSeverity, RelatedDiagnostic, TemplateSource,
+};
 
 use super::fonts::{FontRegistry, LoadedFonts};
 
@@ -27,14 +31,9 @@ pub(super) fn prepare(
 
     let main_bytes = files
         .get(MAIN_TYP)
-        .ok_or_else(|| CompilationError::Failed {
-            message: "main.typ is missing from template source".to_owned(),
-            line: None,
-        })?;
-    let main_text = std::str::from_utf8(main_bytes).map_err(|_| CompilationError::Failed {
-        message: "main.typ must be valid UTF-8".to_owned(),
-        line: None,
-    })?;
+        .ok_or_else(|| failed("main.typ is missing from template source"))?;
+    let main_text =
+        std::str::from_utf8(main_bytes).map_err(|_| failed("main.typ must be valid UTF-8"))?;
     let main = Source::new(file_id(MAIN_TYP), main_text.to_owned());
 
     Ok(PreparedTemplateState {
@@ -47,13 +46,38 @@ pub(super) fn prepare(
 pub(super) fn compile_prepared(
     template: &PreparedTemplateState,
     payload: &serde_json::Value,
-) -> Result<Vec<u8>, CompilationError> {
+) -> Result<CompiledPdf, CompilationError> {
     let world = TemplateWorld::new(template, payload);
     let result = typst::compile(&world);
 
-    let document = result.output.map_err(|errors| map_errors(errors, &world))?;
+    let warnings = map_diagnostics(result.warnings, &world);
+    let document = match result.output {
+        Ok(document) => document,
+        Err(errors) => {
+            let mut diagnostics = map_diagnostics(errors, &world);
+            diagnostics.extend(warnings);
+            return Err(CompilationError::Failed(CompilationReport::new(
+                diagnostics,
+            )));
+        }
+    };
 
-    typst_pdf::pdf(&document, &PdfOptions::default()).map_err(map_export_errors)
+    match typst_pdf::pdf(&document, &PdfOptions::default()) {
+        Ok(bytes) => Ok(CompiledPdf { bytes, warnings }),
+        Err(errors) => {
+            let mut diagnostics = map_diagnostics(errors, &world);
+            diagnostics.extend(warnings);
+            Err(CompilationError::ExportFailed(CompilationReport::new(
+                diagnostics,
+            )))
+        }
+    }
+}
+
+#[derive(Debug)]
+pub(super) struct CompiledPdf {
+    pub(super) bytes: Vec<u8>,
+    pub(super) warnings: Vec<CompilationDiagnostic>,
 }
 
 pub(super) struct PreparedTemplateState {
@@ -144,42 +168,67 @@ fn build_inputs(payload: &serde_json::Value) -> Dict {
     inputs
 }
 
-fn map_errors(
+fn map_diagnostics(
     errors: typst::diag::EcoVec<SourceDiagnostic>,
     world: &TemplateWorld,
-) -> CompilationError {
-    let Some(error) = errors.into_iter().next() else {
-        return CompilationError::Failed {
-            message: "unknown Typst compilation error".to_owned(),
-            line: None,
-        };
-    };
+) -> Vec<CompilationDiagnostic> {
+    errors
+        .into_iter()
+        .map(|error| map_diagnostic(error, world))
+        .collect()
+}
 
-    let line = world
-        .range(error.span)
-        .and_then(|range| {
-            world
-                .source(error.span.id()?)
-                .ok()?
-                .lines()
-                .byte_to_line(range.start)
-        })
-        .map(|line| line + 1);
-
-    CompilationError::Failed {
+fn map_diagnostic(error: SourceDiagnostic, world: &TemplateWorld) -> CompilationDiagnostic {
+    CompilationDiagnostic {
+        severity: match error.severity {
+            Severity::Error => DiagnosticSeverity::Error,
+            Severity::Warning => DiagnosticSeverity::Warning,
+        },
         message: error.message.to_string(),
-        line: line.and_then(|line| u32::try_from(line).ok()),
+        location: map_location(error.span, world),
+        hints: error
+            .hints
+            .into_iter()
+            .map(|hint| RelatedDiagnostic::new(hint.v.to_string(), map_location(hint.span, world)))
+            .collect(),
+        trace: error
+            .trace
+            .into_iter()
+            .map(|trace| {
+                RelatedDiagnostic::new(trace.v.to_string(), map_location(trace.span.into(), world))
+            })
+            .collect(),
     }
 }
 
-fn map_export_errors(errors: typst::diag::EcoVec<SourceDiagnostic>) -> CompilationError {
-    CompilationError::ExportFailed(
-        errors
-            .into_iter()
-            .map(|error| error.message.to_string())
-            .collect::<Vec<_>>()
-            .join("; "),
-    )
+fn map_location(span: DiagSpan, world: &TemplateWorld) -> Option<DiagnosticLocation> {
+    let id = span.id()?;
+    let range = world.range(span)?;
+    let source = world.source(id).ok()?;
+    let (start_line, start_column) = source.lines().byte_to_line_column(range.start)?;
+    let (end_line, end_column) = source.lines().byte_to_line_column(range.end)?;
+
+    Some(DiagnosticLocation::with_source(
+        id.vpath().get_without_slash(),
+        position(start_line, start_column)?,
+        position(end_line, end_column)?,
+        Arc::from(source.text()),
+        range,
+    ))
+}
+
+fn position(line: usize, column: usize) -> Option<DiagnosticPosition> {
+    Some(DiagnosticPosition::new(
+        u32::try_from(line).ok()?.checked_add(1)?,
+        u32::try_from(column).ok()?.checked_add(1)?,
+    ))
+}
+
+fn failed(message: impl Into<String>) -> CompilationError {
+    CompilationError::Failed(CompilationReport::new(vec![CompilationDiagnostic::new(
+        DiagnosticSeverity::Error,
+        message,
+    )]))
 }
 
 #[cfg(test)]
@@ -190,9 +239,13 @@ mod tests {
     use insta::assert_snapshot;
     use serde_json::json;
 
-    use crate::{CompilationError, TemplateSource};
+    use typst::diag::{SourceDiagnostic, Tracepoint};
 
-    use super::{FontRegistry, compile_prepared, prepare};
+    use crate::{CompilationError, DiagnosticSeverity, TemplateSource};
+
+    use super::{
+        FontRegistry, TemplateWorld, compile_prepared, map_diagnostic, map_diagnostics, prepare,
+    };
 
     fn source(main: &str) -> TemplateSource {
         TemplateSource::new(BTreeMap::from([(
@@ -216,7 +269,8 @@ Hello
         .unwrap();
         let pdf = compile_prepared(&template, &json!({})).unwrap();
 
-        assert!(pdf.starts_with(b"%PDF"));
+        assert!(pdf.bytes.starts_with(b"%PDF"));
+        assert!(pdf.warnings.is_empty());
     }
 
     #[test]
@@ -234,8 +288,8 @@ Hello #data.name
         .unwrap();
         let pdf = compile_prepared(&template, &json!({ "name": "Ada" })).unwrap();
 
-        assert!(pdf.starts_with(b"%PDF"));
-        assert_snapshot!(normalize_text(&extract_text_from_pdf(&pdf)), @"Hello Ada");
+        assert!(pdf.bytes.starts_with(b"%PDF"));
+        assert_snapshot!(normalize_text(&extract_text_from_pdf(&pdf.bytes)), @"Hello Ada");
     }
 
     #[test]
@@ -244,13 +298,67 @@ Hello #data.name
         let template = prepare(&source("#let broken ="), &fonts).unwrap();
         let error = compile_prepared(&template, &json!({})).unwrap_err();
 
-        assert!(matches!(
-            error,
-            CompilationError::Failed {
-                message,
-                line: Some(_)
-            } if !message.is_empty()
-        ));
+        assert!(matches!(error, CompilationError::Failed(_)));
+        assert!(!error.primary_message().is_empty());
+        assert!(error.primary_line().is_some());
+        assert_eq!(error.report().diagnostics().len(), 1);
+    }
+
+    #[test]
+    fn preserves_all_typst_errors() {
+        let fonts = FontRegistry::new();
+        let template = prepare(&source("#first\n#second"), &fonts).unwrap();
+        let world = TemplateWorld::new(&template, &json!({}));
+        let span = template.main.root().span();
+        let errors = [
+            SourceDiagnostic::error(span, "first"),
+            SourceDiagnostic::error(span, "second"),
+        ]
+        .into_iter()
+        .collect();
+        let diagnostics = map_diagnostics(errors, &world);
+
+        assert_eq!(diagnostics.len(), 2);
+        assert!(
+            diagnostics
+                .iter()
+                .all(|diagnostic| diagnostic.location.is_some())
+        );
+    }
+
+    #[test]
+    fn captures_successful_compilation_warnings() {
+        let fonts = FontRegistry::new();
+        let template = prepare(&source("<orphan>"), &fonts).unwrap();
+        let compiled = compile_prepared(&template, &json!({})).unwrap();
+
+        assert_eq!(compiled.warnings.len(), 1);
+        assert_eq!(compiled.warnings[0].severity, DiagnosticSeverity::Warning);
+        assert!(compiled.warnings[0].message.contains("not attached"));
+    }
+
+    #[test]
+    fn maps_hints_traces_ranges_and_source_text() {
+        let fonts = FontRegistry::new();
+        let template = prepare(&source("#let value = 1"), &fonts).unwrap();
+        let world = TemplateWorld::new(&template, &json!({}));
+        let span = template.main.root().span();
+        let diagnostic = SourceDiagnostic::error(span, "broken")
+            .with_hint("try something else")
+            .with_tracepoint(Tracepoint::Call(Some("helper".into())), span);
+
+        let mapped = map_diagnostic(diagnostic, &world);
+        let location = mapped.location.unwrap();
+
+        assert_eq!(location.path, "main.typ");
+        assert_eq!(location.start.line, 1);
+        assert_eq!(location.start.column, 1);
+        assert_eq!(location.source(), Some("#let value = 1"));
+        assert!(location.byte_range().is_some());
+        assert_eq!(mapped.hints[0].message, "try something else");
+        assert!(mapped.hints[0].location.is_none());
+        assert!(mapped.trace[0].message.contains("helper"));
+        assert!(mapped.trace[0].location.is_some());
     }
 
     #[test]
@@ -259,13 +367,9 @@ Hello #data.name
         let template = prepare(&source(r#"#import "missing.typ""#), &fonts).unwrap();
         let error = compile_prepared(&template, &json!({})).unwrap_err();
 
-        assert!(matches!(
-            error,
-            CompilationError::Failed {
-                message,
-                line: Some(1)
-            } if message.contains("file not found")
-        ));
+        assert!(matches!(error, CompilationError::Failed(_)));
+        assert_eq!(error.primary_line(), Some(1));
+        assert!(error.primary_message().contains("file not found"));
     }
 
     #[test]
@@ -285,8 +389,8 @@ Hello #data.name
         let ada = compile_prepared(&template, &json!({ "name": "Ada" })).unwrap();
         let grace = compile_prepared(&template, &json!({ "name": "Grace" })).unwrap();
 
-        assert_snapshot!(normalize_text(&extract_text_from_pdf(&ada)), @"Hello Ada");
-        assert_snapshot!(normalize_text(&extract_text_from_pdf(&grace)), @"Hello Grace");
+        assert_snapshot!(normalize_text(&extract_text_from_pdf(&ada.bytes)), @"Hello Ada");
+        assert_snapshot!(normalize_text(&extract_text_from_pdf(&grace.bytes)), @"Hello Grace");
     }
 
     #[test]
@@ -297,11 +401,9 @@ Hello #data.name
             Err(error) => error,
         };
 
-        assert!(matches!(
-            error,
-            CompilationError::Failed { message, line: None }
-                if message.contains("main.typ")
-        ));
+        assert!(matches!(error, CompilationError::Failed(_)));
+        assert!(error.primary_message().contains("main.typ"));
+        assert_eq!(error.primary_line(), None);
     }
 
     fn extract_text_from_pdf(bytes: &[u8]) -> String {

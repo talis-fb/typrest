@@ -150,6 +150,25 @@ Success criterion: `docker run` starts the server, `curl POST /render/invoice` w
 
 ---
 
+## Phase 6 - Compiler Diagnostics + Logging
+
+**Goal:** make template failures as clear locally as compiler errors while retaining safe,
+structured production output.
+
+- [x] Preserve all Typst errors, warnings, locations, hints, and trace frames behind the compiler ACL
+- [x] Add annotated, color-aware human diagnostics
+- [x] Add JSON Lines diagnostic and lifecycle logging
+- [x] Add `papelon check` using the startup warmup/export pipeline
+- [x] Aggregate startup/check failures across every template
+- [x] Report watch and payload-dependent compilation diagnostics
+- [x] Return safe structured diagnostics over HTTP without source excerpts or physical paths
+- [x] Document and test the exact-version Typst upgrade boundary
+
+**Exit criterion:** a broken template is fully explained by `papelon check`, the same information is
+available during startup/watch/render, and future Typst upgrades remain isolated to `compiler/`.
+
+---
+
 ## Post-MVP - Mode 2 (Store)
 
 Do not implement until Mode 1 is in production and has feedback from real users.

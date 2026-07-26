@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 use bytes::Bytes;
 
+use crate::CompilationDiagnostic;
 use crate::schema::Schema;
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -38,11 +39,19 @@ impl TemplateBundle {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Document {
     bytes: Bytes,
+    warnings: Vec<CompilationDiagnostic>,
 }
 
 impl Document {
     pub fn new(bytes: Bytes) -> Self {
-        Self { bytes }
+        Self {
+            bytes,
+            warnings: Vec::new(),
+        }
+    }
+
+    pub(crate) fn with_warnings(bytes: Bytes, warnings: Vec<CompilationDiagnostic>) -> Self {
+        Self { bytes, warnings }
     }
 
     pub fn bytes(&self) -> &Bytes {
@@ -51,5 +60,9 @@ impl Document {
 
     pub fn into_bytes(self) -> Bytes {
         self.bytes
+    }
+
+    pub fn warnings(&self) -> &[CompilationDiagnostic] {
+        &self.warnings
     }
 }

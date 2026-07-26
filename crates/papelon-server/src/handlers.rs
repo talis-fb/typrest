@@ -6,12 +6,13 @@ use axum::extract::{Json, Path, State};
 use axum::http::header::CONTENT_TYPE;
 use axum::http::{HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
-use papelon_core::{Document, RenderRequest, TemplateName};
+use papelon_core::{CompilationError, Document, RenderError, RenderRequest, TemplateName};
 use serde::Serialize;
 use serde_json::Value;
 use tracing::{info, warn};
 
 use crate::errors::ApiError;
+use crate::output::{DiagnosticContext, DiagnosticStage};
 use crate::server::AppState;
 
 pub async fn healthz() -> Json<HealthResponse> {
@@ -62,25 +63,55 @@ pub async fn render_template(
     match result {
         Ok(document) => {
             let pdf_size = document.bytes().len();
+            state.reporter.report_warnings(
+                DiagnosticContext::Render,
+                DiagnosticStage::Compile,
+                &template_for_log,
+                document.warnings(),
+            );
             info!(
+                event = "render.completed",
                 template = %template_for_log,
                 latency_ms = elapsed_ms,
                 pdf_size,
+                warning_count = document.warnings().len(),
                 status = "ok",
                 "render completed"
             );
             Ok(pdf_response(document))
         }
         Err(error) => {
+            if let RenderError::CompilationError(compilation_error) = &error {
+                let stage = match compilation_error {
+                    CompilationError::Failed(_) => DiagnosticStage::Compile,
+                    CompilationError::ExportFailed(_) => DiagnosticStage::Export,
+                };
+                state.reporter.report_compilation(
+                    DiagnosticContext::Render,
+                    stage,
+                    &template_for_log,
+                    compilation_error,
+                );
+            }
             warn!(
+                event = "render.failed",
                 template = %template_for_log,
                 latency_ms = elapsed_ms,
                 status = "error",
-                error = %error,
+                error_kind = render_error_kind(&error),
                 "render failed"
             );
             Err(ApiError::from_render_error(error))
         }
+    }
+}
+
+fn render_error_kind(error: &RenderError) -> &'static str {
+    match error {
+        RenderError::TemplateNotFound(_) => "template_not_found",
+        RenderError::ValidationError(_) => "schema_validation_failed",
+        RenderError::CompilationError(CompilationError::Failed(_)) => "compilation_failed",
+        RenderError::CompilationError(CompilationError::ExportFailed(_)) => "pdf_export_failed",
     }
 }
 

@@ -3,6 +3,8 @@ use std::path::PathBuf;
 
 use papelon_core::{RenderService, TemplateRegistry};
 
+use crate::output::DiagnosticReporter;
+
 #[derive(Debug, Clone)]
 pub struct ServerConfig {
     pub templates_dir: PathBuf,
@@ -36,13 +38,19 @@ impl ServerConfig {
 pub struct AppState {
     pub registry: TemplateRegistry,
     pub render_service: RenderService,
+    pub reporter: DiagnosticReporter,
 }
 
 impl AppState {
-    pub fn new(registry: TemplateRegistry, render_service: RenderService) -> Self {
+    pub fn new(
+        registry: TemplateRegistry,
+        render_service: RenderService,
+        reporter: DiagnosticReporter,
+    ) -> Self {
         Self {
             registry,
             render_service,
+            reporter,
         }
     }
 }

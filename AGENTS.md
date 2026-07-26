@@ -97,7 +97,9 @@ Use **exactly** these names in code (structs, variables, functions, comments):
 | `SchemaVersionError` | Load error: missing or unsupported `schemaVersion`. |
 | `SchemaError` | Load error: structurally invalid schema (`properties` without object, enum with mixed types, etc.). |
 | `ValidationError` | Render error: payload does not satisfy the schema (missing required field, wrong type, invalid enum). |
-| `CompilationError` | Typst compiler failed during startup warmup or request rendering. Contains message and error line. |
+| `CompilationDiagnostic` | Papelon-owned compiler diagnostic: severity, message, optional virtual source range, hints, and trace frames. Contains no `typst::*` type. |
+| `CompilationReport` | Ordered collection of every error and warning produced by one failed compilation/export. |
+| `CompilationError` | Typst compiler failed during startup warmup or request rendering. Contains a `CompilationReport`. |
 | `LoaderError` | Enum that unifies `TemplateLoader` errors: `TemplateNotFound`, `SchemaVersionError`, `SchemaError`, `IoError`. |
 | `RenderError` | Enum that unifies `RenderService` errors: `TemplateNotFound`, `ValidationError`, `CompilationError`. |
 
@@ -145,20 +147,19 @@ The `typst` crate has an unstable API across minor versions. To protect the rest
 
 The Rust compiler reinforces this: `world.rs` and `fonts.rs` are `pub(super)`, invisible outside the module.
 
-### Public Interface - Stable, Never Changes
+### Public Interface - Stable Across Typst Upgrades
 
 Defined in the `compiler` module. This is everything `RenderService` and tests know:
 
 ```rust
-// The only compilation error the external world knows.
-// Contains no typst::* type.
+// Papelon-owned diagnostic types. None contains a typst::* type.
 #[derive(Debug, thiserror::Error)]
 pub enum CompilationError {
-    #[error("compilation failed: {message}")]
-    Failed { message: String, line: Option<u32> },
+    #[error("compilation failed: ...")]
+    Failed(CompilationReport),
 
-    #[error("pdf export failed: {0}")]
-    ExportFailed(String),
+    #[error("pdf export failed: ...")]
+    ExportFailed(CompilationReport),
 }
 
 // The only trait RenderService uses.
@@ -202,8 +203,8 @@ compiler/
 **`world.rs`** contains:
 - `struct TemplateWorld` implementing `typst::World`
 - `fn prepare(source, fonts) -> Result<PreparedTemplate, CompilationError>`: private function that builds reusable template-invariant state
-- `fn compile_prepared(template, payload) -> Result<Vec<u8>, CompilationError>`: private function that builds request-specific inputs, orchestrates compilation, and converts Typst errors to `CompilationError`
-- `fn map_errors(Vec<SourceDiagnostic>) -> CompilationError`: the only place that knows `SourceDiagnostic`
+- `fn compile_prepared(template, payload) -> Result<CompiledPdf, CompilationError>`: private function that builds request-specific inputs, orchestrates compilation, and converts Typst output
+- `fn map_diagnostic(SourceDiagnostic) -> CompilationDiagnostic`: the only place that knows `SourceDiagnostic`, its hints, traces, and spans
 - `fn build_inputs(payload: &serde_json::Value) -> typst::foundations::Dict`: converts the payload to Typst's format
 
 **`fonts.rs`** contains:
@@ -222,6 +223,10 @@ The impact stays **100% inside `world.rs` and `fonts.rs`**. Examples of historic
 | `SourceDiagnostic` gained/lost fields | `world.rs`: only `fn map_errors()` |
 | `FileId`/`VirtualPath` changed module | `world.rs`: imports at the top |
 | `FontBook` changed API | `fonts.rs`: only `FontRegistry` |
+
+`typst`, `typst-pdf`, and `typst-assets` must remain pinned to the same exact version and be
+upgraded together. Public diagnostics store owned strings and numeric locations rather than
+mirroring Typst enums. See `docs/diagnostics.md` for the upgrade checklist.
 
 ### MockCompiler for Tests
 

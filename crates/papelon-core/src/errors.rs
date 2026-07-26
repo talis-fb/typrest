@@ -1,6 +1,9 @@
 use thiserror::Error;
 
-use crate::TemplateName;
+use crate::{
+    CompilationDiagnostic, CompilationReport, DiagnosticLocation, DiagnosticPosition,
+    DiagnosticSeverity, TemplateName,
+};
 
 #[derive(Clone, Debug, Eq, Error, PartialEq)]
 #[error("{field}: {issue}")]
@@ -20,11 +23,56 @@ impl ValidationError {
 
 #[derive(Clone, Debug, Error, PartialEq)]
 pub enum CompilationError {
-    #[error("compilation failed: {message}")]
-    Failed { message: String, line: Option<u32> },
+    #[error("compilation failed: {}", primary_message(.0))]
+    Failed(CompilationReport),
 
-    #[error("pdf export failed: {0}")]
-    ExportFailed(String),
+    #[error("pdf export failed: {}", primary_message(.0))]
+    ExportFailed(CompilationReport),
+}
+
+impl CompilationError {
+    pub fn failed(message: impl Into<String>, line: Option<u32>) -> Self {
+        let mut diagnostic = CompilationDiagnostic::new(DiagnosticSeverity::Error, message);
+        diagnostic.location = line.map(|line| {
+            DiagnosticLocation::new(
+                "main.typ",
+                DiagnosticPosition::new(line, 1),
+                DiagnosticPosition::new(line, 1),
+            )
+        });
+        Self::Failed(CompilationReport::new(vec![diagnostic]))
+    }
+
+    pub fn export_failed(message: impl Into<String>) -> Self {
+        Self::ExportFailed(CompilationReport::new(vec![CompilationDiagnostic::new(
+            DiagnosticSeverity::Error,
+            message,
+        )]))
+    }
+
+    pub fn report(&self) -> &CompilationReport {
+        match self {
+            Self::Failed(report) | Self::ExportFailed(report) => report,
+        }
+    }
+
+    pub fn primary_message(&self) -> &str {
+        primary_message(self.report())
+    }
+
+    pub fn primary_line(&self) -> Option<u32> {
+        self.report()
+            .primary()
+            .and_then(|diagnostic| diagnostic.location.as_ref())
+            .map(|location| location.start.line)
+    }
+}
+
+fn primary_message(report: &CompilationReport) -> &str {
+    report
+        .primary()
+        .map(|diagnostic| diagnostic.message.as_str())
+        .unwrap_or("unknown compilation error")
 }
 
 #[derive(Clone, Debug, Error, PartialEq)]

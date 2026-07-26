@@ -158,10 +158,10 @@ mod tests {
 
     #[test]
     fn returns_compilation_error() {
-        let compiler = Arc::new(MockCompiler::new(Err(CompilationError::Failed {
-            message: "boom".to_owned(),
-            line: Some(1),
-        })));
+        let compiler = Arc::new(MockCompiler::new(Err(CompilationError::failed(
+            "boom",
+            Some(1),
+        ))));
         let service = RenderService::new(registry(schema(json!({}))), compiler);
 
         let error = futures_executor::block_on(service.render(RenderRequest::new(
@@ -172,7 +172,7 @@ mod tests {
 
         assert!(matches!(
             error,
-            RenderError::CompilationError(CompilationError::Failed { .. })
+            RenderError::CompilationError(CompilationError::Failed(_))
         ));
     }
 }

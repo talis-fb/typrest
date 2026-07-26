@@ -22,10 +22,14 @@ The phrase "shared World" means shared template-invariant world state. It does n
 5. The compiler prepares the reusable template state from `TemplateSource`.
 6. The startup path generates a minimal valid sample payload from the template `Schema`.
 7. The compiler performs a real Typst compile and PDF export using the prepared template state and the generated sample payload.
-8. Any load, schema, compile, or export error aborts startup before the server binds its socket.
+8. All discovered templates are checked in name order. Any load, schema, compile, or export error
+   aborts startup before the server binds its socket, after every template failure has been
+   collected and reported.
 9. Successful templates are stored in an in-memory `TemplateRegistry` keyed by `TemplateName`.
 
 Startup errors must be logged or printed with the template name, the error category, the message, and the Typst line number when one is available.
+Successful Typst warnings are reported with their complete diagnostic context but do not fail
+startup.
 
 The sample payload generator should use deterministic values:
 
@@ -112,9 +116,11 @@ prepare, and warm-compile a candidate without holding the registry lock, then re
 one write operation after every step succeeds.
 
 `TemplateRegistry::build()` performs the startup lifecycle in the sorted order returned by the
-loader. `TemplateRegistry::reload()` performs the same load, prepare, generated-payload validation,
-and warmup lifecycle for one template. Registry errors retain the template name and distinguish
-listing, loading, preparation, invalid generated samples, and warmup failures.
+loader and returns the prepared registry plus warnings, or an aggregate containing every template
+failure. `TemplateRegistry::reload()` performs the same load, prepare, generated-payload
+validation, and warmup lifecycle for one template and returns any successful warnings. Registry
+errors retain the template name and distinguish listing, loading, preparation, invalid generated
+samples, and warmup failures.
 
 `RenderService` should receive the registry and compiler. It should not receive `Arc<dyn TemplateLoader>` for normal rendering. The loader remains the abstraction for raw template reads, but startup and watch mode are responsible for translating loader output into prepared registry entries.
 
