@@ -1,3 +1,4 @@
+use std::net::Ipv4Addr;
 use std::path::PathBuf;
 
 use papelon_core::{RenderService, TemplateRegistry};
@@ -18,6 +19,11 @@ impl ServerConfig {
             host: [0, 0, 0, 0],
             watch: false,
         }
+    }
+
+    pub fn with_host(mut self, host: Ipv4Addr) -> Self {
+        self.host = host.octets();
+        self
     }
 
     pub fn with_watch(mut self, watch: bool) -> Self {

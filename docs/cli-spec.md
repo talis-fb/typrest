@@ -140,7 +140,7 @@ Start the HTTP server in filesystem mode.
 ### Syntax
 
 ```text
-papelon serve [--port <port>] [--watch]
+papelon serve [--port <port>] [--hostname <ipv4>] [--watch]
 ```
 
 ### Arguments
@@ -153,6 +153,16 @@ Default:
 
 ```text
 8080
+```
+
+#### `--hostname <ipv4>`
+
+Optional IPv4 address to bind to.
+
+Default:
+
+```text
+0.0.0.0
 ```
 
 #### `--watch`

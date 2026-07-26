@@ -1,3 +1,4 @@
+use std::net::Ipv4Addr;
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
@@ -19,6 +20,11 @@ pub enum Command {
         #[arg(default_value_t = 8080)]
         port: u16,
 
+        /// Hostname to bind to.
+        #[arg(long)]
+        #[arg(default_value_t = Ipv4Addr::new(0, 0, 0, 0))]
+        hostname: Ipv4Addr,
+
         /// Watch the templates directory and log template reloads.
         #[arg(long)]
         watch: bool,
@@ -36,17 +42,24 @@ pub enum Command {
 mod tests {
     use super::{Args, Command};
     use clap::Parser;
+    use std::net::Ipv4Addr;
     use std::path::PathBuf;
 
     #[test]
     fn parses_serve_with_default_port() {
         let args = Args::parse_from(["papelon", "serve"]);
 
-        let Command::Serve { port, watch } = args.command else {
+        let Command::Serve {
+            port,
+            hostname,
+            watch,
+        } = args.command
+        else {
             panic!("expected serve command");
         };
 
         assert_eq!(port, 8080);
+        assert_eq!(hostname, Ipv4Addr::new(0, 0, 0, 0));
         assert!(!watch);
     }
 
@@ -54,12 +67,36 @@ mod tests {
     fn parses_serve_with_port_and_watch() {
         let args = Args::parse_from(["papelon", "serve", "--port", "9090", "--watch"]);
 
-        let Command::Serve { port, watch } = args.command else {
+        let Command::Serve {
+            port,
+            hostname,
+            watch,
+        } = args.command
+        else {
             panic!("expected serve command");
         };
 
         assert_eq!(port, 9090);
+        assert_eq!(hostname, Ipv4Addr::new(0, 0, 0, 0));
         assert!(watch);
+    }
+
+    #[test]
+    fn parses_serve_with_hostname() {
+        let args = Args::parse_from(["papelon", "serve", "--hostname", "127.0.0.1"]);
+
+        let Command::Serve { hostname, .. } = args.command else {
+            panic!("expected serve command");
+        };
+
+        assert_eq!(hostname, Ipv4Addr::new(127, 0, 0, 1));
+    }
+
+    #[test]
+    fn rejects_invalid_serve_hostname() {
+        let result = Args::try_parse_from(["papelon", "serve", "--hostname", "localhost"]);
+
+        assert!(result.is_err());
     }
 
     #[test]
