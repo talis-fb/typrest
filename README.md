@@ -33,6 +33,8 @@ curl http://localhost:8080/templates
 Run without Docker:
 
 ```bash
+cargo run -- serve --port 8080 --watch
+```
 
 Validate every template without starting the server:
 
