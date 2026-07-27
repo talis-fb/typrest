@@ -10,19 +10,20 @@ use typst::utils::LazyHash;
 use typst::{Library, LibraryExt, World, WorldExt};
 use typst_pdf::PdfOptions;
 
+use crate::compiler::prepared_template::PreparedTemplateInner;
 use crate::{
     CompilationDiagnostic, CompilationError, CompilationReport, DiagnosticLocation,
     DiagnosticPosition, DiagnosticSeverity, RelatedDiagnostic, TemplateSource,
 };
 
-use super::fonts::{FontRegistry, LoadedFonts};
+use super::fonts::FontRegistry;
 
 const MAIN_TYP: &str = "main.typ";
 
 pub(super) fn prepare(
     source: &TemplateSource,
     fonts: &FontRegistry,
-) -> Result<PreparedTemplateState, CompilationError> {
+) -> Result<PreparedTemplateInner, CompilationError> {
     let files = source
         .files()
         .iter()
@@ -36,7 +37,7 @@ pub(super) fn prepare(
         std::str::from_utf8(main_bytes).map_err(|_| failed("main.typ must be valid UTF-8"))?;
     let main = Source::new(file_id(MAIN_TYP), main_text.to_owned());
 
-    Ok(PreparedTemplateState {
+    Ok(PreparedTemplateInner {
         main,
         files,
         fonts: fonts.for_source(source),
@@ -44,7 +45,7 @@ pub(super) fn prepare(
 }
 
 pub(super) fn compile_prepared(
-    template: &PreparedTemplateState,
+    template: &PreparedTemplateInner,
     payload: &serde_json::Value,
 ) -> Result<CompiledPdf, CompilationError> {
     let world = TemplateWorld::new(template, payload);
@@ -80,19 +81,13 @@ pub(super) struct CompiledPdf {
     pub(super) warnings: Vec<CompilationDiagnostic>,
 }
 
-pub(super) struct PreparedTemplateState {
-    main: Source,
-    files: BTreeMap<String, Bytes>,
-    fonts: LoadedFonts,
-}
-
 struct TemplateWorld<'a> {
-    template: &'a PreparedTemplateState,
+    template: &'a PreparedTemplateInner,
     library: LazyHash<Library>,
 }
 
 impl<'a> TemplateWorld<'a> {
-    fn new(template: &'a PreparedTemplateState, payload: &serde_json::Value) -> Self {
+    fn new(template: &'a PreparedTemplateInner, payload: &serde_json::Value) -> Self {
         Self {
             template,
             library: LazyHash::new(

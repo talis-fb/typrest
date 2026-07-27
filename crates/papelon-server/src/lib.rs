@@ -90,7 +90,7 @@ mod tests {
     use papelon_core::{
         CompilationDiagnostic, CompilationError, CompilationReport, DiagnosticLocation,
         DiagnosticPosition, DiagnosticSeverity, Document, PdfCompiler, PreparedTemplate,
-        PreparedTemplateEntry, RelatedDiagnostic, RenderService, Schema, TemplateBundle,
+        PreparedTemplateBundle, RelatedDiagnostic, RenderService, Schema, TemplateBundle,
         TemplateLoader, TemplateName, TemplateRegistry, TemplateRegistryError, TemplateSource,
     };
     use serde_json::{Value, json};
@@ -141,7 +141,7 @@ mod tests {
             let bundle = futures_executor::block_on(loader.load(&name)).unwrap();
             registry.insert_for_test(
                 name,
-                PreparedTemplateEntry::new(bundle.schema, PreparedTemplate::for_test()),
+                PreparedTemplateBundle::new(bundle.schema, PreparedTemplate::for_test()),
             );
         }
 

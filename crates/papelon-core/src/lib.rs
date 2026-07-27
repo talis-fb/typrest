@@ -12,16 +12,14 @@ mod template;
 mod template_name;
 mod warnings;
 
-pub use compiler::{PdfCompiler, PreparedTemplate, TypstCompiler};
+pub use compiler::{PdfCompiler, PreparedTemplate, PreparedTemplateBundle, TypstCompiler};
 pub use diagnostic::{
     CompilationDiagnostic, CompilationReport, DiagnosticLocation, DiagnosticPosition,
     DiagnosticSeverity, RelatedDiagnostic,
 };
 pub use errors::{CompilationError, RenderError, ValidationError};
 pub use loader::{LoaderError, TemplateLoader};
-pub use registry::{
-    PreparedTemplateEntry, TemplateRegistry, TemplateRegistryBuildFailure, TemplateRegistryError,
-};
+pub use registry::{TemplateRegistry, TemplateRegistryBuildFailure, TemplateRegistryError};
 pub use render::RenderService;
 pub use render_request::RenderRequest;
 pub use schema::{

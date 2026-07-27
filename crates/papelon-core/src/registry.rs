@@ -4,32 +4,15 @@ use std::sync::{Arc, RwLock};
 use thiserror::Error;
 
 use crate::{
-    CompilationError, LoaderError, PdfCompiler, PreparedTemplate, Schema, TemplateBundle,
-    TemplateLoader, TemplateName, ValidationError, WithWarnings, validate_with_defaults,
+    CompilationError, LoaderError, PdfCompiler, TemplateLoader, TemplateName, ValidationError,
+    WithWarnings, validate_with_defaults,
 };
 
-pub struct PreparedTemplateEntry {
-    schema: Schema,
-    prepared: PreparedTemplate,
-}
-
-impl PreparedTemplateEntry {
-    pub fn new(schema: Schema, prepared: PreparedTemplate) -> Self {
-        Self { schema, prepared }
-    }
-
-    pub fn schema(&self) -> &Schema {
-        &self.schema
-    }
-
-    pub fn prepared(&self) -> &PreparedTemplate {
-        &self.prepared
-    }
-}
+use crate::compiler::PreparedTemplateBundle;
 
 #[derive(Clone, Default)]
 pub struct TemplateRegistry {
-    entries: Arc<RwLock<BTreeMap<TemplateName, Arc<PreparedTemplateEntry>>>>,
+    entries: Arc<RwLock<BTreeMap<TemplateName, Arc<PreparedTemplateBundle>>>>,
 }
 
 impl TemplateRegistry {
@@ -55,11 +38,11 @@ impl TemplateRegistry {
         let mut warnings = Vec::new();
 
         for name in names {
-            match prepare_template(loader, compiler, &name).await {
-                Ok(entry) => {
-                    let (entry, entry_warnings) = entry.into_parts();
-                    warnings.extend(entry_warnings);
-                    registry.replace(name, entry);
+            match prepare_template_bundle(loader, compiler, &name).await {
+                Ok(bundle) => {
+                    let (bundle_prepared_template, bundle_warnings) = bundle.into_parts();
+                    registry.replace(name, bundle_prepared_template);
+                    warnings.extend(bundle_warnings);
                 }
                 Err(error) => failures.push(error),
             }
@@ -84,14 +67,15 @@ impl TemplateRegistry {
         compiler: &dyn PdfCompiler,
         name: &TemplateName,
     ) -> Result<WithWarnings<()>, TemplateRegistryError> {
-        let entry = prepare_template(loader, compiler, name).await?;
+        let bundle = prepare_template_bundle(loader, compiler, name).await?;
 
-        let (entry, warnings) = entry.into_parts();
-        self.replace(name.clone(), entry);
+        let (prepared_template_bundle, warnings) = bundle.into_parts();
+
+        self.replace(name.clone(), prepared_template_bundle);
         Ok(WithWarnings::new((), warnings))
     }
 
-    pub fn get(&self, name: &TemplateName) -> Option<Arc<PreparedTemplateEntry>> {
+    pub fn get(&self, name: &TemplateName) -> Option<Arc<PreparedTemplateBundle>> {
         self.entries
             .read()
             .expect("template registry lock poisoned")
@@ -108,7 +92,7 @@ impl TemplateRegistry {
             .collect()
     }
 
-    fn replace(&self, name: TemplateName, entry: PreparedTemplateEntry) {
+    fn replace(&self, name: TemplateName, entry: PreparedTemplateBundle) {
         self.entries
             .write()
             .expect("template registry lock poisoned")
@@ -117,16 +101,16 @@ impl TemplateRegistry {
 
     #[cfg(any(test, feature = "test-util"))]
     #[doc(hidden)]
-    pub fn insert_for_test(&self, name: TemplateName, entry: PreparedTemplateEntry) {
+    pub fn insert_for_test(&self, name: TemplateName, entry: PreparedTemplateBundle) {
         self.replace(name, entry);
     }
 }
 
-async fn prepare_template(
+async fn prepare_template_bundle(
     loader: &dyn TemplateLoader,
     compiler: &dyn PdfCompiler,
     name: &TemplateName,
-) -> Result<WithWarnings<PreparedTemplateEntry>, TemplateRegistryError> {
+) -> Result<WithWarnings<PreparedTemplateBundle>, TemplateRegistryError> {
     let bundle = loader
         .load(name)
         .await
@@ -134,14 +118,7 @@ async fn prepare_template(
             template: name.clone(),
             source,
         })?;
-    prepare_entry(name, bundle, compiler).await
-}
 
-async fn prepare_entry(
-    name: &TemplateName,
-    bundle: TemplateBundle,
-    compiler: &dyn PdfCompiler,
-) -> Result<WithWarnings<PreparedTemplateEntry>, TemplateRegistryError> {
     let prepared = compiler.prepare(&bundle.source).await.map_err(|source| {
         TemplateRegistryError::Prepare {
             template: name.clone(),
@@ -175,7 +152,7 @@ async fn prepare_entry(
         .collect();
 
     Ok(WithWarnings::new(
-        PreparedTemplateEntry::new(bundle.schema, prepared),
+        PreparedTemplateBundle::new(bundle.schema, prepared),
         warnings,
     ))
 }

@@ -37,9 +37,10 @@ mod tests {
     use bytes::Bytes;
     use serde_json::json;
 
+    use crate::compiler::PreparedTemplateBundle;
     use crate::{
-        CompilationError, Document, PdfCompiler, PreparedTemplate, PreparedTemplateEntry,
-        RenderError, RenderRequest, Schema, TemplateName, TemplateRegistry, TemplateSource,
+        CompilationError, Document, PdfCompiler, PreparedTemplate, RenderError, RenderRequest,
+        Schema, TemplateName, TemplateRegistry, TemplateSource,
     };
 
     use super::RenderService;
@@ -94,7 +95,7 @@ mod tests {
         let registry = TemplateRegistry::default();
         registry.insert_for_test(
             TemplateName::new("invoice").unwrap(),
-            PreparedTemplateEntry::new(schema, PreparedTemplate::for_test()),
+            PreparedTemplateBundle::new(schema, PreparedTemplate::for_test()),
         );
         registry
     }

@@ -1,4 +1,5 @@
 mod fonts;
+mod prepared_template;
 mod world;
 
 use std::sync::Arc;
@@ -12,6 +13,8 @@ use crate::{
 
 use self::fonts::FontRegistry;
 
+pub use prepared_template::{PreparedTemplate, PreparedTemplateBundle};
+
 #[async_trait]
 pub trait PdfCompiler: Send + Sync {
     async fn prepare(&self, source: &TemplateSource) -> Result<PreparedTemplate, CompilationError>;
@@ -21,18 +24,6 @@ pub trait PdfCompiler: Send + Sync {
         template: &PreparedTemplate,
         payload: &serde_json::Value,
     ) -> Result<Document, CompilationError>;
-}
-
-pub struct PreparedTemplate {
-    state: Option<world::PreparedTemplateState>,
-}
-
-impl PreparedTemplate {
-    #[cfg(any(test, feature = "test-util"))]
-    #[doc(hidden)]
-    pub fn for_test() -> Self {
-        Self { state: None }
-    }
 }
 
 #[derive(Clone)]
@@ -58,7 +49,7 @@ impl Default for TypstCompiler {
 impl PdfCompiler for TypstCompiler {
     async fn prepare(&self, source: &TemplateSource) -> Result<PreparedTemplate, CompilationError> {
         Ok(PreparedTemplate {
-            state: Some(world::prepare(source, &self.fonts)?),
+            inner: Some(world::prepare(source, &self.fonts)?),
         })
     }
 
@@ -68,7 +59,7 @@ impl PdfCompiler for TypstCompiler {
         payload: &serde_json::Value,
     ) -> Result<Document, CompilationError> {
         let state = template
-            .state
+            .inner
             .as_ref()
             .ok_or_else(|| compilation_error("test prepared template cannot be compiled"))?;
         let compiled = world::compile_prepared(state, payload)?;
