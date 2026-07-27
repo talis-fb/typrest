@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{Arc, RwLock};
 
 use thiserror::Error;
 
@@ -48,7 +48,7 @@ impl TemplateRegistry {
             }
         };
         let template_count = names.len();
-        let registry = Self::default();
+        let registry = TemplateRegistry::default();
         let mut failures = Vec::new();
         let mut warnings = Vec::new();
 
@@ -97,15 +97,27 @@ impl TemplateRegistry {
     }
 
     pub fn get(&self, name: &TemplateName) -> Option<Arc<PreparedTemplateEntry>> {
-        read_entries(&self.entries).get(name).cloned()
+        self.entries
+            .read()
+            .expect("template registry lock poisoned")
+            .get(name)
+            .cloned()
     }
 
     pub fn names(&self) -> Vec<TemplateName> {
-        read_entries(&self.entries).keys().cloned().collect()
+        self.entries
+            .read()
+            .expect("template registry lock poisoned")
+            .keys()
+            .cloned()
+            .collect()
     }
 
     fn replace(&self, name: TemplateName, entry: PreparedTemplateEntry) {
-        write_entries(&self.entries).insert(name, Arc::new(entry));
+        self.entries
+            .write()
+            .expect("template registry lock poisoned")
+            .insert(name, Arc::new(entry));
     }
 
     #[cfg(any(test, feature = "test-util"))]
@@ -166,24 +178,6 @@ async fn prepare_entry(
 struct PreparedTemplateCandidate {
     entry: PreparedTemplateEntry,
     warnings: Vec<CompilationDiagnostic>,
-}
-
-fn read_entries(
-    entries: &RwLock<BTreeMap<TemplateName, Arc<PreparedTemplateEntry>>>,
-) -> RwLockReadGuard<'_, BTreeMap<TemplateName, Arc<PreparedTemplateEntry>>> {
-    match entries.read() {
-        Ok(entries) => entries,
-        Err(poisoned) => poisoned.into_inner(),
-    }
-}
-
-fn write_entries(
-    entries: &RwLock<BTreeMap<TemplateName, Arc<PreparedTemplateEntry>>>,
-) -> RwLockWriteGuard<'_, BTreeMap<TemplateName, Arc<PreparedTemplateEntry>>> {
-    match entries.write() {
-        Ok(entries) => entries,
-        Err(poisoned) => poisoned.into_inner(),
-    }
 }
 
 #[derive(Debug, Error)]
