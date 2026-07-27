@@ -14,15 +14,19 @@ impl RenderService {
     }
 
     pub async fn render(&self, request: RenderRequest) -> Result<crate::Document, RenderError> {
-        let entry = self
+        let prepared_template_bundle = self
             .registry
             .get(&request.template)
             .ok_or_else(|| RenderError::TemplateNotFound(request.template.clone()))?;
-        let payload = validate_with_defaults(entry.schema(), &request.payload)
-            .map_err(RenderError::ValidationError)?;
+
+        let payload = match prepared_template_bundle.schema() {
+            Some(schema) => validate_with_defaults(schema, &request.payload)
+                .map_err(RenderError::ValidationError)?,
+            None => request.payload,
+        };
 
         self.compiler
-            .compile_prepared(entry.prepared(), &payload)
+            .compile_prepared(prepared_template_bundle.prepared(), &payload)
             .await
             .map_err(RenderError::CompilationError)
     }

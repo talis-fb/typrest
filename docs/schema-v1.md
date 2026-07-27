@@ -2,7 +2,7 @@
 
 ## Goal
 
-The `schema.json` file defines the expected contract for a JSON value.
+The optional `schema.json` file defines the expected contract for a JSON value. A template without this file accepts any JSON payload and receives it directly through `sys.inputs.data`; no payload validation is performed.
 
 In version `v1`, only request body validation (`request.body`) is supported.
 

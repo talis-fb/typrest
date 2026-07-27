@@ -39,11 +39,16 @@ impl FilesystemLoader {
         }
 
         let schema_path = template_dir.join("schema.json");
-        let schema_bytes = fs::read(&schema_path).map_err(|error| FilesystemLoaderError::Read {
-            path: schema_path.clone(),
-            error,
-        })?;
-        let schema = Schema::parse(&schema_bytes)?;
+        let schema = if schema_path.is_file() {
+            let schema_bytes =
+                fs::read(&schema_path).map_err(|error| FilesystemLoaderError::Read {
+                    path: schema_path.clone(),
+                    error,
+                })?;
+            Some(Schema::parse(&schema_bytes)?)
+        } else {
+            None
+        };
 
         let mut files = BTreeMap::new();
         read_tree(&template_dir, &template_dir, "", &mut files)?;
@@ -53,7 +58,11 @@ impl FilesystemLoader {
             read_tree(&shared_dir, &shared_dir, "_shared", &mut files)?;
         }
 
-        Ok(TemplateBundle::new(TemplateSource::new(files), schema))
+        let source = TemplateSource::new(files);
+        Ok(match schema {
+            Some(schema) => TemplateBundle::new(source, schema),
+            None => TemplateBundle::without_schema(source),
+        })
     }
 
     pub(crate) fn list_sync(&self) -> Result<Vec<TemplateName>, LoaderError> {
@@ -241,7 +250,19 @@ mod tests {
         assert!(bundle.source.files().contains_key("schema.json"));
         assert!(bundle.source.files().contains_key("assets/item.typ"));
         assert!(bundle.source.files().contains_key("_shared/brand.typ"));
-        assert_eq!(bundle.schema.schema_version, "v1");
+        assert_eq!(bundle.schema.as_ref().unwrap().schema_version, "v1");
+    }
+
+    #[test]
+    fn resolves_template_without_schema() {
+        let root = tempdir().unwrap();
+        write(&root.path().join("welcome/main.typ"), "Hello");
+
+        let loader = FilesystemLoader::new(root.path());
+        let bundle = block_on(loader.load(&TemplateName::new("welcome").unwrap())).unwrap();
+
+        assert!(bundle.schema.is_none());
+        assert!(bundle.source.files().contains_key("main.typ"));
     }
 
     #[test]

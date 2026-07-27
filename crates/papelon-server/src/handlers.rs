@@ -1,10 +1,9 @@
 use std::time::Instant;
 
-use axum::body::Body;
-use axum::extract::rejection::JsonRejection;
+use axum::body::{Body, Bytes};
 use axum::extract::{Json, Path, State};
 use axum::http::header::CONTENT_TYPE;
-use axum::http::{HeaderValue, StatusCode};
+use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use papelon_core::{CompilationError, Document, RenderError, RenderRequest, TemplateName};
 use serde::Serialize;
@@ -37,7 +36,8 @@ pub async fn list_templates(
 pub async fn render_template(
     State(state): State<AppState>,
     Path(template): Path<String>,
-    payload: Result<Json<Value>, JsonRejection>,
+    headers: HeaderMap,
+    body: Bytes,
 ) -> Result<Response, ApiError> {
     let template = TemplateName::new(template).map_err(|error| {
         ApiError::new(
@@ -48,9 +48,25 @@ pub async fn render_template(
     })?;
     let template_for_log = template.clone();
 
-    let Json(payload) = payload.map_err(|error| {
-        ApiError::new(StatusCode::BAD_REQUEST, "invalid_json", error.body_text())
-    })?;
+    let schema = state
+        .registry
+        .get(&template)
+        .and_then(|entry| entry.schema().cloned());
+
+    let payload = if body.is_empty() && schema.is_none() {
+        Value::Object(serde_json::Map::new())
+    } else {
+        if !has_json_content_type(&headers) {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "invalid_json",
+                "request body must have content-type application/json",
+            ));
+        }
+        serde_json::from_slice(&body).map_err(|error| {
+            ApiError::new(StatusCode::BAD_REQUEST, "invalid_json", error.to_string())
+        })?
+    };
 
     let started_at = Instant::now();
 
@@ -104,6 +120,18 @@ pub async fn render_template(
             Err(ApiError::from_render_error(error))
         }
     }
+}
+
+fn has_json_content_type(headers: &HeaderMap) -> bool {
+    headers
+        .get(CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| {
+            value
+                .split(';')
+                .next()
+                .is_some_and(|mime| mime.trim() == "application/json")
+        })
 }
 
 fn render_error_kind(error: &RenderError) -> &'static str {

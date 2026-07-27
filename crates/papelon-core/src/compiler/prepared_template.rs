@@ -23,17 +23,27 @@ pub(super) struct PreparedTemplateInner {
 }
 
 pub struct PreparedTemplateBundle {
-    pub schema: Schema,
+    pub schema: Option<Schema>,
     pub prepared: PreparedTemplate,
 }
 
 impl PreparedTemplateBundle {
     pub fn new(schema: Schema, prepared: PreparedTemplate) -> Self {
-        Self { schema, prepared }
+        Self {
+            schema: Some(schema),
+            prepared,
+        }
     }
 
-    pub fn schema(&self) -> &Schema {
-        &self.schema
+    pub fn without_schema(prepared: PreparedTemplate) -> Self {
+        Self {
+            schema: None,
+            prepared,
+        }
+    }
+
+    pub fn schema(&self) -> Option<&Schema> {
+        self.schema.as_ref()
     }
 
     pub fn prepared(&self) -> &PreparedTemplate {

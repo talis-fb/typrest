@@ -4,7 +4,7 @@ Papelon is an HTTP server for server-side PDF generation with Typst. It is built
 
 Applications integrate with Papelon through HTTP. A service in any language sends JSON to a template endpoint, and Papelon validates the payload, compiles the matching Typst template, and returns PDF bytes.
 
-The current MVP runs in filesystem mode. Templates live in a directory mounted into the server, and each template contains a `main.typ` file plus a `schema.json` contract.
+The current MVP runs in filesystem mode. Templates live in a directory mounted into the server, and each template contains a required `main.typ` file. An optional `schema.json` contract can validate request payloads.
 
 ## Quickstart
 
@@ -57,7 +57,7 @@ templates/
     brand.typ
 ```
 
-Each template directory must contain `main.typ` and `schema.json`. Files under `_shared/` are available to every template.
+Each template directory must contain `main.typ`; `schema.json` is optional. If it is absent, Papelon skips payload validation and injects the request JSON directly through `sys.inputs.data`. Files under `_shared/` are available to every template.
 
 ## Complete Typst Example
 
@@ -153,7 +153,7 @@ Error responses use JSON:
 Status codes:
 
 - `404`: template not found
-- `422`: payload does not match `schema.json`
+- `422`: payload does not match `schema.json` (when present)
 - `500`: Typst compilation or PDF export failed
 
 ## Compiler Diagnostics

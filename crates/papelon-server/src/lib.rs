@@ -139,10 +139,11 @@ mod tests {
 
         for name in names {
             let bundle = futures_executor::block_on(loader.load(&name)).unwrap();
-            registry.insert_for_test(
-                name,
-                PreparedTemplateBundle::new(bundle.schema, PreparedTemplate::for_test()),
-            );
+            let entry = match bundle.schema {
+                Some(schema) => PreparedTemplateBundle::new(schema, PreparedTemplate::for_test()),
+                None => PreparedTemplateBundle::without_schema(PreparedTemplate::for_test()),
+            };
+            registry.insert_for_test(name, entry);
         }
 
         registry
@@ -241,12 +242,12 @@ mod tests {
 
     #[tokio::test]
     async fn render_returns_pdf() {
-        let app = app(
+        let first_app = app(
             memory_loader(vec![("invoice", template(schema(json!({}))))]),
             Ok(Document::new(Bytes::from_static(b"%PDF-1.4 mock"))),
         );
 
-        let response = app
+        let response = first_app
             .oneshot(
                 Request::builder()
                     .method(Method::POST)
@@ -267,6 +268,51 @@ mod tests {
             .await
             .unwrap();
         assert!(bytes.starts_with(b"%PDF"));
+    }
+
+    #[tokio::test]
+    async fn render_without_schema_accepts_any_json_payload_and_empty_body() {
+        let source = TemplateSource::new(BTreeMap::from([(
+            "main.typ".to_owned(),
+            Bytes::from_static(b"Hello"),
+        )]));
+        let second_app = app(
+            memory_loader(vec![("welcome", TemplateBundle::without_schema(source))]),
+            Ok(Document::new(Bytes::from_static(b"%PDF-1.4 mock"))),
+        );
+
+        let response = second_app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/render/welcome")
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"["not an object"]"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let source = TemplateSource::new(BTreeMap::from([(
+            "main.typ".to_owned(),
+            Bytes::from_static(b"Hello"),
+        )]));
+        let empty_app = app(
+            memory_loader(vec![("welcome", TemplateBundle::without_schema(source))]),
+            Ok(Document::new(Bytes::from_static(b"%PDF-1.4 mock"))),
+        );
+        let response = empty_app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/render/welcome")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
     }
 
     #[tokio::test]
@@ -463,25 +509,29 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn startup_registry_reports_template_load_and_compilation_failures() {
+    async fn startup_registry_allows_templates_without_schema() {
         let missing_schema = tempdir().unwrap();
-        write(
-            &missing_schema.path().join("invoice/main.typ"),
-            "Missing schema",
-        );
+        write(&missing_schema.path().join("invoice/main.typ"), "No schema");
         let compiler = papelon_core::TypstCompiler::new();
         let loader = FilesystemLoader::new(missing_schema.path());
 
-        let load_error = match TemplateRegistry::build(&loader, &compiler).await {
-            Ok(_) => panic!("missing schema should fail startup"),
-            Err(error) => error,
-        };
-        assert!(matches!(
-            load_error.value().failures(),
-            [TemplateRegistryError::Load { template, .. }]
-                if template.as_str() == "invoice"
-        ));
+        let build = TemplateRegistry::build(&loader, &compiler).await.unwrap();
+        assert_eq!(
+            build.value().names(),
+            vec![TemplateName::new("invoice").unwrap()]
+        );
+        assert!(
+            build
+                .value()
+                .get(&TemplateName::new("invoice").unwrap())
+                .unwrap()
+                .schema()
+                .is_none()
+        );
+    }
 
+    #[tokio::test]
+    async fn startup_registry_reports_template_compilation_failures() {
         let broken_typst = tempdir().unwrap();
         write(
             &broken_typst.path().join("invoice/schema.json"),
@@ -492,6 +542,7 @@ mod tests {
             "#let broken =",
         );
         let loader = FilesystemLoader::new(broken_typst.path());
+        let compiler = papelon_core::TypstCompiler::new();
 
         let compile_error = match TemplateRegistry::build(&loader, &compiler).await {
             Ok(_) => panic!("broken Typst should fail startup"),

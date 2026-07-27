@@ -27,12 +27,22 @@ impl TemplateSource {
 #[derive(Clone, Debug, PartialEq)]
 pub struct TemplateBundle {
     pub source: TemplateSource,
-    pub schema: Schema,
+    pub schema: Option<Schema>,
 }
 
 impl TemplateBundle {
     pub fn new(source: TemplateSource, schema: Schema) -> Self {
-        Self { source, schema }
+        Self {
+            source,
+            schema: Some(schema),
+        }
+    }
+
+    pub fn without_schema(source: TemplateSource) -> Self {
+        Self {
+            source,
+            schema: None,
+        }
     }
 }
 

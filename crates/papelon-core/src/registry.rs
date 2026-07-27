@@ -125,13 +125,18 @@ async fn prepare_template_bundle(
             source,
         }
     })?;
-    let sample = bundle.schema.sample_payload();
-    let sample = validate_with_defaults(&bundle.schema, &sample).map_err(|violations| {
-        TemplateRegistryError::SamplePayload {
-            template: name.clone(),
-            violations,
+    let sample = match bundle.schema.as_ref() {
+        Some(schema) => {
+            let sample = schema.sample_payload();
+            validate_with_defaults(schema, &sample).map_err(|violations| {
+                TemplateRegistryError::SamplePayload {
+                    template: name.clone(),
+                    violations,
+                }
+            })?
         }
-    })?;
+        None => serde_json::json!({}),
+    };
 
     let document = compiler
         .compile_prepared(&prepared, &sample)
@@ -151,10 +156,12 @@ async fn prepare_template_bundle(
         })
         .collect();
 
-    Ok(WithWarnings::new(
-        PreparedTemplateBundle::new(bundle.schema, prepared),
-        warnings,
-    ))
+    let prepared_bundle = match bundle.schema {
+        Some(schema) => PreparedTemplateBundle::new(schema, prepared),
+        None => PreparedTemplateBundle::without_schema(prepared),
+    };
+
+    Ok(WithWarnings::new(prepared_bundle, warnings))
 }
 
 #[derive(Debug, Error)]
@@ -373,21 +380,23 @@ mod tests {
     #[test]
     fn invalid_generated_payload_fails_registry_build() {
         let mut invalid_bundle = bundle();
-        invalid_bundle.schema = Schema::parse(
-            json!({
-                "schemaVersion": "v1",
-                "request": {
-                    "body": {
-                        "type": "string",
-                        "default": "invalid",
-                        "enum": ["valid"]
+        invalid_bundle.schema = Some(
+            Schema::parse(
+                json!({
+                    "schemaVersion": "v1",
+                    "request": {
+                        "body": {
+                            "type": "string",
+                            "default": "invalid",
+                            "enum": ["valid"]
+                        }
                     }
-                }
-            })
-            .to_string()
-            .as_bytes(),
-        )
-        .unwrap();
+                })
+                .to_string()
+                .as_bytes(),
+            )
+            .unwrap(),
+        );
         let loader = CountingLoader {
             bundle: invalid_bundle,
             loads: AtomicUsize::new(0),
