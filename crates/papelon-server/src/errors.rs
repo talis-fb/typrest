@@ -1,6 +1,9 @@
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json, Response};
-use papelon_core::{CompilationError, LoaderError, RenderError, ValidationError};
+use papelon_core::{
+    CompilationDiagnostic, CompilationError, DiagnosticLocation, DiagnosticSeverity, LoaderError,
+    RelatedDiagnostic, RenderError, ValidationError,
+};
 use serde::Serialize;
 
 #[derive(Debug)]
@@ -18,6 +21,7 @@ impl ApiError {
                 message: message.into(),
                 violations: Vec::new(),
                 line: None,
+                diagnostics: Vec::new(),
             },
         }
     }
@@ -51,6 +55,7 @@ impl ApiError {
                     message: "Payload validation failed".to_owned(),
                     violations: violations.into_iter().map(Into::into).collect(),
                     line: None,
+                    diagnostics: Vec::new(),
                 },
             },
             RenderError::CompilationError(error) => compilation_error_response(error),
@@ -59,21 +64,24 @@ impl ApiError {
 }
 
 fn compilation_error_response(error: CompilationError) -> ApiError {
-    match error {
-        CompilationError::Failed { message, line } => ApiError {
-            status: StatusCode::INTERNAL_SERVER_ERROR,
-            body: ErrorBody {
-                error: "compilation_failed".to_owned(),
-                message,
-                violations: Vec::new(),
-                line,
-            },
-        },
-        CompilationError::ExportFailed(message) => ApiError::new(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "compilation_failed",
+    let message = error.primary_message().to_owned();
+    let line = error.primary_line();
+    let diagnostics = error
+        .report()
+        .diagnostics()
+        .iter()
+        .map(DiagnosticBody::from)
+        .collect();
+
+    ApiError {
+        status: StatusCode::INTERNAL_SERVER_ERROR,
+        body: ErrorBody {
+            error: "compilation_failed".to_owned(),
             message,
-        ),
+            violations: Vec::new(),
+            line,
+            diagnostics,
+        },
     }
 }
 
@@ -91,6 +99,87 @@ pub struct ErrorBody {
     pub violations: Vec<ViolationBody>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub line: Option<u32>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<DiagnosticBody>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DiagnosticBody {
+    pub severity: &'static str,
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub location: Option<DiagnosticLocationBody>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub hints: Vec<RelatedDiagnosticBody>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub trace: Vec<RelatedDiagnosticBody>,
+}
+
+impl From<&CompilationDiagnostic> for DiagnosticBody {
+    fn from(diagnostic: &CompilationDiagnostic) -> Self {
+        Self {
+            severity: match diagnostic.severity {
+                DiagnosticSeverity::Error => "error",
+                DiagnosticSeverity::Warning => "warning",
+            },
+            message: diagnostic.message.clone(),
+            location: diagnostic.location.as_ref().map(Into::into),
+            hints: diagnostic.hints.iter().map(Into::into).collect(),
+            trace: diagnostic.trace.iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct RelatedDiagnosticBody {
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub location: Option<DiagnosticLocationBody>,
+}
+
+impl From<&RelatedDiagnostic> for RelatedDiagnosticBody {
+    fn from(diagnostic: &RelatedDiagnostic) -> Self {
+        Self {
+            message: diagnostic.message.clone(),
+            location: diagnostic.location.as_ref().map(Into::into),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct DiagnosticLocationBody {
+    pub path: String,
+    pub range: DiagnosticRangeBody,
+}
+
+impl From<&DiagnosticLocation> for DiagnosticLocationBody {
+    fn from(location: &DiagnosticLocation) -> Self {
+        Self {
+            path: location.path.clone(),
+            range: DiagnosticRangeBody {
+                start: DiagnosticPositionBody {
+                    line: location.start.line,
+                    column: location.start.column,
+                },
+                end: DiagnosticPositionBody {
+                    line: location.end.line,
+                    column: location.end.column,
+                },
+            },
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct DiagnosticRangeBody {
+    pub start: DiagnosticPositionBody,
+    pub end: DiagnosticPositionBody,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DiagnosticPositionBody {
+    pub line: u32,
+    pub column: u32,
 }
 
 #[derive(Debug, Serialize)]

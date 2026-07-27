@@ -1,52 +1,79 @@
 pub mod errors;
 pub mod handlers;
 pub mod loader;
+pub mod output;
 pub mod router;
 pub mod server;
 
 use std::net::SocketAddr;
+use std::path::Path;
 use std::sync::Arc;
 
-use papelon_core::{PdfCompiler, RenderService, TemplateRegistry, TypstCompiler};
+use papelon_core::{
+    PdfCompiler, RenderService, TemplateRegistry, TemplateRegistryBuildFailure, TypstCompiler,
+    WithWarnings,
+};
+use thiserror::Error;
 use tracing::info;
-use tracing_subscriber::EnvFilter;
 
 use crate::loader::filesystem::FilesystemLoader;
 use crate::loader::watch::start_template_watcher;
+use crate::output::{DiagnosticContext, DiagnosticReporter};
 use crate::router::router;
 use crate::server::{AppState, ServerConfig};
 
-pub async fn serve(config: ServerConfig) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    init_tracing();
+pub async fn compile_templates(
+    templates_dir: impl AsRef<Path>,
+) -> Result<WithWarnings<TemplateRegistry>, WithWarnings<TemplateRegistryBuildFailure>> {
+    let loader = FilesystemLoader::new(templates_dir.as_ref());
+    let compiler = TypstCompiler::new();
+    TemplateRegistry::build(&loader, &compiler).await
+}
 
+pub async fn serve(config: ServerConfig, reporter: DiagnosticReporter) -> Result<(), ServeError> {
     let loader = Arc::new(FilesystemLoader::new(config.templates_dir));
     let compiler: Arc<dyn PdfCompiler> = Arc::new(TypstCompiler::new());
-    let registry = TemplateRegistry::build(loader.as_ref(), compiler.as_ref()).await?;
+    let build = TemplateRegistry::build(loader.as_ref(), compiler.as_ref()).await?;
+    reporter.report_build(DiagnosticContext::Startup, &build);
+    info!(
+        event = "templates.startup.completed",
+        template_count = build.value().names().len(),
+        warning_count = build.warnings().len(),
+        status = "ok",
+        "templates compiled successfully"
+    );
+    let registry = build.into_value();
     let _watcher = if config.watch {
         Some(start_template_watcher(
             loader,
             registry.clone(),
             compiler.clone(),
+            reporter.clone(),
         )?)
     } else {
         None
     };
     let render_service = RenderService::new(registry.clone(), compiler);
-    let app = router(AppState::new(registry, render_service));
+    let app = router(AppState::new(registry, render_service, reporter));
     let address = SocketAddr::from((config.host, config.port));
     let listener = tokio::net::TcpListener::bind(address).await?;
 
-    info!(%address, "papelon server listening");
+    info!(event = "server.listening", %address, "papelon server listening");
     axum::serve(listener, app).await?;
 
     Ok(())
 }
 
-fn init_tracing() {
-    let filter =
-        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("papelon_server=info"));
+#[derive(Debug, Error)]
+pub enum ServeError {
+    #[error("{0}")]
+    Registry(#[from] WithWarnings<TemplateRegistryBuildFailure>),
 
-    tracing_subscriber::fmt().with_env_filter(filter).init();
+    #[error("template watcher failed: {0}")]
+    Watch(#[from] notify::Error),
+
+    #[error("server I/O failed: {0}")]
+    Io(#[from] std::io::Error),
 }
 
 #[cfg(test)]
@@ -61,15 +88,17 @@ mod tests {
     use bytes::Bytes;
     use papelon_core::loader::memory::MemoryLoader;
     use papelon_core::{
-        CompilationError, Document, PdfCompiler, PreparedTemplate, PreparedTemplateEntry,
-        RenderService, Schema, TemplateBundle, TemplateLoader, TemplateName, TemplateRegistry,
-        TemplateRegistryError, TemplateSource,
+        CompilationDiagnostic, CompilationError, CompilationReport, DiagnosticLocation,
+        DiagnosticPosition, DiagnosticSeverity, Document, PdfCompiler, PreparedTemplate,
+        PreparedTemplateBundle, RelatedDiagnostic, RenderService, Schema, TemplateBundle,
+        TemplateLoader, TemplateName, TemplateRegistry, TemplateRegistryError, TemplateSource,
     };
     use serde_json::{Value, json};
     use tempfile::tempdir;
     use tower::ServiceExt;
 
     use crate::loader::filesystem::FilesystemLoader;
+    use crate::output::{ColorChoice, DiagnosticReporter, OutputFormat};
     use crate::router::router;
     use crate::server::AppState;
 
@@ -97,7 +126,11 @@ mod tests {
         let compiler = Arc::new(MockCompiler { result });
         let registry = registry_from_loader(loader.as_ref());
         let render_service = RenderService::new(registry.clone(), compiler);
-        router(AppState::new(registry, render_service))
+        router(AppState::new(registry, render_service, test_reporter(".")))
+    }
+
+    fn test_reporter(root: impl AsRef<std::path::Path>) -> DiagnosticReporter {
+        DiagnosticReporter::new(OutputFormat::Pretty, ColorChoice::Never, root.as_ref())
     }
 
     fn registry_from_loader(loader: &MemoryLoader) -> TemplateRegistry {
@@ -108,7 +141,7 @@ mod tests {
             let bundle = futures_executor::block_on(loader.load(&name)).unwrap();
             registry.insert_for_test(
                 name,
-                PreparedTemplateEntry::new(bundle.schema, PreparedTemplate::for_test()),
+                PreparedTemplateBundle::new(bundle.schema, PreparedTemplate::for_test()),
             );
         }
 
@@ -306,10 +339,7 @@ mod tests {
     async fn render_compilation_failure_returns_500() {
         let app = app(
             memory_loader(vec![("invoice", template(schema(json!({}))))]),
-            Err(CompilationError::Failed {
-                message: "syntax error".to_owned(),
-                line: Some(3),
-            }),
+            Err(CompilationError::failed("syntax error", Some(3))),
         );
 
         let response = app
@@ -330,9 +360,80 @@ mod tests {
             json!({
                 "error": "compilation_failed",
                 "message": "syntax error",
-                "line": 3
+                "line": 3,
+                "diagnostics": [
+                    {
+                        "severity": "error",
+                        "message": "syntax error",
+                        "location": {
+                            "path": "main.typ",
+                            "range": {
+                                "start": { "line": 3, "column": 1 },
+                                "end": { "line": 3, "column": 1 }
+                            }
+                        }
+                    }
+                ]
             })
         );
+    }
+
+    #[tokio::test]
+    async fn render_compilation_failure_returns_all_safe_diagnostic_details() {
+        let mut first = CompilationDiagnostic::new(DiagnosticSeverity::Error, "unknown variable");
+        first.location = Some(DiagnosticLocation::new(
+            "_shared/brand.typ",
+            DiagnosticPosition::new(4, 3),
+            DiagnosticPosition::new(4, 8),
+        ));
+        first
+            .hints
+            .push(RelatedDiagnostic::new("check the spelling", None));
+        first.trace.push(RelatedDiagnostic::new(
+            "while calling `brand`",
+            Some(DiagnosticLocation::new(
+                "main.typ",
+                DiagnosticPosition::new(9, 1),
+                DiagnosticPosition::new(9, 6),
+            )),
+        ));
+        let second =
+            CompilationDiagnostic::new(DiagnosticSeverity::Error, "second compilation error");
+        let app = app(
+            memory_loader(vec![("invoice", template(schema(json!({}))))]),
+            Err(CompilationError::Failed(CompilationReport::new(vec![
+                first, second,
+            ]))),
+        );
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/render/invoice")
+                    .header("content-type", "application/json")
+                    .body(Body::from("{}"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let body = response_body(response).await;
+        assert_eq!(body["diagnostics"].as_array().unwrap().len(), 2);
+        assert_eq!(
+            body["diagnostics"][0]["location"]["path"],
+            "_shared/brand.typ"
+        );
+        assert_eq!(
+            body["diagnostics"][0]["hints"][0]["message"],
+            "check the spelling"
+        );
+        assert_eq!(
+            body["diagnostics"][0]["trace"][0]["location"]["path"],
+            "main.typ"
+        );
+        assert!(body["diagnostics"][0].get("source").is_none());
+        assert!(!body.to_string().contains("/var/"));
     }
 
     #[tokio::test]
@@ -376,8 +477,8 @@ mod tests {
             Err(error) => error,
         };
         assert!(matches!(
-            load_error,
-            TemplateRegistryError::Load { template, .. }
+            load_error.value().failures(),
+            [TemplateRegistryError::Load { template, .. }]
                 if template.as_str() == "invoice"
         ));
 
@@ -397,12 +498,17 @@ mod tests {
             Err(error) => error,
         };
         assert!(matches!(
-            compile_error,
-            TemplateRegistryError::Warmup {
+            compile_error.value().failures(),
+            [TemplateRegistryError::Warmup {
                 template,
-                source: CompilationError::Failed { line: Some(_), .. }
-            } if template.as_str() == "invoice"
+                source: CompilationError::Failed(_)
+            }] if template.as_str() == "invoice"
         ));
+        let TemplateRegistryError::Warmup { source, .. } = &compile_error.value().failures()[0]
+        else {
+            unreachable!()
+        };
+        assert!(source.primary_line().is_some());
     }
 
     #[tokio::test]
@@ -424,9 +530,14 @@ Hello #data.name
         let compiler: Arc<dyn PdfCompiler> = Arc::new(papelon_core::TypstCompiler::new());
         let registry = TemplateRegistry::build(loader.as_ref(), compiler.as_ref())
             .await
-            .unwrap();
+            .unwrap()
+            .into_value();
         let render_service = RenderService::new(registry.clone(), compiler);
-        let app = router(AppState::new(registry, render_service));
+        let app = router(AppState::new(
+            registry,
+            render_service,
+            test_reporter(root.path()),
+        ));
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
@@ -476,9 +587,14 @@ Hello #data.name
         let compiler: Arc<dyn PdfCompiler> = Arc::new(papelon_core::TypstCompiler::new());
         let registry = TemplateRegistry::build(loader.as_ref(), compiler.as_ref())
             .await
-            .unwrap();
+            .unwrap()
+            .into_value();
         let render_service = RenderService::new(registry.clone(), compiler);
-        let app = router(AppState::new(registry, render_service));
+        let app = router(AppState::new(
+            registry,
+            render_service,
+            test_reporter(&examples_dir),
+        ));
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });

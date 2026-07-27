@@ -279,23 +279,17 @@ let main_source = Source::new(main_id, main_text.to_string());
 
 ## Extracting Compilation Errors Into Useful Messages
 
-```rust
-use typst::diag::SourceDiagnostic;
+All access to `SourceDiagnostic` belongs in `compiler/world.rs`. The adapter must preserve:
 
-fn format_typst_error(error: &SourceDiagnostic, world: &impl World) -> String {
-    let message = error.message.to_string();
-    
-    // Try to get location information
-    if let Some(range) = world.source(error.span.id().unwrap_or(world.main()))
-        .ok()
-        .and_then(|s| s.range(error.span))
-    {
-        format!("line {}: {}", range.start.line + 1, message)
-    } else {
-        message
-    }
-}
-```
+- every error and warning, not only the first;
+- the primary virtual path and full line/column range;
+- detached and source-linked hints;
+- call, import, include, and show trace frames;
+- a location-less fallback when Typst cannot resolve a span.
+
+Convert those values immediately into the Papelon-owned types documented in
+`docs/diagnostics.md`. Never expose `SourceDiagnostic`, `DiagSpan`, or `Tracepoint` through a
+public signature.
 
 ---
 

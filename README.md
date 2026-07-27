@@ -33,7 +33,13 @@ curl http://localhost:8080/templates
 Run without Docker:
 
 ```bash
-cargo run -- serve ./examples/templates 8080 --watch
+cargo run -- serve --port 8080 --watch
+```
+
+Validate every template without starting the server:
+
+```bash
+cargo run -- check
 ```
 
 ## Template Structure
@@ -149,3 +155,15 @@ Status codes:
 - `404`: template not found
 - `422`: payload does not match `schema.json`
 - `500`: Typst compilation or PDF export failed
+
+## Compiler Diagnostics
+
+`papelon check`, server startup, watch reloads, and request-time compilation share the same
+diagnostic pipeline. Terminal output includes annotated source ranges, all Typst errors and
+warnings, hints, and call/import traces.
+
+Use `--log-format json` for JSON Lines logs and `--color auto|always|never` to control terminal
+color. Compilation failures returned over HTTP contain structured paths, ranges, hints, and traces,
+but never template source excerpts or absolute filesystem paths.
+
+See [docs/diagnostics.md](docs/diagnostics.md) for the output contract and Typst upgrade procedure.

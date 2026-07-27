@@ -7,6 +7,7 @@ use tokio::sync::mpsc;
 use tracing::{error, info, warn};
 
 use crate::loader::filesystem::FilesystemLoader;
+use crate::output::{DiagnosticContext, DiagnosticReporter, DiagnosticStage};
 
 pub struct TemplateWatcher {
     _watcher: RecommendedWatcher,
@@ -23,6 +24,7 @@ pub fn start_template_watcher(
     loader: Arc<FilesystemLoader>,
     registry: TemplateRegistry,
     compiler: Arc<dyn PdfCompiler>,
+    reporter: DiagnosticReporter,
 ) -> notify::Result<TemplateWatcher> {
     let root = loader.root().to_owned();
     let watch_root = root.clone();
@@ -39,7 +41,15 @@ pub fn start_template_watcher(
     watcher.watch(&watch_root, RecursiveMode::Recursive)?;
     let worker = tokio::spawn(async move {
         while let Some(result) = receiver.recv().await {
-            handle_event(result, &root, loader.as_ref(), &registry, compiler.as_ref()).await;
+            handle_event(
+                result,
+                &root,
+                loader.as_ref(),
+                &registry,
+                compiler.as_ref(),
+                &reporter,
+            )
+            .await;
         }
     });
     info!(templates_dir = %watch_root.display(), "template watch mode enabled");
@@ -56,6 +66,7 @@ async fn handle_event(
     loader: &FilesystemLoader,
     registry: &TemplateRegistry,
     compiler: &dyn PdfCompiler,
+    reporter: &DiagnosticReporter,
 ) {
     let event = match result {
         Ok(event) => event,
@@ -83,12 +94,12 @@ async fn handle_event(
     }
 
     if saw_shared {
-        reload_shared(loader, registry, compiler).await;
+        reload_shared(loader, registry, compiler, reporter).await;
         return;
     }
 
     for template in templates {
-        reload_template(loader, registry, compiler, &template).await;
+        reload_template(loader, registry, compiler, &template, reporter).await;
     }
 }
 
@@ -103,11 +114,12 @@ async fn reload_shared(
     loader: &FilesystemLoader,
     registry: &TemplateRegistry,
     compiler: &dyn PdfCompiler,
+    reporter: &DiagnosticReporter,
 ) {
     match loader.list().await {
         Ok(templates) => {
             for template in templates {
-                reload_template(loader, registry, compiler, &template).await;
+                reload_template(loader, registry, compiler, &template, reporter).await;
             }
             info!("shared template files changed");
         }
@@ -120,10 +132,54 @@ async fn reload_template(
     registry: &TemplateRegistry,
     compiler: &dyn PdfCompiler,
     template: &TemplateName,
+    reporter: &DiagnosticReporter,
 ) {
     match registry.reload(loader, compiler, template).await {
-        Ok(()) => info!(template = %template, "template reloaded"),
-        Err(error) => warn!(template = %template, error = %error, "template reload failed"),
+        Ok(reload) => {
+            reporter.report_diagnostics(
+                DiagnosticContext::Watch,
+                DiagnosticStage::Compile,
+                reload.warnings(),
+            );
+            info!(
+                event = "template.reload.completed",
+                template = %template,
+                warning_count = reload.warnings().len(),
+                "template reloaded"
+            );
+        }
+        Err(error) => {
+            match &error {
+                papelon_core::TemplateRegistryError::Prepare { source, .. } => {
+                    reporter.report_compilation(
+                        DiagnosticContext::Watch,
+                        DiagnosticStage::Prepare,
+                        template,
+                        source,
+                    );
+                }
+                papelon_core::TemplateRegistryError::Warmup { source, .. } => {
+                    reporter.report_compilation(
+                        DiagnosticContext::Watch,
+                        DiagnosticStage::Compile,
+                        template,
+                        source,
+                    );
+                }
+                _ => reporter.report_simple_error(
+                    DiagnosticContext::Watch,
+                    DiagnosticStage::Load,
+                    Some(template),
+                    &error.to_string(),
+                ),
+            }
+            warn!(
+                event = "template.reload.failed",
+                template = %template,
+                last_known_good = true,
+                "template reload failed; keeping last known good version"
+            );
+        }
     }
 }
 
@@ -161,6 +217,7 @@ mod tests {
     use tempfile::tempdir;
 
     use crate::loader::filesystem::FilesystemLoader;
+    use crate::output::{ColorChoice, DiagnosticReporter, OutputFormat};
 
     use super::{ChangedTemplate, changed_template, reload_shared, reload_template};
 
@@ -182,10 +239,7 @@ mod tests {
             _: &serde_json::Value,
         ) -> Result<Document, CompilationError> {
             if self.fail.load(Ordering::SeqCst) {
-                Err(CompilationError::Failed {
-                    message: "broken reload".to_owned(),
-                    line: Some(2),
-                })
+                Err(CompilationError::failed("broken reload", Some(2)))
             } else {
                 Ok(Document::new(Bytes::from_static(b"%PDF-1.4 mock")))
             }
@@ -257,18 +311,20 @@ mod tests {
             prepares: AtomicUsize::new(0),
         };
         let name = TemplateName::new("invoice").unwrap();
+        let reporter =
+            DiagnosticReporter::new(OutputFormat::Pretty, ColorChoice::Never, root.path());
 
-        reload_template(&loader, &registry, &compiler, &name).await;
+        reload_template(&loader, &registry, &compiler, &name, &reporter).await;
         let first = registry.get(&name).unwrap();
 
         fs::write(root.path().join("invoice/main.typ"), "second").unwrap();
-        reload_template(&loader, &registry, &compiler, &name).await;
+        reload_template(&loader, &registry, &compiler, &name, &reporter).await;
         let second = registry.get(&name).unwrap();
         assert!(!std::sync::Arc::ptr_eq(&first, &second));
 
         compiler.fail.store(true, Ordering::SeqCst);
         fs::write(root.path().join("invoice/main.typ"), "#let broken =").unwrap();
-        reload_template(&loader, &registry, &compiler, &name).await;
+        reload_template(&loader, &registry, &compiler, &name, &reporter).await;
         let after_failure = registry.get(&name).unwrap();
 
         assert!(std::sync::Arc::ptr_eq(&second, &after_failure));
@@ -285,10 +341,12 @@ mod tests {
             fail: AtomicBool::new(false),
             prepares: AtomicUsize::new(0),
         };
+        let reporter =
+            DiagnosticReporter::new(OutputFormat::Pretty, ColorChoice::Never, root.path());
 
-        reload_shared(&loader, &registry, &compiler).await;
+        reload_shared(&loader, &registry, &compiler, &reporter).await;
         let first_count = compiler.prepares.load(Ordering::SeqCst);
-        reload_shared(&loader, &registry, &compiler).await;
+        reload_shared(&loader, &registry, &compiler, &reporter).await;
 
         assert_eq!(first_count, 2);
         assert_eq!(compiler.prepares.load(Ordering::SeqCst), 4);
