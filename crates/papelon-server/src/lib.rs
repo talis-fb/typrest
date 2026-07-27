@@ -10,8 +10,8 @@ use std::path::Path;
 use std::sync::Arc;
 
 use papelon_core::{
-    PdfCompiler, RenderService, TemplateRegistry, TemplateRegistryBuild,
-    TemplateRegistryBuildError, TypstCompiler,
+    PdfCompiler, RenderService, TemplateRegistry, TemplateRegistryBuildFailure, TypstCompiler,
+    WithWarnings,
 };
 use thiserror::Error;
 use tracing::info;
@@ -24,7 +24,7 @@ use crate::server::{AppState, ServerConfig};
 
 pub async fn compile_templates(
     templates_dir: impl AsRef<Path>,
-) -> Result<TemplateRegistryBuild, TemplateRegistryBuildError> {
+) -> Result<WithWarnings<TemplateRegistry>, WithWarnings<TemplateRegistryBuildFailure>> {
     let loader = FilesystemLoader::new(templates_dir.as_ref());
     let compiler = TypstCompiler::new();
     TemplateRegistry::build(&loader, &compiler).await
@@ -37,12 +37,12 @@ pub async fn serve(config: ServerConfig, reporter: DiagnosticReporter) -> Result
     reporter.report_build(DiagnosticContext::Startup, &build);
     info!(
         event = "templates.startup.completed",
-        template_count = build.template_count(),
+        template_count = build.value().names().len(),
         warning_count = build.warnings().len(),
         status = "ok",
         "templates compiled successfully"
     );
-    let registry = build.into_registry();
+    let registry = build.into_value();
     let _watcher = if config.watch {
         Some(start_template_watcher(
             loader,
@@ -67,7 +67,7 @@ pub async fn serve(config: ServerConfig, reporter: DiagnosticReporter) -> Result
 #[derive(Debug, Error)]
 pub enum ServeError {
     #[error("{0}")]
-    Registry(#[from] TemplateRegistryBuildError),
+    Registry(#[from] WithWarnings<TemplateRegistryBuildFailure>),
 
     #[error("template watcher failed: {0}")]
     Watch(#[from] notify::Error),
@@ -477,7 +477,7 @@ mod tests {
             Err(error) => error,
         };
         assert!(matches!(
-            load_error.failures(),
+            load_error.value().failures(),
             [TemplateRegistryError::Load { template, .. }]
                 if template.as_str() == "invoice"
         ));
@@ -498,13 +498,14 @@ mod tests {
             Err(error) => error,
         };
         assert!(matches!(
-            compile_error.failures(),
+            compile_error.value().failures(),
             [TemplateRegistryError::Warmup {
                 template,
                 source: CompilationError::Failed(_)
             }] if template.as_str() == "invoice"
         ));
-        let TemplateRegistryError::Warmup { source, .. } = &compile_error.failures()[0] else {
+        let TemplateRegistryError::Warmup { source, .. } = &compile_error.value().failures()[0]
+        else {
             unreachable!()
         };
         assert!(source.primary_line().is_some());
@@ -530,7 +531,7 @@ Hello #data.name
         let registry = TemplateRegistry::build(loader.as_ref(), compiler.as_ref())
             .await
             .unwrap()
-            .into_registry();
+            .into_value();
         let render_service = RenderService::new(registry.clone(), compiler);
         let app = router(AppState::new(
             registry,
@@ -587,7 +588,7 @@ Hello #data.name
         let registry = TemplateRegistry::build(loader.as_ref(), compiler.as_ref())
             .await
             .unwrap()
-            .into_registry();
+            .into_value();
         let render_service = RenderService::new(registry.clone(), compiler);
         let app = router(AppState::new(
             registry,

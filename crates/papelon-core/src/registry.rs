@@ -4,8 +4,8 @@ use std::sync::{Arc, RwLock};
 use thiserror::Error;
 
 use crate::{
-    CompilationDiagnostic, CompilationError, LoaderError, PdfCompiler, PreparedTemplate, Schema,
-    TemplateBundle, TemplateLoader, TemplateName, ValidationError, validate_with_defaults,
+    CompilationError, LoaderError, PdfCompiler, PreparedTemplate, Schema, TemplateBundle,
+    TemplateLoader, TemplateName, ValidationError, WithWarnings, validate_with_defaults,
 };
 
 pub struct PreparedTemplateEntry {
@@ -36,15 +36,17 @@ impl TemplateRegistry {
     pub async fn build(
         loader: &dyn TemplateLoader,
         compiler: &dyn PdfCompiler,
-    ) -> Result<TemplateRegistryBuild, TemplateRegistryBuildError> {
+    ) -> Result<WithWarnings<TemplateRegistry>, WithWarnings<TemplateRegistryBuildFailure>> {
         let names = match loader.list().await {
             Ok(names) => names,
             Err(source) => {
-                return Err(TemplateRegistryBuildError {
-                    template_count: 0,
-                    failures: vec![TemplateRegistryError::List { source }],
-                    warnings: Vec::new(),
-                });
+                return Err(WithWarnings::new(
+                    TemplateRegistryBuildFailure {
+                        template_count: 0,
+                        failures: vec![TemplateRegistryError::List { source }],
+                    },
+                    Vec::new(),
+                ));
             }
         };
         let template_count = names.len();
@@ -54,31 +56,25 @@ impl TemplateRegistry {
 
         for name in names {
             match prepare_template(loader, compiler, &name).await {
-                Ok(candidate) => {
-                    warnings.extend(candidate.warnings.into_iter().map(|diagnostic| {
-                        TemplateDiagnostic {
-                            template: name.clone(),
-                            diagnostic,
-                        }
-                    }));
-                    registry.replace(name, candidate.entry);
+                Ok(entry) => {
+                    let (entry, entry_warnings) = entry.into_parts();
+                    warnings.extend(entry_warnings);
+                    registry.replace(name, entry);
                 }
                 Err(error) => failures.push(error),
             }
         }
 
         if failures.is_empty() {
-            Ok(TemplateRegistryBuild {
-                registry,
-                template_count,
-                warnings,
-            })
+            Ok(WithWarnings::new(registry, warnings))
         } else {
-            Err(TemplateRegistryBuildError {
-                template_count,
-                failures,
+            Err(WithWarnings::new(
+                TemplateRegistryBuildFailure {
+                    template_count,
+                    failures,
+                },
                 warnings,
-            })
+            ))
         }
     }
 
@@ -87,13 +83,12 @@ impl TemplateRegistry {
         loader: &dyn TemplateLoader,
         compiler: &dyn PdfCompiler,
         name: &TemplateName,
-    ) -> Result<TemplateRegistryReload, TemplateRegistryError> {
-        let candidate = prepare_template(loader, compiler, name).await?;
+    ) -> Result<WithWarnings<()>, TemplateRegistryError> {
+        let entry = prepare_template(loader, compiler, name).await?;
 
-        self.replace(name.clone(), candidate.entry);
-        Ok(TemplateRegistryReload {
-            warnings: candidate.warnings,
-        })
+        let (entry, warnings) = entry.into_parts();
+        self.replace(name.clone(), entry);
+        Ok(WithWarnings::new((), warnings))
     }
 
     pub fn get(&self, name: &TemplateName) -> Option<Arc<PreparedTemplateEntry>> {
@@ -131,7 +126,7 @@ async fn prepare_template(
     loader: &dyn TemplateLoader,
     compiler: &dyn PdfCompiler,
     name: &TemplateName,
-) -> Result<PreparedTemplateCandidate, TemplateRegistryError> {
+) -> Result<WithWarnings<PreparedTemplateEntry>, TemplateRegistryError> {
     let bundle = loader
         .load(name)
         .await
@@ -146,7 +141,7 @@ async fn prepare_entry(
     name: &TemplateName,
     bundle: TemplateBundle,
     compiler: &dyn PdfCompiler,
-) -> Result<PreparedTemplateCandidate, TemplateRegistryError> {
+) -> Result<WithWarnings<PreparedTemplateEntry>, TemplateRegistryError> {
     let prepared = compiler.prepare(&bundle.source).await.map_err(|source| {
         TemplateRegistryError::Prepare {
             template: name.clone(),
@@ -169,15 +164,20 @@ async fn prepare_entry(
             source,
         })?;
 
-    Ok(PreparedTemplateCandidate {
-        entry: PreparedTemplateEntry::new(bundle.schema, prepared),
-        warnings: document.warnings().to_vec(),
-    })
-}
+    let warnings = document
+        .warnings()
+        .iter()
+        .cloned()
+        .map(|mut diagnostic| {
+            diagnostic.template = Some(name.clone());
+            diagnostic
+        })
+        .collect();
 
-struct PreparedTemplateCandidate {
-    entry: PreparedTemplateEntry,
-    warnings: Vec<CompilationDiagnostic>,
+    Ok(WithWarnings::new(
+        PreparedTemplateEntry::new(bundle.schema, prepared),
+        warnings,
+    ))
 }
 
 #[derive(Debug, Error)]
@@ -216,65 +216,20 @@ pub enum TemplateRegistryError {
     },
 }
 
-pub struct TemplateRegistryBuild {
-    registry: TemplateRegistry,
-    template_count: usize,
-    warnings: Vec<TemplateDiagnostic>,
-}
-
-impl TemplateRegistryBuild {
-    pub fn into_registry(self) -> TemplateRegistry {
-        self.registry
-    }
-
-    pub fn registry(&self) -> &TemplateRegistry {
-        &self.registry
-    }
-
-    pub fn template_count(&self) -> usize {
-        self.template_count
-    }
-
-    pub fn warnings(&self) -> &[TemplateDiagnostic] {
-        &self.warnings
-    }
-}
-
 #[derive(Debug, Error)]
 #[error("{} of {} templates failed to compile", .failures.len(), .template_count)]
-pub struct TemplateRegistryBuildError {
+pub struct TemplateRegistryBuildFailure {
     template_count: usize,
     failures: Vec<TemplateRegistryError>,
-    warnings: Vec<TemplateDiagnostic>,
 }
 
-impl TemplateRegistryBuildError {
+impl TemplateRegistryBuildFailure {
     pub fn template_count(&self) -> usize {
         self.template_count
     }
 
     pub fn failures(&self) -> &[TemplateRegistryError] {
         &self.failures
-    }
-
-    pub fn warnings(&self) -> &[TemplateDiagnostic] {
-        &self.warnings
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct TemplateDiagnostic {
-    pub template: TemplateName,
-    pub diagnostic: CompilationDiagnostic,
-}
-
-pub struct TemplateRegistryReload {
-    warnings: Vec<CompilationDiagnostic>,
-}
-
-impl TemplateRegistryReload {
-    pub fn warnings(&self) -> &[CompilationDiagnostic] {
-        &self.warnings
     }
 }
 
@@ -411,7 +366,7 @@ mod tests {
         let build =
             futures_executor::block_on(TemplateRegistry::build(loader.as_ref(), compiler.as_ref()))
                 .unwrap();
-        let registry = build.into_registry();
+        let registry = build.into_value();
 
         assert_eq!(loader.loads.load(Ordering::SeqCst), 1);
         assert_eq!(compiler.prepares.load(Ordering::SeqCst), 1);
@@ -471,7 +426,7 @@ mod tests {
         };
 
         assert!(matches!(
-            error.failures(),
+            error.value().failures(),
             [super::TemplateRegistryError::SamplePayload { template, .. }]
                 if template.as_str() == "invoice"
         ));
@@ -491,15 +446,15 @@ mod tests {
                 Err(error) => error,
             };
 
-        assert_eq!(error.template_count(), 2);
-        assert_eq!(error.failures().len(), 2);
+        assert_eq!(error.value().template_count(), 2);
+        assert_eq!(error.value().failures().len(), 2);
         assert!(matches!(
-            &error.failures()[0],
+            &error.value().failures()[0],
             super::TemplateRegistryError::Load { template, .. }
                 if template.as_str() == "first"
         ));
         assert!(matches!(
-            &error.failures()[1],
+            &error.value().failures()[1],
             super::TemplateRegistryError::Load { template, .. }
                 if template.as_str() == "second"
         ));
@@ -516,7 +471,10 @@ mod tests {
             futures_executor::block_on(TemplateRegistry::build(&loader, &WarningCompiler)).unwrap();
 
         assert_eq!(build.warnings().len(), 1);
-        assert_eq!(build.warnings()[0].template.as_str(), "invoice");
-        assert_eq!(build.warnings()[0].diagnostic.message, "careful");
+        assert_eq!(
+            build.warnings()[0].template,
+            Some(TemplateName::new("invoice").unwrap())
+        );
+        assert_eq!(build.warnings()[0].message, "careful");
     }
 }

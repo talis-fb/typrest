@@ -10,6 +10,7 @@ mod render_request;
 pub mod schema;
 mod template;
 mod template_name;
+mod warnings;
 
 pub use compiler::{PdfCompiler, PreparedTemplate, TypstCompiler};
 pub use diagnostic::{
@@ -19,8 +20,7 @@ pub use diagnostic::{
 pub use errors::{CompilationError, RenderError, ValidationError};
 pub use loader::{LoaderError, TemplateLoader};
 pub use registry::{
-    PreparedTemplateEntry, TemplateDiagnostic, TemplateRegistry, TemplateRegistryBuild,
-    TemplateRegistryBuildError, TemplateRegistryError, TemplateRegistryReload,
+    PreparedTemplateEntry, TemplateRegistry, TemplateRegistryBuildFailure, TemplateRegistryError,
 };
 pub use render::RenderService;
 pub use render_request::RenderRequest;
@@ -30,3 +30,4 @@ pub use schema::{
 };
 pub use template::{Document, TemplateBundle, TemplateSource};
 pub use template_name::{TemplateName, TemplateNameError};
+pub use warnings::WithWarnings;

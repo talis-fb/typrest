@@ -136,10 +136,9 @@ async fn reload_template(
 ) {
     match registry.reload(loader, compiler, template).await {
         Ok(reload) => {
-            reporter.report_warnings(
+            reporter.report_diagnostics(
                 DiagnosticContext::Watch,
                 DiagnosticStage::Compile,
-                template,
                 reload.warnings(),
             );
             info!(

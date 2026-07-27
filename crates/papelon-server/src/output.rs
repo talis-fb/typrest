@@ -10,8 +10,8 @@ use codespan_reporting::term;
 use codespan_reporting::term::termcolor::{ColorChoice as TermColorChoice, StandardStream};
 use codespan_reporting::term::{Styles, StylesWriter};
 use papelon_core::{
-    CompilationDiagnostic, CompilationError, DiagnosticSeverity, TemplateDiagnostic, TemplateName,
-    TemplateRegistryBuild, TemplateRegistryBuildError, TemplateRegistryError,
+    CompilationDiagnostic, CompilationError, DiagnosticSeverity, TemplateName, TemplateRegistry,
+    TemplateRegistryBuildFailure, TemplateRegistryError, WithWarnings,
 };
 use tracing::{Level, error, event, info};
 use tracing_subscriber::EnvFilter;
@@ -52,18 +52,18 @@ impl DiagnosticReporter {
         }
     }
 
-    pub fn report_build(&self, context: DiagnosticContext, build: &TemplateRegistryBuild) {
-        self.report_template_diagnostics(context, DiagnosticStage::Compile, build.warnings());
+    pub fn report_build(&self, context: DiagnosticContext, build: &WithWarnings<TemplateRegistry>) {
+        self.report_diagnostics(context, DiagnosticStage::Compile, build.warnings());
     }
 
     pub fn report_build_error(
         &self,
         context: DiagnosticContext,
-        error: &TemplateRegistryBuildError,
+        error: &WithWarnings<TemplateRegistryBuildFailure>,
     ) {
-        self.report_template_diagnostics(context, DiagnosticStage::Compile, error.warnings());
+        self.report_diagnostics(context, DiagnosticStage::Compile, error.warnings());
 
-        for failure in error.failures() {
+        for failure in error.value().failures() {
             match failure {
                 TemplateRegistryError::List { source } => self.report_simple_error(
                     context,
@@ -105,8 +105,8 @@ impl DiagnosticReporter {
         error!(
             event = "templates.check.failed",
             context = context.as_str(),
-            template_count = error.template_count(),
-            failed_count = error.failures().len(),
+            template_count = error.value().template_count(),
+            failed_count = error.value().failures().len(),
             warning_count = error.warnings().len(),
             "template compilation failed"
         );
@@ -120,7 +120,7 @@ impl DiagnosticReporter {
         error: &CompilationError,
     ) {
         for diagnostic in error.report().diagnostics() {
-            self.report_diagnostic(context, stage, template, diagnostic);
+            self.report_diagnostic(context, stage, Some(template), diagnostic);
         }
     }
 
@@ -132,7 +132,7 @@ impl DiagnosticReporter {
         warnings: &[CompilationDiagnostic],
     ) {
         for diagnostic in warnings {
-            self.report_diagnostic(context, stage, template, diagnostic);
+            self.report_diagnostic(context, stage, Some(template), diagnostic);
         }
     }
 
@@ -172,14 +172,14 @@ impl DiagnosticReporter {
         }
     }
 
-    fn report_template_diagnostics(
+    pub fn report_diagnostics(
         &self,
         context: DiagnosticContext,
         stage: DiagnosticStage,
-        diagnostics: &[TemplateDiagnostic],
+        diagnostics: &[CompilationDiagnostic],
     ) {
         for diagnostic in diagnostics {
-            self.report_diagnostic(context, stage, &diagnostic.template, &diagnostic.diagnostic);
+            self.report_diagnostic(context, stage, diagnostic.template.as_ref(), diagnostic);
         }
     }
 
@@ -187,7 +187,7 @@ impl DiagnosticReporter {
         &self,
         context: DiagnosticContext,
         stage: DiagnosticStage,
-        template: &TemplateName,
+        template: Option<&TemplateName>,
         diagnostic: &CompilationDiagnostic,
     ) {
         let report_id = self.next_report_id.fetch_add(1, Ordering::Relaxed);
@@ -197,7 +197,7 @@ impl DiagnosticReporter {
         }
     }
 
-    fn report_pretty(&self, template: &TemplateName, diagnostic: &CompilationDiagnostic) {
+    fn report_pretty(&self, template: Option<&TemplateName>, diagnostic: &CompilationDiagnostic) {
         let Some(location) = diagnostic.location.as_ref() else {
             let level = match diagnostic.severity {
                 DiagnosticSeverity::Error => "error",
@@ -277,7 +277,7 @@ impl DiagnosticReporter {
         report_id: u64,
         context: DiagnosticContext,
         stage: DiagnosticStage,
-        template: &TemplateName,
+        template: Option<&TemplateName>,
         diagnostic: &CompilationDiagnostic,
     ) {
         emit_json_diagnostic(report_id, context, stage, template, diagnostic);
@@ -306,13 +306,15 @@ impl DiagnosticReporter {
         }
     }
 
-    fn display_path(&self, template: &TemplateName, virtual_path: &str) -> PathBuf {
+    fn display_path(&self, template: Option<&TemplateName>, virtual_path: &str) -> PathBuf {
         if virtual_path.starts_with("_shared/") {
             self.templates_root.join(virtual_path)
-        } else {
+        } else if let Some(template) = template {
             self.templates_root
                 .join(template.as_str())
                 .join(virtual_path)
+        } else {
+            PathBuf::from(virtual_path)
         }
     }
 
@@ -397,21 +399,27 @@ pub fn init_tracing(format: OutputFormat, color: ColorChoice) {
     }
 }
 
-pub fn log_check_success(build: &TemplateRegistryBuild) {
-    info!(
-        event = "templates.check.completed",
-        template_count = build.template_count(),
-        warning_count = build.warnings().len(),
-        status = "ok",
-        "templates compiled successfully"
-    );
+pub fn log_check_success(format: OutputFormat, build: &WithWarnings<TemplateRegistry>) {
+    match format {
+        OutputFormat::Pretty => eprintln!("templates compiled successfully"),
+        OutputFormat::Json => {
+            info!(
+                target: "papelon_server",
+                event = "templates.check.completed",
+                template_count = build.value().names().len(),
+                warning_count = build.warnings().len(),
+                status = "ok",
+                "templates compiled successfully"
+            );
+        }
+    }
 }
 
 fn emit_json_diagnostic(
     report_id: u64,
     context: DiagnosticContext,
     stage: DiagnosticStage,
-    template: &TemplateName,
+    template: Option<&TemplateName>,
     diagnostic: &CompilationDiagnostic,
 ) {
     match diagnostic.severity {
@@ -443,60 +451,112 @@ fn emit_json_primary<L: JsonDiagnosticLevel>(
     report_id: u64,
     context: DiagnosticContext,
     stage: DiagnosticStage,
-    template: &TemplateName,
+    template: Option<&TemplateName>,
     diagnostic: &CompilationDiagnostic,
 ) {
     if let Some(location) = &diagnostic.location {
-        match L::LEVEL {
-            Level::ERROR => event!(
-                Level::ERROR,
-                event = "compiler.diagnostic",
-                report_id,
-                context = context.as_str(),
-                stage = stage.as_str(),
-                template = %template,
-                message = %diagnostic.message,
-                path = %location.path,
-                line_start = location.start.line,
-                column_start = location.start.column,
-                line_end = location.end.line,
-                column_end = location.end.column,
-            ),
-            _ => event!(
-                Level::WARN,
-                event = "compiler.diagnostic",
-                report_id,
-                context = context.as_str(),
-                stage = stage.as_str(),
-                template = %template,
-                message = %diagnostic.message,
-                path = %location.path,
-                line_start = location.start.line,
-                column_start = location.start.column,
-                line_end = location.end.line,
-                column_end = location.end.column,
-            ),
+        if let Some(template) = template {
+            match L::LEVEL {
+                Level::ERROR => event!(
+                    Level::ERROR,
+                    event = "compiler.diagnostic",
+                    report_id,
+                    context = context.as_str(),
+                    stage = stage.as_str(),
+                    template = %template,
+                    message = %diagnostic.message,
+                    path = %location.path,
+                    line_start = location.start.line,
+                    column_start = location.start.column,
+                    line_end = location.end.line,
+                    column_end = location.end.column,
+                ),
+                _ => event!(
+                    Level::WARN,
+                    event = "compiler.diagnostic",
+                    report_id,
+                    context = context.as_str(),
+                    stage = stage.as_str(),
+                    template = %template,
+                    message = %diagnostic.message,
+                    path = %location.path,
+                    line_start = location.start.line,
+                    column_start = location.start.column,
+                    line_end = location.end.line,
+                    column_end = location.end.column,
+                ),
+            }
+        } else {
+            match L::LEVEL {
+                Level::ERROR => event!(
+                    Level::ERROR,
+                    event = "compiler.diagnostic",
+                    report_id,
+                    context = context.as_str(),
+                    stage = stage.as_str(),
+                    message = %diagnostic.message,
+                    path = %location.path,
+                    line_start = location.start.line,
+                    column_start = location.start.column,
+                    line_end = location.end.line,
+                    column_end = location.end.column,
+                ),
+                _ => event!(
+                    Level::WARN,
+                    event = "compiler.diagnostic",
+                    report_id,
+                    context = context.as_str(),
+                    stage = stage.as_str(),
+                    message = %diagnostic.message,
+                    path = %location.path,
+                    line_start = location.start.line,
+                    column_start = location.start.column,
+                    line_end = location.end.line,
+                    column_end = location.end.column,
+                ),
+            }
         }
     } else {
-        match L::LEVEL {
-            Level::ERROR => event!(
-                Level::ERROR,
-                event = "compiler.diagnostic",
-                report_id,
-                context = context.as_str(),
-                stage = stage.as_str(),
-                template = %template,
-                message = %diagnostic.message,
-            ),
-            _ => event!(
-                Level::WARN,
-                event = "compiler.diagnostic",
-                report_id,
-                context = context.as_str(),
-                stage = stage.as_str(),
-                template = %template,
-                message = %diagnostic.message,
-            ),
+        if let Some(template) = template {
+            match L::LEVEL {
+                Level::ERROR => event!(
+                    Level::ERROR,
+                    event = "compiler.diagnostic",
+                    report_id,
+                    context = context.as_str(),
+                    stage = stage.as_str(),
+                    template = %template,
+                    message = %diagnostic.message,
+                ),
+                _ => event!(
+                    Level::WARN,
+                    event = "compiler.diagnostic",
+                    report_id,
+                    context = context.as_str(),
+                    stage = stage.as_str(),
+                    template = %template,
+                    message = %diagnostic.message,
+                ),
+            }
+        } else {
+            match L::LEVEL {
+                Level::ERROR => event!(
+                    Level::ERROR,
+                    event = "compiler.diagnostic",
+                    report_id,
+                    context = context.as_str(),
+                    stage = stage.as_str(),
+                    message = %diagnostic.message,
+                ),
+                _ => event!(
+                    Level::WARN,
+                    event = "compiler.diagnostic",
+                    report_id,
+                    context = context.as_str(),
+                    stage = stage.as_str(),
+                    message = %diagnostic.message,
+                ),
+            }
         }
     }
 }
@@ -508,10 +568,43 @@ fn emit_json_related(
     related_index: usize,
     context: DiagnosticContext,
     stage: DiagnosticStage,
-    template: &TemplateName,
+    template: Option<&TemplateName>,
     related: &papelon_core::RelatedDiagnostic,
 ) {
     if let Some(location) = &related.location {
+        if let Some(template) = template {
+            event!(
+                Level::INFO,
+                event = event_name,
+                report_id,
+                related_index,
+                context = context.as_str(),
+                stage = stage.as_str(),
+                template = %template,
+                message = %related.message,
+                path = %location.path,
+                line_start = location.start.line,
+                column_start = location.start.column,
+                line_end = location.end.line,
+                column_end = location.end.column,
+            );
+        } else {
+            event!(
+                Level::INFO,
+                event = event_name,
+                report_id,
+                related_index,
+                context = context.as_str(),
+                stage = stage.as_str(),
+                message = %related.message,
+                path = %location.path,
+                line_start = location.start.line,
+                column_start = location.start.column,
+                line_end = location.end.line,
+                column_end = location.end.column,
+            );
+        }
+    } else if let Some(template) = template {
         event!(
             Level::INFO,
             event = event_name,
@@ -521,11 +614,6 @@ fn emit_json_related(
             stage = stage.as_str(),
             template = %template,
             message = %related.message,
-            path = %location.path,
-            line_start = location.start.line,
-            column_start = location.start.column,
-            line_end = location.end.line,
-            column_end = location.end.column,
         );
     } else {
         event!(
@@ -535,7 +623,6 @@ fn emit_json_related(
             related_index,
             context = context.as_str(),
             stage = stage.as_str(),
-            template = %template,
             message = %related.message,
         );
     }

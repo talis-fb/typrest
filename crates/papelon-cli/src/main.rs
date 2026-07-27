@@ -97,7 +97,7 @@ async fn run_check(output_format: OutputFormat, color: ServerColorChoice) -> boo
     match papelon_server::compile_templates(&config.templates_root).await {
         Ok(build) => {
             reporter.report_build(DiagnosticContext::Check, &build);
-            log_check_success(&build);
+            log_check_success(output_format, &build);
             true
         }
         Err(error) => {

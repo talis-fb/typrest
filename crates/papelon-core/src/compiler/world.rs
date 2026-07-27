@@ -180,6 +180,7 @@ fn map_diagnostics(
 
 fn map_diagnostic(error: SourceDiagnostic, world: &TemplateWorld) -> CompilationDiagnostic {
     CompilationDiagnostic {
+        template: None,
         severity: match error.severity {
             Severity::Error => DiagnosticSeverity::Error,
             Severity::Warning => DiagnosticSeverity::Warning,
