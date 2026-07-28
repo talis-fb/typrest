@@ -4,9 +4,10 @@
 
 `papelon.toml` defines the root configuration for a Papelon project in filesystem mode.
 
-In the MVP, it exists to answer one question:
+In the MVP, it defines:
 
-Which directory contains the project templates?
+- which directory contains the project templates
+- whether the unauthenticated development Web UI is enabled
 
 ---
 
@@ -39,6 +40,7 @@ Example:
 ```toml
 schema_version = "v1"
 templates_root = "templates"
+web_ui = false
 ```
 
 ---
@@ -48,7 +50,8 @@ templates_root = "templates"
 ```text
 papelon.toml
  ├── schema_version (string, required)
- └── templates_root (string, required)
+ ├── templates_root (string, required)
+ └── web_ui (boolean, optional; default false)
 ```
 
 Unknown top-level fields should be ignored in the MVP so the format can evolve without breaking older binaries.
@@ -149,6 +152,60 @@ After resolution:
 - the path must be a directory
 
 Otherwise the CLI must fail before starting the server.
+
+---
+
+## `web_ui`
+
+Type:
+
+```text
+boolean
+```
+
+Required:
+
+```text
+no
+```
+
+Default:
+
+```text
+false
+```
+
+Responsibility:
+
+Enables the development-only template inspection and PDF preview interface.
+
+```toml
+schema_version = "v1"
+templates_root = "templates"
+web_ui = true
+```
+
+When enabled, Papelon additionally mounts:
+
+- `/webui` and its embedded static assets
+- `/_api/templates`
+- `/_api/templates/:template`
+
+The existing `/render/:template` route remains available whether or not the Web UI is enabled.
+
+### Security
+
+The Web UI has no authentication or authorization and is intended only for local development.
+When enabling it, bind Papelon to the loopback interface:
+
+```bash
+papelon serve --hostname 127.0.0.1
+```
+
+Do not expose a Web UI-enabled instance directly to an untrusted network.
+
+See the [Web UI Specification](webui-spec.md) for route and behavior contracts and the
+[Web UI Usage and Development Guide](webui-development.md) for setup and contributor workflows.
 
 ---
 

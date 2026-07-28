@@ -20,6 +20,18 @@ cargo test -p papelon-server repository_examples_load_and_render_invoice_over_ht
 cargo test -p papelon-cli
 ```
 
+Validate the Web UI:
+
+```bash
+cd webui
+npm run check
+npm test
+npm run build
+```
+
+The Vite production output under `webui/dist` is committed and embedded in the Rust binary.
+Frontend changes are incomplete until the source and rebuilt output are both included.
+
 ## Test Categories
 
 Core unit tests cover schema parsing, schema validation, template names, in-memory loading, and `RenderService` behavior. These tests should use direct assertions and avoid real Typst unless they are specifically testing compiler integration.
@@ -27,6 +39,11 @@ Core unit tests cover schema parsing, schema validation, template names, in-memo
 Compiler tests live under `crates/papelon-core/src/compiler/`. They are allowed to use real Typst because the compiler module is the anti-corruption layer around Typst APIs. These tests validate PDF compilation, payload injection through `sys.inputs.data`, syntax error mapping, and default font loading.
 
 Server tests cover HTTP handlers, error mapping, template listing, and render responses. Most server tests use `MemoryLoader` and mock compiler output. Tests that intentionally validate filesystem or real Typst integration can use `FilesystemLoader` and `TypstCompiler`.
+
+Web UI frontend tests cover schema-derived payload initialization, Form/Raw conversion, and custom
+field validation. `svelte-check` covers TypeScript and Svelte diagnostics, including accessibility
+warnings. Server tests cover the disabled-by-default configuration, conditional route mounting,
+embedded static assets, and registry-backed `/_api/*` responses.
 
 CLI tests cover command parsing and filesystem scaffolding for `papelon serve`, `--watch`, and `papelon init`. They should use temporary directories and must not rely on global local state.
 
@@ -77,3 +94,6 @@ podman compose down
 ```
 
 Tests should not require Docker, Podman, or generated local artifacts such as `invoice.pdf`.
+
+See the [Web UI Usage and Development Guide](webui-development.md) for the complete frontend and
+embedded-asset workflow.
