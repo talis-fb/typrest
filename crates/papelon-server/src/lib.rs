@@ -4,6 +4,7 @@ pub mod loader;
 pub mod output;
 pub mod router;
 pub mod server;
+mod webui;
 
 use std::net::SocketAddr;
 use std::path::Path;
@@ -19,7 +20,7 @@ use tracing::info;
 use crate::loader::filesystem::FilesystemLoader;
 use crate::loader::watch::start_template_watcher;
 use crate::output::{DiagnosticContext, DiagnosticReporter};
-use crate::router::router;
+use crate::router::router_with_web_ui;
 use crate::server::{AppState, ServerConfig};
 
 pub async fn compile_templates(
@@ -54,7 +55,10 @@ pub async fn serve(config: ServerConfig, reporter: DiagnosticReporter) -> Result
         None
     };
     let render_service = RenderService::new(registry.clone(), compiler);
-    let app = router(AppState::new(registry, render_service, reporter));
+    let app = router_with_web_ui(
+        AppState::new(registry, render_service, reporter),
+        config.web_ui,
+    );
     let address = SocketAddr::from((config.host, config.port));
     let listener = tokio::net::TcpListener::bind(address).await?;
 
@@ -99,7 +103,7 @@ mod tests {
 
     use crate::loader::filesystem::FilesystemLoader;
     use crate::output::{ColorChoice, DiagnosticReporter, OutputFormat};
-    use crate::router::router;
+    use crate::router::{router, router_with_web_ui};
     use crate::server::AppState;
 
     #[derive(Clone)]
@@ -127,6 +131,19 @@ mod tests {
         let registry = registry_from_loader(loader.as_ref());
         let render_service = RenderService::new(registry.clone(), compiler);
         router(AppState::new(registry, render_service, test_reporter(".")))
+    }
+
+    fn app_with_web_ui(
+        loader: Arc<MemoryLoader>,
+        result: Result<Document, CompilationError>,
+    ) -> axum::Router {
+        let compiler = Arc::new(MockCompiler { result });
+        let registry = registry_from_loader(loader.as_ref());
+        let render_service = RenderService::new(registry.clone(), compiler);
+        router_with_web_ui(
+            AppState::new(registry, render_service, test_reporter(".")),
+            true,
+        )
     }
 
     fn test_reporter(root: impl AsRef<std::path::Path>) -> DiagnosticReporter {
@@ -238,6 +255,214 @@ mod tests {
                 ]
             })
         );
+    }
+
+    #[tokio::test]
+    async fn web_ui_routes_are_not_mounted_when_disabled() {
+        let app = app(
+            memory_loader(vec![("invoice", template(schema(json!({}))))]),
+            Ok(Document::new(Bytes::from_static(b"%PDF-1.4 mock"))),
+        );
+
+        for uri in [
+            "/webui",
+            "/webui/",
+            "/webui/assets/missing.js",
+            "/_api/templates",
+            "/_api/templates/invoice",
+        ] {
+            let response = app
+                .clone()
+                .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+
+            assert_eq!(response.status(), StatusCode::NOT_FOUND, "{uri}");
+        }
+    }
+
+    #[tokio::test]
+    async fn web_ui_serves_embedded_index_and_assets_when_enabled() {
+        let app = app_with_web_ui(
+            memory_loader(Vec::new()),
+            Ok(Document::new(Bytes::from_static(b"%PDF-1.4 mock"))),
+        );
+
+        let redirect = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/webui")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(redirect.status(), StatusCode::PERMANENT_REDIRECT);
+        assert_eq!(redirect.headers().get("location").unwrap(), "/webui/");
+
+        let index = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/webui/")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(index.status(), StatusCode::OK);
+        assert_eq!(
+            index.headers().get("content-type").unwrap(),
+            "text/html; charset=utf-8"
+        );
+        assert_eq!(index.headers().get("cache-control").unwrap(), "no-cache");
+        let index_bytes = axum::body::to_bytes(index.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let index_html = String::from_utf8(index_bytes.to_vec()).unwrap();
+        let script_path = index_html
+            .split("src=\"")
+            .nth(1)
+            .unwrap()
+            .split('"')
+            .next()
+            .unwrap();
+
+        let asset = app
+            .oneshot(
+                Request::builder()
+                    .uri(script_path)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(asset.status(), StatusCode::OK);
+        assert!(
+            asset
+                .headers()
+                .get("content-type")
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .contains("javascript")
+        );
+        assert_eq!(
+            asset.headers().get("cache-control").unwrap(),
+            "public, max-age=31536000, immutable"
+        );
+    }
+
+    #[tokio::test]
+    async fn web_ui_metadata_comes_from_prepared_registry() {
+        let schema = schema(json!({
+            "type": "object",
+            "properties": {
+                "name": { "type": "string", "required": true }
+            }
+        }));
+        let source = TemplateSource::new(BTreeMap::from([(
+            "main.typ".to_owned(),
+            Bytes::from_static(b"Hello"),
+        )]));
+        let app = app_with_web_ui(
+            memory_loader(vec![
+                ("invoice", template(schema)),
+                ("welcome", TemplateBundle::without_schema(source)),
+            ]),
+            Ok(Document::new(Bytes::from_static(b"%PDF-1.4 mock"))),
+        );
+
+        let list = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/_api/templates")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(list.status(), StatusCode::OK);
+        assert_eq!(
+            response_body(list).await,
+            json!({
+                "templates": [
+                    { "name": "invoice", "hasSchema": true },
+                    { "name": "welcome", "hasSchema": false }
+                ]
+            })
+        );
+
+        let invoice = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/_api/templates/invoice")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let invoice_body = response_body(invoice).await;
+        assert_eq!(invoice_body["name"], "invoice");
+        assert_eq!(invoice_body["schema"]["schemaVersion"], "v1");
+        assert_eq!(
+            invoice_body["schema"]["request"]["body"]["properties"]["name"]["type"],
+            "string"
+        );
+        assert!(
+            invoice_body["schema"]["request"]["body"]["properties"]["name"]
+                .get("default")
+                .is_none()
+        );
+
+        let welcome = app
+            .oneshot(
+                Request::builder()
+                    .uri("/_api/templates/welcome")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            response_body(welcome).await,
+            json!({ "name": "welcome", "schema": null })
+        );
+    }
+
+    #[tokio::test]
+    async fn web_ui_metadata_rejects_invalid_and_missing_names() {
+        let app = app_with_web_ui(
+            memory_loader(Vec::new()),
+            Ok(Document::new(Bytes::from_static(b"%PDF-1.4 mock"))),
+        );
+
+        let missing = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/_api/templates/missing")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+        assert_eq!(response_body(missing).await["error"], "template_not_found");
+
+        let invalid = app
+            .oneshot(
+                Request::builder()
+                    .uri("/_api/templates/%24")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]

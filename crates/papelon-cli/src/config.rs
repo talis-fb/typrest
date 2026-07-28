@@ -8,12 +8,15 @@ pub const CONFIG_FILE: &str = "papelon.toml";
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectConfig {
     pub templates_root: PathBuf,
+    pub web_ui: bool,
 }
 
 #[derive(Debug, Deserialize)]
 struct RawProjectConfig {
     schema_version: String,
     templates_root: String,
+    #[serde(default)]
+    web_ui: bool,
 }
 
 pub fn load_project_config(project_root: &Path) -> std::io::Result<ProjectConfig> {
@@ -52,7 +55,10 @@ pub fn load_project_config(project_root: &Path) -> std::io::Result<ProjectConfig
         ));
     }
 
-    Ok(ProjectConfig { templates_root })
+    Ok(ProjectConfig {
+        templates_root,
+        web_ui: config.web_ui,
+    })
 }
 
 pub fn find_project_root(start_dir: &Path) -> std::io::Result<PathBuf> {
@@ -146,6 +152,7 @@ mod tests {
         let config = load_project_config(root.path()).unwrap();
 
         assert_eq!(config.templates_root, root.path().join("templates"));
+        assert!(!config.web_ui);
     }
 
     #[test]
@@ -218,6 +225,35 @@ mod tests {
         .unwrap();
 
         assert_eq!(config.templates_root, "templates");
+    }
+
+    #[test]
+    fn parse_project_config_defaults_web_ui_to_false() {
+        let config =
+            parse_project_config("schema_version = \"v1\"\ntemplates_root = \"templates\"\n")
+                .unwrap();
+
+        assert!(!config.web_ui);
+    }
+
+    #[test]
+    fn parse_project_config_accepts_web_ui_boolean() {
+        let config = parse_project_config(
+            "schema_version = \"v1\"\ntemplates_root = \"templates\"\nweb_ui = true\n",
+        )
+        .unwrap();
+
+        assert!(config.web_ui);
+    }
+
+    #[test]
+    fn parse_project_config_rejects_non_boolean_web_ui() {
+        let error = parse_project_config(
+            "schema_version = \"v1\"\ntemplates_root = \"templates\"\nweb_ui = \"yes\"\n",
+        )
+        .unwrap_err();
+
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
     }
 
     #[test]

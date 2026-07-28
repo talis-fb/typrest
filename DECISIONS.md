@@ -140,6 +140,26 @@ never cross the HTTP boundary.
 
 ---
 
+## DEC-008 - Embed the tracked development Web UI
+
+**Date:** 2026-07
+
+**Status:** Accepted
+
+**Decision:** Build the Vite Web UI into a small tracked `webui/dist` directory and embed those
+files in the Papelon server binary.
+
+**Context:** The Web UI is optional at runtime, but Papelon should retain its portable single-binary
+deployment and its Rust-only release/Docker build. Requiring a runtime asset directory would make
+the binary location-dependent, while invoking npm from Cargo would add Node and network access to
+normal Rust builds.
+
+**Consequences:** Frontend source changes must be followed by `npm run build`, and the updated
+`webui/dist` files are committed with the source. The server mounts the embedded files and metadata
+routes only when `web_ui = true`.
+
+---
+
 ## Template for new decisions
 
 ```

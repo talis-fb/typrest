@@ -1,13 +1,13 @@
 use std::collections::BTreeMap;
 
-use serde::{Deserialize, Deserializer};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 
 use crate::ValidationError;
 use crate::loader::LoaderError;
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Schema {
     pub schema_version: String,
@@ -49,22 +49,28 @@ impl Schema {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct SchemaRequest {
     pub body: SchemaField,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct SchemaField {
-    #[serde(rename = "type")]
+    #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
     pub field_type: Option<SchemaType>,
     #[serde(default)]
     pub required: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub properties: Option<BTreeMap<String, SchemaField>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub items: Option<Box<SchemaField>>,
-    #[serde(rename = "enum")]
+    #[serde(rename = "enum", skip_serializing_if = "Option::is_none")]
     pub enum_values: Option<Vec<Value>>,
-    #[serde(default, deserialize_with = "deserialize_optional_value")]
+    #[serde(
+        default,
+        deserialize_with = "deserialize_optional_value",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub default: Option<Value>,
 }
 
@@ -132,7 +138,7 @@ impl SchemaField {
     }
 }
 
-#[derive(Copy, Clone, Debug, Deserialize, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SchemaType {
     String,
@@ -352,7 +358,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
+    use serde_json::{Value, json};
 
     use crate::loader::LoaderError;
 
@@ -555,5 +561,33 @@ mod tests {
             })
         );
         assert!(validate(&schema, &payload).is_ok());
+    }
+
+    #[test]
+    fn serializes_schema_without_inventing_absent_optional_fields() {
+        let schema = parse(json!({
+            "schemaVersion": "v1",
+            "request": {
+                "body": {
+                    "type": "object",
+                    "properties": {
+                        "name": { "type": "string", "required": true },
+                        "nickname": { "type": "null", "default": null }
+                    }
+                }
+            }
+        }));
+
+        let serialized = serde_json::to_value(schema).unwrap();
+        assert_eq!(serialized["schemaVersion"], "v1");
+        assert!(
+            serialized["request"]["body"]["properties"]["name"]
+                .get("default")
+                .is_none()
+        );
+        assert_eq!(
+            serialized["request"]["body"]["properties"]["nickname"]["default"],
+            Value::Null
+        );
     }
 }

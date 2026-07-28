@@ -11,6 +11,7 @@ pub struct ServerConfig {
     pub port: u16,
     pub host: [u8; 4],
     pub watch: bool,
+    pub web_ui: bool,
 }
 
 impl ServerConfig {
@@ -20,6 +21,7 @@ impl ServerConfig {
             port,
             host: [0, 0, 0, 0],
             watch: false,
+            web_ui: false,
         }
     }
 
@@ -30,6 +32,11 @@ impl ServerConfig {
 
     pub fn with_watch(mut self, watch: bool) -> Self {
         self.watch = watch;
+        self
+    }
+
+    pub fn with_web_ui(mut self, web_ui: bool) -> Self {
+        self.web_ui = web_ui;
         self
     }
 }
@@ -52,5 +59,21 @@ impl AppState {
             render_service,
             reporter,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use super::ServerConfig;
+
+    #[test]
+    fn web_ui_is_disabled_by_default_and_can_be_enabled() {
+        let disabled = ServerConfig::new(PathBuf::from("templates"), 8080);
+        assert!(!disabled.web_ui);
+
+        let enabled = disabled.with_web_ui(true);
+        assert!(enabled.web_ui);
     }
 }

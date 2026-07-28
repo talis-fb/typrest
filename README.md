@@ -167,3 +167,40 @@ color. Compilation failures returned over HTTP contain structured paths, ranges,
 but never template source excerpts or absolute filesystem paths.
 
 See [docs/diagnostics.md](docs/diagnostics.md) for the output contract and Typst upgrade procedure.
+
+## Development Web UI
+
+Papelon includes an optional browser interface for inspecting prepared templates, editing test
+payloads, previewing PDFs, and downloading the latest render. It is disabled by default.
+
+Enable it in `papelon.toml`:
+
+```toml
+schema_version = "v1"
+templates_root = "templates"
+web_ui = true
+```
+
+Then run Papelon on the loopback interface and open `http://127.0.0.1:8080/webui`:
+
+```bash
+cargo run -- serve --hostname 127.0.0.1
+```
+
+The Web UI is a development tool and has no authentication. Do not expose it to an untrusted
+network. Its metadata API reads only from the prepared in-memory template registry, and all PDF
+generation still uses `POST /render/:template`.
+
+See the [Web UI guide](docs/webui-development.md) for usage and contributor workflows and the
+[Web UI specification](docs/webui-spec.md) for the complete behavior and internal route contracts.
+
+Frontend sources and the committed production build live under `webui/`. After changing frontend
+source, rebuild and verify it before committing:
+
+```bash
+cd webui
+npm ci
+npm run check
+npm test
+npm run build
+```

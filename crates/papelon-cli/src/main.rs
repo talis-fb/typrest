@@ -68,7 +68,8 @@ async fn run_serve(
     let reporter = DiagnosticReporter::new(output_format, color, &config.templates_root);
     let server_config = ServerConfig::new(&config.templates_root, port)
         .with_host(hostname)
-        .with_watch(watch);
+        .with_watch(watch)
+        .with_web_ui(config.web_ui);
 
     match papelon_server::serve(server_config, reporter.clone()).await {
         Ok(()) => true,

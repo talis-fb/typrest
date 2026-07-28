@@ -11,6 +11,8 @@ bytes.workspace = true
 codespan-reporting.workspace = true
 notify.workspace = true
 papelon-core = { path = "../papelon-core" }
+mime_guess = "2"
+rust-embed = { version = "8", features = ["debug-embed", "deterministic-timestamps"] }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
