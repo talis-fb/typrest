@@ -1,45 +1,6 @@
-use std::net::Ipv4Addr;
-use std::path::PathBuf;
-
-use papelon_core::{RenderService, TemplateRegistry};
-
 use crate::output::DiagnosticReporter;
 
-#[derive(Debug, Clone)]
-pub struct ServerConfig {
-    pub templates_dir: PathBuf,
-    pub port: u16,
-    pub host: [u8; 4],
-    pub watch: bool,
-    pub web_ui: bool,
-}
-
-impl ServerConfig {
-    pub fn new(templates_dir: impl Into<PathBuf>, port: u16) -> Self {
-        Self {
-            templates_dir: templates_dir.into(),
-            port,
-            host: [0, 0, 0, 0],
-            watch: false,
-            web_ui: false,
-        }
-    }
-
-    pub fn with_host(mut self, host: Ipv4Addr) -> Self {
-        self.host = host.octets();
-        self
-    }
-
-    pub fn with_watch(mut self, watch: bool) -> Self {
-        self.watch = watch;
-        self
-    }
-
-    pub fn with_web_ui(mut self, web_ui: bool) -> Self {
-        self.web_ui = web_ui;
-        self
-    }
-}
+use papelon_core::{RenderService, TemplateRegistry};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -66,7 +27,7 @@ impl AppState {
 mod tests {
     use std::path::PathBuf;
 
-    use super::ServerConfig;
+    use crate::config::ServerConfig;
 
     #[test]
     fn web_ui_is_disabled_by_default_and_can_be_enabled() {

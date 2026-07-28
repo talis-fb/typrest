@@ -1,49 +1,45 @@
+pub mod config;
 pub mod errors;
 pub mod handlers;
 pub mod loader;
 pub mod output;
 pub mod router;
 pub mod server;
-mod webui;
 
 use std::net::SocketAddr;
-use std::path::Path;
 use std::sync::Arc;
 
-use papelon_core::{
-    PdfCompiler, RenderService, TemplateRegistry, TemplateRegistryBuildFailure, TypstCompiler,
-    WithWarnings,
-};
-use thiserror::Error;
+use papelon_core::{PdfCompiler, RenderService, TemplateRegistry, TypstCompiler};
 use tracing::info;
 
+use crate::config::ServerConfig;
+use crate::errors::ServeError;
 use crate::loader::filesystem::FilesystemLoader;
 use crate::loader::watch::start_template_watcher;
 use crate::output::{DiagnosticContext, DiagnosticReporter};
-use crate::router::router_with_web_ui;
-use crate::server::{AppState, ServerConfig};
-
-pub async fn compile_templates(
-    templates_dir: impl AsRef<Path>,
-) -> Result<WithWarnings<TemplateRegistry>, WithWarnings<TemplateRegistryBuildFailure>> {
-    let loader = FilesystemLoader::new(templates_dir.as_ref());
-    let compiler = TypstCompiler::new();
-    TemplateRegistry::build(&loader, &compiler).await
-}
+use crate::router::router;
+use crate::server::AppState;
 
 pub async fn serve(config: ServerConfig, reporter: DiagnosticReporter) -> Result<(), ServeError> {
-    let loader = Arc::new(FilesystemLoader::new(config.templates_dir));
+    let loader = Arc::new(FilesystemLoader::new(config.templates_dir.clone()));
+
     let compiler: Arc<dyn PdfCompiler> = Arc::new(TypstCompiler::new());
-    let build = TemplateRegistry::build(loader.as_ref(), compiler.as_ref()).await?;
-    reporter.report_build(DiagnosticContext::Startup, &build);
+
+    let registry_with_warnings =
+        TemplateRegistry::build(loader.as_ref(), compiler.as_ref()).await?;
+
+    reporter.report_build(DiagnosticContext::Startup, &registry_with_warnings);
+
+    let (registry, warnings) = registry_with_warnings.into_parts();
+
     info!(
         event = "templates.startup.completed",
-        template_count = build.value().names().len(),
-        warning_count = build.warnings().len(),
+        template_count = registry.names().len(),
+        warning_count = warnings.len(),
         status = "ok",
         "templates compiled successfully"
     );
-    let registry = build.into_value();
+
     let _watcher = if config.watch {
         Some(start_template_watcher(
             loader,
@@ -54,30 +50,18 @@ pub async fn serve(config: ServerConfig, reporter: DiagnosticReporter) -> Result
     } else {
         None
     };
+
     let render_service = RenderService::new(registry.clone(), compiler);
-    let app = router_with_web_ui(
-        AppState::new(registry, render_service, reporter),
-        config.web_ui,
-    );
+    let app = AppState::new(registry, render_service, reporter);
+    let app_router = router(app, &config);
+
     let address = SocketAddr::from((config.host, config.port));
     let listener = tokio::net::TcpListener::bind(address).await?;
 
     info!(event = "server.listening", %address, "papelon server listening");
-    axum::serve(listener, app).await?;
+    axum::serve(listener, app_router).await?;
 
     Ok(())
-}
-
-#[derive(Debug, Error)]
-pub enum ServeError {
-    #[error("{0}")]
-    Registry(#[from] WithWarnings<TemplateRegistryBuildFailure>),
-
-    #[error("template watcher failed: {0}")]
-    Watch(#[from] notify::Error),
-
-    #[error("server I/O failed: {0}")]
-    Io(#[from] std::io::Error),
 }
 
 #[cfg(test)]
@@ -101,9 +85,10 @@ mod tests {
     use tempfile::tempdir;
     use tower::ServiceExt;
 
+    use crate::config::ServerConfig;
     use crate::loader::filesystem::FilesystemLoader;
     use crate::output::{ColorChoice, DiagnosticReporter, OutputFormat};
-    use crate::router::{router, router_with_web_ui};
+    use crate::router::router;
     use crate::server::AppState;
 
     #[derive(Clone)]
@@ -130,7 +115,10 @@ mod tests {
         let compiler = Arc::new(MockCompiler { result });
         let registry = registry_from_loader(loader.as_ref());
         let render_service = RenderService::new(registry.clone(), compiler);
-        router(AppState::new(registry, render_service, test_reporter(".")))
+        router(
+            AppState::new(registry, render_service, test_reporter(".")),
+            &ServerConfig::new(".", 0),
+        )
     }
 
     fn app_with_web_ui(
@@ -140,9 +128,9 @@ mod tests {
         let compiler = Arc::new(MockCompiler { result });
         let registry = registry_from_loader(loader.as_ref());
         let render_service = RenderService::new(registry.clone(), compiler);
-        router_with_web_ui(
+        router(
             AppState::new(registry, render_service, test_reporter(".")),
-            true,
+            &ServerConfig::new(".", 0).with_web_ui(true),
         )
     }
 
@@ -214,7 +202,7 @@ mod tests {
         let response = app
             .oneshot(
                 Request::builder()
-                    .uri("/healthz")
+                    .uri("/_healthz")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -238,7 +226,7 @@ mod tests {
         let response = app
             .oneshot(
                 Request::builder()
-                    .uri("/templates")
+                    .uri("/_api/templates")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -250,8 +238,8 @@ mod tests {
             response_body(response).await,
             json!({
                 "templates": [
-                    { "name": "invoice" },
-                    { "name": "welcome" }
+                    { "name": "invoice", "hasSchema": true },
+                    { "name": "welcome", "hasSchema": true }
                 ]
             })
         );
@@ -264,13 +252,7 @@ mod tests {
             Ok(Document::new(Bytes::from_static(b"%PDF-1.4 mock"))),
         );
 
-        for uri in [
-            "/webui",
-            "/webui/",
-            "/webui/assets/missing.js",
-            "/_api/templates",
-            "/_api/templates/invoice",
-        ] {
+        for uri in ["/webui", "/webui/", "/webui/assets/missing.js"] {
             let response = app
                 .clone()
                 .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
@@ -809,11 +791,10 @@ Hello #data.name
             .unwrap()
             .into_value();
         let render_service = RenderService::new(registry.clone(), compiler);
-        let app = router(AppState::new(
-            registry,
-            render_service,
-            test_reporter(root.path()),
-        ));
+        let app = router(
+            AppState::new(registry, render_service, test_reporter(root.path())),
+            &ServerConfig::new(root.path(), 0),
+        );
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
@@ -866,11 +847,10 @@ Hello #data.name
             .unwrap()
             .into_value();
         let render_service = RenderService::new(registry.clone(), compiler);
-        let app = router(AppState::new(
-            registry,
-            render_service,
-            test_reporter(&examples_dir),
-        ));
+        let app = router(
+            AppState::new(registry, render_service, test_reporter(&examples_dir)),
+            &ServerConfig::new(&examples_dir, 0),
+        );
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });

@@ -1,7 +1,31 @@
+use crate::config::CONFIG_FILE;
+use papelon_server::output::{
+    ColorChoice as ServerColorChoice, DiagnosticContext, DiagnosticReporter, DiagnosticStage,
+    OutputFormat,
+};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::config::CONFIG_FILE;
+pub(crate) async fn run_init(
+    path: Option<PathBuf>,
+    output_format: OutputFormat,
+    color: ServerColorChoice,
+) -> bool {
+    let current_dir = std::env::current_dir().unwrap_or_default();
+    let reporter = DiagnosticReporter::new(output_format, color, &current_dir);
+    match init_project(&current_dir, path.as_deref()) {
+        Ok(()) => true,
+        Err(error) => {
+            reporter.report_simple_error(
+                DiagnosticContext::Startup,
+                DiagnosticStage::Load,
+                None,
+                &error.to_string(),
+            );
+            false
+        }
+    }
+}
 
 const DEFAULT_TEMPLATES_ROOT: &str = "templates";
 const HELLO_WORLD_TEMPLATE: &str = "hello-world";

@@ -2023,6 +2023,7 @@ name = "papelon-cli"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "papelon-core",
  "papelon-server",
  "serde",
  "serde_json",

@@ -2,9 +2,22 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json, Response};
 use papelon_core::{
     CompilationDiagnostic, CompilationError, DiagnosticLocation, DiagnosticSeverity, LoaderError,
-    RelatedDiagnostic, RenderError, ValidationError,
+    RelatedDiagnostic, RenderError, TemplateRegistryBuildFailure, ValidationError, WithWarnings,
 };
 use serde::Serialize;
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum ServeError {
+    #[error("{0}")]
+    Registry(#[from] WithWarnings<TemplateRegistryBuildFailure>),
+
+    #[error("template watcher failed: {0}")]
+    Watch(#[from] notify::Error),
+
+    #[error("server I/O failed: {0}")]
+    Io(#[from] std::io::Error),
+}
 
 #[derive(Debug)]
 pub struct ApiError {

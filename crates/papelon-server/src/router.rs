@@ -1,22 +1,22 @@
 use axum::Router;
 use axum::routing::{get, post};
 
-use crate::handlers::{healthz, list_templates, render_template};
+use crate::config::ServerConfig;
+use crate::handlers::{api, healthz, render_template, webui};
 use crate::server::AppState;
-use crate::webui;
 
-pub fn router(state: AppState) -> Router {
-    router_with_web_ui(state, false)
-}
-
-pub fn router_with_web_ui(state: AppState, web_ui_enabled: bool) -> Router {
+pub fn router(state: AppState, config: &ServerConfig) -> Router {
     let router = Router::new()
-        .route("/healthz", get(healthz))
-        .route("/templates", get(list_templates))
-        .route("/render/{template}", post(render_template));
+        .route("/_healthz", get(healthz::healthz))
+        .route("/_api/templates", get(api::list_templates))
+        .route("/_api/templates/{template}", get(api::template_metadata))
+        .route("/render/{template}", post(render_template::render_template));
 
-    let router = if web_ui_enabled {
-        router.merge(webui::router())
+    let router = if config.web_ui {
+        router
+            .route("/webui", get(webui::webui_redirect))
+            .route("/webui/", get(webui::webui_index))
+            .route("/webui/{*path}", get(webui::webui_asset))
     } else {
         router
     };

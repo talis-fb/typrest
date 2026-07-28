@@ -3,6 +3,11 @@ use std::path::{Component, Path, PathBuf};
 
 use serde::Deserialize;
 
+use papelon_server::output::{
+    ColorChoice as ServerColorChoice, DiagnosticContext, DiagnosticReporter, DiagnosticStage,
+    OutputFormat,
+};
+
 pub const CONFIG_FILE: &str = "papelon.toml";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -17,6 +22,24 @@ struct RawProjectConfig {
     templates_root: String,
     #[serde(default)]
     web_ui: bool,
+}
+
+pub fn load_config(
+    output_format: OutputFormat,
+    color: ServerColorChoice,
+    context: DiagnosticContext,
+) -> Option<ProjectConfig> {
+    let current_dir = std::env::current_dir().unwrap_or_default();
+    let reporter = DiagnosticReporter::new(output_format, color, &current_dir);
+    let result = find_project_root(&current_dir).and_then(|root| load_project_config(&root));
+
+    match result {
+        Ok(config) => Some(config),
+        Err(error) => {
+            reporter.report_simple_error(context, DiagnosticStage::Load, None, &error.to_string());
+            None
+        }
+    }
 }
 
 pub fn load_project_config(project_root: &Path) -> std::io::Result<ProjectConfig> {
