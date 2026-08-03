@@ -48,18 +48,18 @@ typrest serve --store /path/to/store 8080
 templates/
   invoice/
     main.typ        ← Typst template (required)
-    schema.json     ← data contract (required)
+    schema.yml      ← data contract (required)
     assets/         ← optional
       logo.svg
   welcome/
     main.typ
-    schema.json
+    schema.yml
   _shared/          ← files available to all templates
     brand.typ
     logo.svg
 ```
 
-### `schema.json` Format
+### `schema.yml` Format
 
 The official schema specification is in:
 
@@ -87,7 +87,7 @@ Use **exactly** these names in code (structs, variables, functions, comments):
 | Term | Meaning |
 |---|---|
 | `TemplateName` | newtype over String. Template identifier. Invariant: non-empty, ASCII alphanumeric only, hyphen (`-`), and underscore (`_`). |
-| `Schema` | Recursive structure parsed from `schema.json`. Contains payload validation rules. |
+| `Schema` | Recursive structure parsed from `schema.yml` (or legacy `schema.json`). Contains payload validation rules. |
 | `TemplateSource` | Map of `relative path -> bytes`. Raw template files read by the loader. |
 | `TemplateBundle` | `TemplateSource` + `Schema`. Everything the compiler needs; self-contained. Return value of `TemplateLoader`. |
 | `PreparedTemplate` | Compiler ACL-owned prepared template state. Opaque outside `compiler/`; contains no public `typst::*` type. |
@@ -266,7 +266,7 @@ typrest/
   DECISIONS.md            ← architectural decision log
   ROADMAP.md              ← phase tasks with checkboxes
   docs/
-    schema-v1.md          ← schema.json reference
+    schema-v1.md          ← schema.yml reference
     startup-template-compilation.md ← startup compilation + prepared runtime design
     typst-integration.md  ← typst crate API reference
   crates/
@@ -306,7 +306,7 @@ typrest/
 Request:
 ```
 Content-Type: application/json
-Body: { payload matching the template schema.json }
+Body: { payload matching the template schema definition }
 ```
 
 Successful response:
@@ -382,7 +382,7 @@ Response:
 - `_shared/` is included automatically in the compilation context of every template
 - Subdirectories inside a template are allowed: the relative path is preserved in `TemplateSource`
 - Schema errors are detected when loading the template, never during render
-- Unknown fields at the root of `schema.json` are ignored with a warning, not rejected
+- Unknown fields at the root of `schema.yml` are ignored with a warning, not rejected
 - Use modern Rust module organization (edition 2018+): prefer `foo.rs` + `foo/` for submodules and do not create new `mod.rs` files. When touching existing modules, migrate gradually to this pattern if it is within the scope of the change.
 - Do not create `pub use` only as an alias/import convenience between modules. Prefer exposing the real submodule (`pub mod memory;`, `pub mod filesystem;`) and importing through the explicit path.
 

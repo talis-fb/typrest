@@ -49,7 +49,7 @@ mod tests {
     use super::MemoryLoader;
 
     fn template() -> TemplateBundle {
-        let schema = Schema::parse(
+        let schema = Schema::parse_json(
             json!({
                 "schemaVersion": "v1",
                 "request": {

@@ -68,7 +68,7 @@ pub fn init_project(project_root: &Path, target_root: Option<&Path>) -> std::io:
     fs::create_dir_all(&hello_world)?;
     fs::write(config_path, TYPREST_TOML)?;
     fs::write(hello_world.join("main.typ"), MAIN_TYP)?;
-    fs::write(hello_world.join("schema.json"), SCHEMA_JSON)?;
+    fs::write(hello_world.join("schema.yml"), SCHEMA_YAML)?;
 
     Ok(())
 }
@@ -93,20 +93,14 @@ const MAIN_TYP: &str = r#"#let data = json(bytes(sys.inputs.data))
 = Hello #data.name
 "#;
 
-const SCHEMA_JSON: &str = r#"{
-  "schemaVersion": "v1",
-  "request": {
-    "body": {
-      "type": "object",
-      "properties": {
-        "name": {
-          "type": "string",
-          "default": "World"
-        }
-      }
-    }
-  }
-}
+const SCHEMA_YAML: &str = r#"schemaVersion: v1
+request:
+  body:
+    type: object
+    properties:
+      name:
+        type: string
+        default: World
 "#;
 
 #[cfg(test)]
@@ -124,7 +118,7 @@ mod tests {
         let config = std::fs::read_to_string(root.path().join("typrest.toml")).unwrap();
         let template_dir = root.path().join("templates").join("hello-world");
         let main = std::fs::read_to_string(template_dir.join("main.typ")).unwrap();
-        let schema = std::fs::read_to_string(template_dir.join("schema.json")).unwrap();
+        let schema = std::fs::read_to_string(template_dir.join("schema.yml")).unwrap();
 
         assert_eq!(
             config,
@@ -132,8 +126,9 @@ mod tests {
         );
         assert!(main.contains("#let data = json(bytes(sys.inputs.data))"));
         assert!(main.contains("= Hello #data.name"));
-        assert!(schema.contains(r#""name""#));
-        assert!(schema.contains(r#""default": "World""#));
+        assert!(schema.contains("name:"));
+        assert!(schema.contains("default: World"));
+        typrest_core::Schema::parse_yaml(schema.as_bytes()).unwrap();
     }
 
     #[test]
@@ -146,7 +141,7 @@ mod tests {
         let config = std::fs::read_to_string(target.join("typrest.toml")).unwrap();
         let template_dir = target.join("templates").join("hello-world");
         let main = std::fs::read_to_string(template_dir.join("main.typ")).unwrap();
-        let schema = std::fs::read_to_string(template_dir.join("schema.json")).unwrap();
+        let schema = std::fs::read_to_string(template_dir.join("schema.yml")).unwrap();
 
         assert_eq!(
             config,
@@ -154,8 +149,9 @@ mod tests {
         );
         assert!(main.contains("#let data = json(bytes(sys.inputs.data))"));
         assert!(main.contains("= Hello #data.name"));
-        assert!(schema.contains(r#""name""#));
-        assert!(schema.contains(r#""default": "World""#));
+        assert!(schema.contains("name:"));
+        assert!(schema.contains("default: World"));
+        typrest_core::Schema::parse_yaml(schema.as_bytes()).unwrap();
     }
 
     #[test]
@@ -168,7 +164,7 @@ mod tests {
         let config = std::fs::read_to_string(target.join("typrest.toml")).unwrap();
         let template_dir = target.join("templates").join("hello-world");
         let main = std::fs::read_to_string(template_dir.join("main.typ")).unwrap();
-        let schema = std::fs::read_to_string(template_dir.join("schema.json")).unwrap();
+        let schema = std::fs::read_to_string(template_dir.join("schema.yml")).unwrap();
 
         assert_eq!(
             config,
@@ -176,8 +172,9 @@ mod tests {
         );
         assert!(main.contains("#let data = json(bytes(sys.inputs.data))"));
         assert!(main.contains("= Hello #data.name"));
-        assert!(schema.contains(r#""name""#));
-        assert!(schema.contains(r#""default": "World""#));
+        assert!(schema.contains("name:"));
+        assert!(schema.contains("default: World"));
+        typrest_core::Schema::parse_yaml(schema.as_bytes()).unwrap();
     }
 
     #[test]

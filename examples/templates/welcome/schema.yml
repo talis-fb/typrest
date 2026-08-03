@@ -1,0 +1,14 @@
+schemaVersion: v1
+request:
+  body:
+    type: object
+    properties:
+      name:
+        type: string
+        required: true
+      message:
+        type: string
+        required: true
+      company:
+        type: string
+        default: ""

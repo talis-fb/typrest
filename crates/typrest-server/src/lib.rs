@@ -155,7 +155,7 @@ mod tests {
     }
 
     fn schema(body: Value) -> Schema {
-        Schema::parse(
+        Schema::parse_json(
             json!({
                 "schemaVersion": "v1",
                 "request": { "body": body }
@@ -741,8 +741,8 @@ mod tests {
     async fn startup_registry_reports_template_compilation_failures() {
         let broken_typst = tempdir().unwrap();
         write(
-            &broken_typst.path().join("invoice/schema.json"),
-            r#"{"schemaVersion":"v1","request":{"body":{}}}"#,
+            &broken_typst.path().join("invoice/schema.yml"),
+            "schemaVersion: v1\nrequest:\n  body: {}\n",
         );
         write(
             &broken_typst.path().join("invoice/main.typ"),
@@ -773,8 +773,8 @@ mod tests {
     async fn render_real_template_over_http() {
         let root = tempdir().unwrap();
         write(
-            &root.path().join("invoice/schema.json"),
-            r#"{"schemaVersion":"v1","request":{"body":{"type":"object","properties":{"name":{"type":"string","required":true}}}}}"#,
+            &root.path().join("invoice/schema.yml"),
+            "schemaVersion: v1\nrequest:\n  body:\n    type: object\n    properties:\n      name:\n        type: string\n        required: true\n",
         );
         write(
             &root.path().join("invoice/main.typ"),

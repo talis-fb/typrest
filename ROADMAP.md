@@ -19,7 +19,7 @@ Success criterion: `docker run` starts the server, `curl POST /render/invoice` w
 - [x] Create a Cargo workspace with three crates: `typrest-core`, `typrest-server`, `typrest-cli`
 - [x] Define domain types in `typrest-core`:
   - [x] `TemplateName` (newtype over String with validation)
-  - [x] `Schema` and `SchemaField` (parsed from schema.json)
+  - [x] `Schema` and `SchemaField` (parsed from schema.yml or legacy schema.json)
   - [x] `TemplateSource` (path -> bytes map)
   - [x] `TemplateBundle` (TemplateSource + Schema)
   - [x] `RenderRequest` (TemplateName + serde_json::Value)
@@ -28,11 +28,11 @@ Success criterion: `docker run` starts the server, `curl POST /render/invoice` w
 - [x] Define the `TemplateLoader` trait in `typrest-core`
 - [x] Implement `FilesystemLoader`:
   - [x] Recursively scan the templates directory
-  - [x] Parse each template's `schema.json`
+  - [x] Parse each template's schema definition
   - [x] Include `_shared/` files in every template context
   - [x] Preserve subdirectory structure in the file map
 - [x] Implement `MemoryLoader` for tests (receives an in-memory map)
-- [x] `schema.json` parser and validator:
+- [x] schema parser and validator:
   - [x] Types: string, number, boolean, enum, array, object
   - [x] Required vs optional fields
   - [x] Defaults for optional fields
@@ -105,12 +105,12 @@ Success criterion: `docker run` starts the server, `curl POST /render/invoice` w
   - [x] On change: rescan the changed template, update `FilesystemLoader`
   - [x] Log which template was reloaded
 - [x] Minimal CLI in `typrest-cli`:
-  - [x] `typrest init <name>`: creates `name/main.typ` and `name/schema.json` with boilerplate
+  - [x] `typrest init <name>`: creates `name/main.typ` and `name/schema.yml` with boilerplate
   - [x] `main.typ` boilerplate already includes `#let data = json(bytes(sys.inputs.data))`
 - [x] README with:
   - [x] What the project is (3 paragraphs)
   - [x] Quickstart: docker-compose + curl in 5 minutes
-  - [x] `schema.json` reference
+  - [x] `schema.yml` reference
   - [x] Complete .typ template example
   - [x] HTTP API reference
 - [x] Example templates in the repository:

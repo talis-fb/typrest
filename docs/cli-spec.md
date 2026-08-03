@@ -57,7 +57,7 @@ my-project/
   templates/
     invoice/
       main.typ
-      schema.json
+      schema.yml
     _shared/
       brand.typ
 ```
@@ -83,7 +83,7 @@ When executed, the command creates:
 - `typrest.toml` in the chosen target root
 - `templates/` in the chosen target root
 - `templates/hello-world/main.typ`
-- `templates/hello-world/schema.json`
+- `templates/hello-world/schema.yml`
 
 Default `typrest.toml` content:
 
@@ -92,23 +92,17 @@ schema_version = "v1"
 templates_root = "templates"
 ```
 
-Default `templates/hello-world/schema.json` content:
+Default `templates/hello-world/schema.yml` content:
 
-```json
-{
-  "schemaVersion": "v1",
-  "request": {
-    "body": {
-      "type": "object",
-      "properties": {
-        "name": {
-          "type": "string",
-          "default": "World",
-        }
-      }
-    }
-  }
-}
+```yaml
+schemaVersion: v1
+request:
+  body:
+    type: object
+    properties:
+      name:
+        type: string
+        default: World
 ```
 
 Default `templates/hello-world/main.typ` content:

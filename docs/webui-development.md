@@ -33,7 +33,7 @@ network.
 ### Choose a Template
 
 The first screen lists every template prepared during server startup. A Schema badge means the
-template has a parsed `schema.json`; Raw JSON means it does not.
+template has a parsed schema definition; Raw JSON means it does not.
 
 Selecting a template opens its workspace and updates the URL:
 
@@ -75,7 +75,7 @@ rendering.
 Raw JSON mode edits the complete request value submitted to the render endpoint. It is always
 available and is the only mode for:
 
-- templates without `schema.json`;
+- templates without a schema definition;
 - schemas whose request root is not an object.
 
 The editor reports invalid JSON before making a request. Switching from Form mode produces a

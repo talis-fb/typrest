@@ -314,7 +314,7 @@ mod tests {
     }
 
     fn bundle() -> TemplateBundle {
-        let schema = Schema::parse(
+        let schema = Schema::parse_json(
             json!({
                 "schemaVersion": "v1",
                 "request": {
@@ -381,7 +381,7 @@ mod tests {
     fn invalid_generated_payload_fails_registry_build() {
         let mut invalid_bundle = bundle();
         invalid_bundle.schema = Some(
-            Schema::parse(
+            Schema::parse_json(
                 json!({
                     "schemaVersion": "v1",
                     "request": {

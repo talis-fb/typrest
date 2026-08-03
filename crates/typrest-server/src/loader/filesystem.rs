@@ -38,16 +38,27 @@ impl FilesystemLoader {
             .into());
         }
 
-        let schema_path = template_dir.join("schema.json");
-        let schema = if schema_path.is_file() {
-            let schema_bytes =
-                fs::read(&schema_path).map_err(|error| FilesystemLoaderError::Read {
-                    path: schema_path.clone(),
-                    error,
-                })?;
-            Some(Schema::parse(&schema_bytes)?)
-        } else {
-            None
+        let unallowed_paths = [template_dir.join("schema.yaml")];
+        if unallowed_paths.iter().any(|path| path.is_file()) {
+            return Err(FilesystemLoaderError::UnsupportedSchemaFilename {
+                template: name.clone(),
+            }
+            .into());
+        }
+
+        let yaml_schema_path = template_dir.join("schema.yml");
+        let json_schema_path = template_dir.join("schema.json");
+
+        let schema = match (yaml_schema_path.is_file(), json_schema_path.is_file()) {
+            (true, true) => {
+                return Err(FilesystemLoaderError::ConflictingSchemaFiles {
+                    template: name.clone(),
+                }
+                .into());
+            }
+            (true, false) => Some(read_schema(&yaml_schema_path, Schema::parse_yaml)?),
+            (false, true) => Some(read_schema(&json_schema_path, Schema::parse_json)?),
+            (false, false) => None,
         };
 
         let mut files = BTreeMap::new();
@@ -121,6 +132,14 @@ enum FilesystemLoaderError {
     #[error("template '{template}' is missing main.typ")]
     MissingMain { template: TemplateName },
 
+    #[error(
+        "template '{template}' contains both schema.yml and schema.json; keep only one schema definition"
+    )]
+    ConflictingSchemaFiles { template: TemplateName },
+
+    #[error("template '{template}' contains unsupported schema.yaml; rename it to schema.yml")]
+    UnsupportedSchemaFilename { template: TemplateName },
+
     #[error("failed to read '{path}': {error}")]
     Read {
         path: PathBuf,
@@ -137,6 +156,17 @@ enum FilesystemLoaderError {
 
     #[error("template path '{path}' is not valid UTF-8")]
     NonUtf8Path { path: PathBuf },
+}
+
+fn read_schema(
+    path: &Path,
+    parse: fn(&[u8]) -> Result<Schema, LoaderError>,
+) -> Result<Schema, LoaderError> {
+    let bytes = fs::read(path).map_err(|error| FilesystemLoaderError::Read {
+        path: path.to_owned(),
+        error,
+    })?;
+    parse(&bytes)
 }
 
 impl From<FilesystemLoaderError> for LoaderError {
@@ -237,8 +267,8 @@ mod tests {
             "#import \"assets/item.typ\"",
         );
         write(
-            &root.path().join("invoice/schema.json"),
-            r#"{"schemaVersion":"v1","request":{"body":{"type":"object"}}}"#,
+            &root.path().join("invoice/schema.yml"),
+            "schemaVersion: v1\nrequest:\n  body:\n    type: object\n",
         );
         write(&root.path().join("invoice/assets/item.typ"), "item");
         write(&root.path().join("_shared/brand.typ"), "brand");
@@ -247,7 +277,7 @@ mod tests {
         let bundle = block_on(loader.load(&TemplateName::new("invoice").unwrap())).unwrap();
 
         assert!(bundle.source.files().contains_key("main.typ"));
-        assert!(bundle.source.files().contains_key("schema.json"));
+        assert!(bundle.source.files().contains_key("schema.yml"));
         assert!(bundle.source.files().contains_key("assets/item.typ"));
         assert!(bundle.source.files().contains_key("_shared/brand.typ"));
         assert_eq!(bundle.schema.as_ref().unwrap().schema_version, "v1");
@@ -266,17 +296,71 @@ mod tests {
     }
 
     #[test]
-    fn lists_template_directories_without_shared() {
+    fn resolves_legacy_json_schema() {
         let root = tempdir().unwrap();
+        write(&root.path().join("invoice/main.typ"), "Hello");
+        write(
+            &root.path().join("invoice/schema.json"),
+            r#"{"schemaVersion":"v1","request":{"body":{"type":"object"}}}"#,
+        );
+
+        let loader = FilesystemLoader::new(root.path());
+        let bundle = block_on(loader.load(&TemplateName::new("invoice").unwrap())).unwrap();
+
+        assert_eq!(bundle.schema.as_ref().unwrap().schema_version, "v1");
+        assert!(bundle.source.files().contains_key("schema.json"));
+    }
+
+    #[test]
+    fn rejects_conflicting_schema_files() {
+        let root = tempdir().unwrap();
+        write(&root.path().join("invoice/main.typ"), "Hello");
+        write(
+            &root.path().join("invoice/schema.yml"),
+            "schemaVersion: v1\nrequest:\n  body: {}\n",
+        );
         write(
             &root.path().join("invoice/schema.json"),
             r#"{"schemaVersion":"v1","request":{"body":{}}}"#,
         );
+
+        let loader = FilesystemLoader::new(root.path());
+        let error = block_on(loader.load(&TemplateName::new("invoice").unwrap())).unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("both schema.yml and schema.json")
+        );
+    }
+
+    #[test]
+    fn rejects_unsupported_yaml_suffix() {
+        let root = tempdir().unwrap();
+        write(&root.path().join("invoice/main.typ"), "Hello");
+        write(
+            &root.path().join("invoice/schema.yaml"),
+            "schemaVersion: v1\nrequest:\n  body: {}\n",
+        );
+
+        let loader = FilesystemLoader::new(root.path());
+        let error = block_on(loader.load(&TemplateName::new("invoice").unwrap())).unwrap_err();
+
+        assert!(error.to_string().contains("rename it to schema.yml"));
+    }
+
+    #[test]
+    fn lists_template_directories_without_shared() {
+        let root = tempdir().unwrap();
+        write(
+            &root.path().join("invoice/schema.yml"),
+            "schemaVersion: v1\nrequest:\n  body: {}\n",
+        );
         write(&root.path().join("invoice/main.typ"), "");
         write(&root.path().join("welcome/main.typ"), "");
         write(
-            &root.path().join("welcome/schema.json"),
-            r#"{"schemaVersion":"v1","request":{"body":{}}}"#,
+            &root.path().join("welcome/schema.yml"),
+            "schemaVersion: v1\nrequest:\n  body: {}\n",
         );
         write(&root.path().join("_shared/brand.typ"), "");
 

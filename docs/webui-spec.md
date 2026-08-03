@@ -78,7 +78,7 @@ for external integrations. External systems should use the supported `/templates
 `/render/:template` routes instead.
 
 Metadata handlers must read from `TemplateRegistry`. They must not scan the filesystem, call
-`TemplateLoader`, or reparse `schema.json`.
+`TemplateLoader`, or reparse the schema file.
 
 #### `GET /_api/templates`
 
@@ -137,7 +137,7 @@ Returns the template name and its canonical parsed schema:
 }
 ```
 
-A template without `schema.json` returns:
+A template without a schema file returns:
 
 ```json
 {
@@ -250,7 +250,7 @@ Before mode switching or rendering, the client must reject:
 - duplicate custom keys;
 - a custom value that is not valid JSON.
 
-Custom fields are test-payload additions only. They do not change `schema.json`.
+Custom fields are test-payload additions only. They do not change `schema.yml`.
 
 ### Mode Switching
 

@@ -251,8 +251,8 @@ mod tests {
         fs::create_dir_all(&template).unwrap();
         fs::write(template.join("main.typ"), main).unwrap();
         fs::write(
-            template.join("schema.json"),
-            r#"{"schemaVersion":"v1","request":{"body":{"type":"object"}}}"#,
+            template.join("schema.yml"),
+            "schemaVersion: v1\nrequest:\n  body:\n    type: object\n",
         )
         .unwrap();
     }
@@ -321,6 +321,26 @@ mod tests {
         reload_template(&loader, &registry, &compiler, &name, &reporter).await;
         let second = registry.get(&name).unwrap();
         assert!(!std::sync::Arc::ptr_eq(&first, &second));
+
+        fs::write(
+            root.path().join("invoice/schema.json"),
+            r#"{"schemaVersion":"v1","request":{"body":{}}}"#,
+        )
+        .unwrap();
+        reload_template(&loader, &registry, &compiler, &name, &reporter).await;
+        let after_conflict = registry.get(&name).unwrap();
+        assert!(std::sync::Arc::ptr_eq(&second, &after_conflict));
+        fs::remove_file(root.path().join("invoice/schema.json")).unwrap();
+
+        fs::write(root.path().join("invoice/schema.yml"), "schemaVersion: [").unwrap();
+        reload_template(&loader, &registry, &compiler, &name, &reporter).await;
+        let after_schema_error = registry.get(&name).unwrap();
+        assert!(std::sync::Arc::ptr_eq(&second, &after_schema_error));
+        fs::write(
+            root.path().join("invoice/schema.yml"),
+            "schemaVersion: v1\nrequest:\n  body:\n    type: object\n",
+        )
+        .unwrap();
 
         compiler.fail.store(true, Ordering::SeqCst);
         fs::write(root.path().join("invoice/main.typ"), "#let broken =").unwrap();

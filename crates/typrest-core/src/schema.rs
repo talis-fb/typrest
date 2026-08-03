@@ -15,9 +15,23 @@ pub struct Schema {
 }
 
 impl Schema {
-    pub fn parse(bytes: &[u8]) -> Result<Self, LoaderError> {
+    /// Parses a JSON schema definition.
+    pub fn parse_json(bytes: &[u8]) -> Result<Self, LoaderError> {
         let value: Value = serde_json::from_slice(bytes).map_err(SchemaError::from)?;
+        Self::from_value(value)
+    }
 
+    /// Parses a YAML schema definition.
+    pub fn parse_yaml(bytes: &[u8]) -> Result<Self, LoaderError> {
+        let options = serde_saphyr::options! {
+            strict_booleans: true,
+        };
+        let value: Value =
+            serde_saphyr::from_slice_with_options(bytes, options).map_err(SchemaError::from)?;
+        Self::from_value(value)
+    }
+
+    fn from_value(value: Value) -> Result<Self, LoaderError> {
         match value.get("schemaVersion") {
             None => return Err(SchemaVersionError::Missing.into()),
             Some(Value::String(version)) if version == "v1" => {}
@@ -200,6 +214,9 @@ pub enum SchemaError {
     #[error("invalid schema JSON: {0}")]
     Json(#[from] serde_json::Error),
 
+    #[error("invalid schema YAML: {0}")]
+    Yaml(#[from] serde_saphyr::Error),
+
     #[error("invalid schema at {path}: {message}")]
     InvalidStructure { path: String, message: String },
 }
@@ -365,7 +382,121 @@ mod tests {
     use super::{Schema, SchemaError, SchemaVersionError, validate, validate_with_defaults};
 
     fn parse(schema: serde_json::Value) -> Schema {
-        Schema::parse(schema.to_string().as_bytes()).expect("schema should parse")
+        Schema::parse_json(schema.to_string().as_bytes()).expect("schema should parse")
+    }
+
+    fn parse_yaml(schema: &str) -> Schema {
+        Schema::parse_yaml(schema.as_bytes()).expect("schema should parse")
+    }
+
+    #[test]
+    fn parses_yaml_schema_with_comments_and_nested_fields() {
+        let schema = parse_yaml(
+            r#"
+# Schema definitions are authored as YAML.
+schemaVersion: v1
+request:
+  body:
+    type: object
+    properties:
+      name:
+        type: string
+        required: true
+      status:
+        type: string
+        enum: [draft, final]
+"#,
+        );
+
+        let properties = schema.body().properties.as_ref().unwrap();
+        assert!(properties["name"].required);
+        assert_eq!(
+            properties["status"].enum_values,
+            Some(vec![json!("draft"), json!("final")])
+        );
+    }
+
+    #[test]
+    fn yaml_uses_strict_boolean_values() {
+        let schema = parse_yaml(
+            r#"
+schemaVersion: v1
+request:
+  body:
+    type: string
+    enum: [on, off]
+"#,
+        );
+
+        assert_eq!(
+            schema.body().enum_values,
+            Some(vec![json!("on"), json!("off")])
+        );
+    }
+
+    #[test]
+    fn rejects_malformed_yaml() {
+        let error = Schema::parse_yaml(b"schemaVersion: [v1\n").unwrap_err();
+
+        assert!(matches!(
+            error,
+            LoaderError::SchemaError(SchemaError::Yaml(_))
+        ));
+    }
+
+    #[test]
+    fn rejects_duplicate_yaml_keys() {
+        let error =
+            Schema::parse_yaml(b"schemaVersion: v1\nschemaVersion: v1\nrequest:\n  body: {}\n")
+                .unwrap_err();
+
+        assert!(matches!(
+            error,
+            LoaderError::SchemaError(SchemaError::Yaml(_))
+        ));
+    }
+
+    #[test]
+    fn rejects_multiple_yaml_documents() {
+        let error = Schema::parse_yaml(
+            b"schemaVersion: v1\nrequest:\n  body: {}\n---\nschemaVersion: v1\nrequest:\n  body: {}\n",
+        )
+        .unwrap_err();
+
+        assert!(matches!(
+            error,
+            LoaderError::SchemaError(SchemaError::Yaml(_))
+        ));
+    }
+
+    #[test]
+    fn preserves_version_error_classification_for_yaml() {
+        let missing = Schema::parse_yaml(b"request:\n  body: {}\n").unwrap_err();
+        let unsupported =
+            Schema::parse_yaml(b"schemaVersion: v2\nrequest:\n  body: {}\n").unwrap_err();
+
+        assert!(matches!(
+            missing,
+            LoaderError::SchemaVersionError(SchemaVersionError::Missing)
+        ));
+        assert!(matches!(
+            unsupported,
+            LoaderError::SchemaVersionError(SchemaVersionError::Unsupported(version))
+                if version == "v2"
+        ));
+    }
+
+    #[test]
+    fn preserves_structural_error_classification_for_yaml() {
+        let error = Schema::parse_yaml(
+            b"schemaVersion: v1\nrequest:\n  body:\n    type: string\n    properties: {}\n",
+        )
+        .unwrap_err();
+
+        assert!(matches!(
+            error,
+            LoaderError::SchemaError(SchemaError::InvalidStructure { .. })
+        ));
     }
 
     #[test]
@@ -432,7 +563,7 @@ mod tests {
 
     #[test]
     fn rejects_inconsistent_schema_during_parse() {
-        let error = Schema::parse(
+        let error = Schema::parse_json(
             json!({
                 "schemaVersion": "v1",
                 "request": {
@@ -455,7 +586,7 @@ mod tests {
 
     #[test]
     fn rejects_mixed_enum_values_during_parse() {
-        let error = Schema::parse(
+        let error = Schema::parse_json(
             json!({
                 "schemaVersion": "v1",
                 "request": {
@@ -475,7 +606,7 @@ mod tests {
 
     #[test]
     fn rejects_missing_schema_version_during_parse() {
-        let error = Schema::parse(
+        let error = Schema::parse_json(
             json!({
                 "request": {
                     "body": {}
@@ -494,7 +625,7 @@ mod tests {
 
     #[test]
     fn rejects_unsupported_schema_version_during_parse() {
-        let error = Schema::parse(
+        let error = Schema::parse_json(
             json!({
                 "schemaVersion": "v2",
                 "request": {

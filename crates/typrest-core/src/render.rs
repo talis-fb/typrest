@@ -84,7 +84,7 @@ mod tests {
     }
 
     fn schema(body: serde_json::Value) -> Schema {
-        Schema::parse(
+        Schema::parse_json(
             json!({
                 "schemaVersion": "v1",
                 "request": { "body": body }

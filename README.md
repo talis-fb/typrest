@@ -4,7 +4,7 @@ Typrest is an HTTP server for server-side PDF generation with Typst. It is built
 
 Applications integrate with Typrest through HTTP. A service in any language sends JSON to a template endpoint, and Typrest validates the payload, compiles the matching Typst template, and returns PDF bytes.
 
-The current MVP runs in filesystem mode. Templates live in a directory mounted into the server, and each template contains a required `main.typ` file. An optional `schema.json` contract can validate request payloads.
+The current MVP runs in filesystem mode. Templates live in a directory mounted into the server, and each template contains a required `main.typ` file. An optional `schema.yml` contract can validate request payloads.
 
 ## Quickstart
 
@@ -48,16 +48,16 @@ cargo run -- check
 templates/
   invoice/
     main.typ
-    schema.json
+    schema.yml
     assets/
   welcome/
     main.typ
-    schema.json
+    schema.yml
   _shared/
     brand.typ
 ```
 
-Each template directory must contain `main.typ`; `schema.json` is optional. If it is absent, Typrest skips payload validation and injects the request JSON directly through `sys.inputs.data`. Files under `_shared/` are available to every template.
+Each template directory must contain `main.typ`; `schema.yml` is optional. Legacy `schema.json` files are also accepted, but a template cannot contain both. If no schema is present, Typrest skips payload validation and injects the request JSON directly through `sys.inputs.data`. Files under `_shared/` are available to every template.
 
 ## Complete Typst Example
 
@@ -71,25 +71,19 @@ Each template directory must contain `main.typ`; `schema.json` is optional. If i
 
 The JSON request body is injected into Typst through `sys.inputs.data`.
 
-## schema.json Reference
+## schema.yml Reference
 
 Typrest supports schema version `v1`. The root object must contain `schemaVersion` and `request.body`.
 
-```json
-{
-  "schemaVersion": "v1",
-  "request": {
-    "body": {
-      "type": "object",
-      "properties": {
-        "name": {
-          "type": "string",
-          "required": true
-        }
-      }
-    }
-  }
-}
+```yaml
+schemaVersion: v1
+request:
+  body:
+    type: object
+    properties:
+      name:
+        type: string
+        required: true
 ```
 
 Supported field types are `string`, `number`, `boolean`, `object`, `array`, and `null`. Object schemas use `properties`, array schemas use `items`, fields are optional by default, and optional fields can define `default`.
@@ -153,7 +147,7 @@ Error responses use JSON:
 Status codes:
 
 - `404`: template not found
-- `422`: payload does not match `schema.json` (when present)
+- `422`: payload does not match the template schema (when present)
 - `500`: Typst compilation or PDF export failed
 
 ## Compiler Diagnostics

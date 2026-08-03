@@ -18,7 +18,7 @@ The phrase "shared World" means shared template-invariant world state. It does n
 4. Load-time errors remain load errors:
    - missing template files become `LoaderError::IoError`;
    - invalid or unsupported `schemaVersion` becomes `SchemaVersionError`;
-   - structurally invalid schema JSON becomes `SchemaError`.
+   - syntactically or structurally invalid schema definitions become `SchemaError`.
 5. The compiler prepares the reusable template state from `TemplateSource`.
 6. The startup path generates a minimal valid sample payload from the template `Schema`.
 7. The compiler performs a real Typst compile and PDF export using the prepared template state and the generated sample payload.

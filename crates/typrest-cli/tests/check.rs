@@ -13,8 +13,8 @@ fn write_project(root: &Path, main: &str) {
     .unwrap();
     fs::write(root.join("templates/invoice/main.typ"), main).unwrap();
     fs::write(
-        root.join("templates/invoice/schema.json"),
-        r#"{"schemaVersion":"v1","request":{"body":{"type":"object"}}}"#,
+        root.join("templates/invoice/schema.yml"),
+        "schemaVersion: v1\nrequest:\n  body:\n    type: object\n",
     )
     .unwrap();
 }

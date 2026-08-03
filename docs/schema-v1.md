@@ -1,8 +1,12 @@
-# Schema Specification (`schema.json`) - Version 1
+# Schema Specification (`schema.yml`) - Version 1
 
 ## Goal
 
-The optional `schema.json` file defines the expected contract for a JSON value. A template without this file accepts any JSON payload and receives it directly through `sys.inputs.data`; no payload validation is performed.
+The optional `schema.yml` file defines the expected contract for a JSON value. A template without a schema file accepts any JSON payload and receives it directly through `sys.inputs.data`; no payload validation is performed.
+
+`schema.yml` is the canonical filename and uses YAML syntax. Legacy `schema.json` files remain supported with JSON syntax. A template must not contain both files. The unsupported `schema.yaml` spelling is rejected with an instruction to rename it to `schema.yml`, preventing accidental schema-less loading.
+
+YAML schema files contain exactly one document. Duplicate mapping keys are invalid. Only `true` and `false` are interpreted as booleans; values such as `on` and `off` remain strings. YAML comments are allowed.
 
 In version `v1`, only request body validation (`request.body`) is supported.
 
@@ -12,21 +16,15 @@ The `schemaVersion` field is required.
 
 Example:
 
-```json
-{
-  "schemaVersion": "v1",
-  "request": {
-    "body": {
-      "type": "object",
-      "properties": {
-        "name": {
-          "type": "string",
-          "required": true
-        }
-      }
-    }
-  }
-}
+```yaml
+schemaVersion: v1
+request:
+  body:
+    type: object
+    properties:
+      name:
+        type: string
+        required: true
 ```
 
 ---
@@ -34,7 +32,7 @@ Example:
 # Structure
 
 ```text
-schema.json
+schema.yml
  ├── schemaVersion (string)
  └── request
       └── body (Schema)
@@ -54,7 +52,7 @@ All schema fields are optional.
 
 An empty schema:
 
-```json
+```yaml
 {}
 ```
 
@@ -141,18 +139,13 @@ Each property represents the schema of an object field.
 
 Example:
 
-```json
-{
-  "type": "object",
-  "properties": {
-    "name": {
-      "type": "string"
-    },
-    "age": {
-      "type": "number"
-    }
-  }
-}
+```yaml
+type: object
+properties:
+  name:
+    type: string
+  age:
+    type: number
 ```
 
 Using `properties` when `type` is not `object` is a schema error.
@@ -177,13 +170,10 @@ Defines the schema of each array element.
 
 Example:
 
-```json
-{
-  "type": "array",
-  "items": {
-    "type": "string"
-  }
-}
+```yaml
+type: array
+items:
+  type: string
 ```
 
 Using `items` when `type` is not `array` is a schema error.
@@ -211,26 +201,16 @@ Rules:
 
 Example:
 
-```json
-{
-  "type": "string",
-  "enum": [
-    "BRL",
-    "USD"
-  ]
-}
+```yaml
+type: string
+enum: [BRL, USD]
 ```
 
 Invalid example:
 
-```json
-{
-  "type": "string",
-  "enum": [
-    "BRL",
-    10
-  ]
-}
+```yaml
+type: string
+enum: [BRL, 10]
 ```
 
 ---
@@ -259,11 +239,9 @@ Input:
 
 Schema:
 
-```json
-{
-  "type": "string",
-  "default": "anonymous"
-}
+```yaml
+type: string
+default: anonymous
 ```
 
 Result:
