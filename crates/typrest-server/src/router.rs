@@ -1,5 +1,5 @@
 use axum::Router;
-use axum::routing::{get, post};
+use axum::routing::get;
 
 use crate::config::ServerConfig;
 use crate::handlers::{api, healthz, render_template, webui};
@@ -13,7 +13,10 @@ pub fn router(state: AppState, config: &ServerConfig) -> Router {
             "/_api/templates/{*template_id}",
             get(api::template_metadata),
         )
-        .route("/{*template_id}", post(render_template::render_template));
+        .route(
+            "/{*template_id}",
+            get(render_template::render_template).post(render_template::render_template),
+        );
 
     let router = if config.web_ui {
         router

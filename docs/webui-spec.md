@@ -155,7 +155,7 @@ array—is sent unchanged to the render endpoint.
 
 ## Rendering and Blob Lifecycle
 
-The only PDF-producing request is:
+The bundled UI's PDF-producing request is:
 
 ```http
 POST /financial/invoice
@@ -202,7 +202,8 @@ server-side rendering, a frontend router, or an alternative rendering engine.
 - Metadata routes remain available and read exclusively from the prepared registry.
 - Object schemas support Form and Raw JSON workflows; other roots remain renderable as raw JSON.
 - Invalid JSON and colliding custom keys are blocked before rendering.
-- Every preview and download originates from `POST /{*template_id}`.
+- Every preview and download originates from the UI's `POST /{*template_id}` request. The API also
+  supports bodyless `GET /{*template_id}` rendering.
 - Replaced and abandoned Blob URLs are revoked.
 - Embedded files use the specified content types and cache policy.
 - Structured validation, compilation, warning, and PDF response contracts remain unchanged.

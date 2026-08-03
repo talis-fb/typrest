@@ -134,10 +134,12 @@ Returns prepared templates in template-ID order:
 Returns the prepared template ID and its parsed schema, or `"schema": null` when no schema is
 present. These metadata endpoints currently remain mounted when the Web UI is disabled.
 
-### `POST /{*template_id}`
+### `GET /{*template_id}` and `POST /{*template_id}`
 
-Send a JSON request body with `Content-Type: application/json`. A successful response is
-`application/pdf` with status `200`.
+Both methods render the selected template and return `application/pdf` with status `200`. POST
+accepts a JSON request body with `Content-Type: application/json`. A bodyless GET has the same
+behavior as a bodyless POST: schema-less templates use `{}`, while schema-backed templates retain
+the existing invalid-JSON response.
 
 Errors use a structured JSON envelope:
 

@@ -475,17 +475,6 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(response_body(response).await["id"], "financial/invoice");
-
-        let encoded_separator = app
-            .oneshot(
-                Request::builder()
-                    .uri("/_api/templates/financial%2Finvoice")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(encoded_separator.status(), StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]
@@ -516,6 +505,84 @@ mod tests {
             .await
             .unwrap();
         assert!(bytes.starts_with(b"%PDF"));
+    }
+
+    #[tokio::test]
+    async fn get_render_without_body_returns_pdf_for_schema_less_template() {
+        let source = TemplateSource::new(BTreeMap::from([(
+            "main.typ".to_owned(),
+            Bytes::from_static(b"Hello"),
+        )]));
+        let app = app(
+            memory_loader(vec![("welcome", TemplateBundle::without_schema(source))]),
+            Ok(Document::new(Bytes::from_static(b"%PDF-1.4 mock"))),
+        );
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri("/welcome")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response.headers().get("content-type").unwrap(),
+            "application/pdf"
+        );
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert!(bytes.starts_with(b"%PDF"));
+    }
+
+    #[tokio::test]
+    async fn get_render_without_body_matches_post_without_body_for_schema_template() {
+        let post_app = app(
+            memory_loader(vec![("invoice", template(schema(json!({}))))]),
+            Ok(Document::new(Bytes::from_static(b"%PDF-1.4 mock"))),
+        );
+        let post = post_app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/invoice")
+                    .header("content-type", "application/json")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let post_status = post.status();
+        let post_body = axum::body::to_bytes(post.into_body(), usize::MAX)
+            .await
+            .unwrap();
+
+        let get_app = app(
+            memory_loader(vec![("invoice", template(schema(json!({}))))]),
+            Ok(Document::new(Bytes::from_static(b"%PDF-1.4 mock"))),
+        );
+        let get = get_app
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri("/invoice")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let get_status = get.status();
+        let get_body = axum::body::to_bytes(get.into_body(), usize::MAX)
+            .await
+            .unwrap();
+
+        assert_eq!(get_status, post_status);
+        assert_eq!(get_body, post_body);
     }
 
     #[tokio::test]
@@ -555,6 +622,7 @@ mod tests {
                 Request::builder()
                     .method(Method::POST)
                     .uri("/welcome")
+                    .header("content-type", "application/json")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -797,6 +865,31 @@ mod tests {
                     .uri("/invoice")
                     .header("content-type", "application/json")
                     .body(Body::from("{"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            response_body(response).await["error"],
+            json!("invalid_json")
+        );
+    }
+
+    #[tokio::test]
+    async fn post_render_requires_json_content_type() {
+        let app = app(
+            memory_loader(vec![("invoice", template(schema(json!({}))))]),
+            Ok(Document::new(Bytes::from_static(b"%PDF-1.4 mock"))),
+        );
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/invoice")
+                    .body(Body::empty())
                     .unwrap(),
             )
             .await

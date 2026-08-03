@@ -117,6 +117,7 @@ pinned in the workspace manifest.
 | `GET` | `/_healthz` | Always |
 | `GET` | `/_api/templates` | Always |
 | `GET` | `/_api/templates/{*template_id}` | Always |
+| `GET` | `/{*template_id}` | Always |
 | `POST` | `/{*template_id}` | Always |
 | `GET` | `/` | Redirects to `/_webui/` only with `web_ui = true` |
 | `GET` | `/_webui`, `/_webui/`, `/_webui/*` | Only with `web_ui = true` |

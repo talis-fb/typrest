@@ -3,7 +3,7 @@ use std::time::Instant;
 use axum::body::{Body, Bytes};
 use axum::extract::{Path, State};
 use axum::http::header::CONTENT_TYPE;
-use axum::http::{HeaderMap, HeaderValue, StatusCode};
+use axum::http::{HeaderMap, HeaderValue, Method, StatusCode};
 use axum::response::{IntoResponse, Response};
 use serde_json::Value;
 use tracing::{info, warn};
@@ -16,6 +16,7 @@ use crate::server::AppState;
 pub async fn render_template(
     State(state): State<AppState>,
     Path(template_id): Path<String>,
+    method: Method,
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<Response, ApiError> {
@@ -28,21 +29,17 @@ pub async fn render_template(
     })?;
     let template_for_log = template.clone();
 
-    let schema = state
-        .registry
-        .get(&template)
-        .and_then(|entry| entry.schema().cloned());
+    if method == Method::POST && !has_json_content_type(&headers) {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "invalid_json",
+            "request body must have content-type application/json",
+        ));
+    }
 
-    let payload = if body.is_empty() && schema.is_none() {
+    let payload = if body.is_empty() {
         Value::Object(serde_json::Map::new())
     } else {
-        if !has_json_content_type(&headers) {
-            return Err(ApiError::new(
-                StatusCode::BAD_REQUEST,
-                "invalid_json",
-                "request body must have content-type application/json",
-            ));
-        }
         serde_json::from_slice(&body).map_err(|error| {
             ApiError::new(StatusCode::BAD_REQUEST, "invalid_json", error.to_string())
         })?

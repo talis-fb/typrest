@@ -83,8 +83,8 @@ web_ui = true
 
 When true, `GET /` redirects to `/_webui/`, and the server mounts `/_webui`, `/_webui/`, and
 `/_webui/*`. The `/_api/templates` and `/_api/templates/{*template_id}` metadata routes remain
-mounted whether this flag is true or false. `POST /{*template_id}` and `GET /_healthz` are also
-independent of the flag.
+mounted whether this flag is true or false. `GET /{*template_id}`, `POST /{*template_id}`, and
+`GET /_healthz` are also independent of the flag.
 
 The Web UI has no authentication. Bind to loopback when enabling it:
 

@@ -86,6 +86,7 @@ fn resolve_target_root(
 
 const TYPREST_TOML: &str = r#"schema_version = "v1"
 templates_root = "templates"
+web_ui = true
 "#;
 
 const MAIN_TYP: &str = r#"#let data = json(bytes(sys.inputs.data))
