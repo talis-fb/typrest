@@ -8,15 +8,16 @@ Typrest is a service, not a PDF library. Clients submit JSON to an HTTP endpoint
 compiled by Typst. The implemented runtime is filesystem mode: templates live under the
 `templates_root` configured by `typrest.toml`.
 
-Store mode, tags, publishing, remote backends, authentication, SDKs, compilation caches, and Typst
-Universe packages are outside the current scope.
+Store mode, tags, publishing, remote backends, authentication, SDKs, and compilation caches are
+outside the current scope. Filesystem mode supports literal, fully versioned packages from the
+Typst Universe `preview` namespace.
 
 ## Workspace Responsibilities
 
 | Area | Responsibility |
 |---|---|
 | `typrest-core` | Domain types, schemas, validation, compiler ACL, prepared registry, rendering |
-| `typrest-server` | Filesystem loader, watch mode, Axum routes, HTTP errors, startup, diagnostics |
+| `typrest-server` | Filesystem and package loading, watch mode, Axum routes, startup, diagnostics |
 | `typrest-cli` | Project discovery/configuration and the `init`, `check`, and `serve` commands |
 | `webui` | Optional Svelte development UI and committed embedded production assets |
 
@@ -31,6 +32,9 @@ filesystem loader belongs to `typrest-server` and implements the core `TemplateL
 | `Schema` | Parsed optional `schema.yml` or legacy `schema.json` payload contract |
 | `TemplateSource` | Ordered map of relative virtual path to bytes |
 | `TemplateBundle` | Raw `TemplateSource` plus `Option<Schema>` returned by a loader |
+| `PackageCoordinate` | Exact package namespace, name, and version |
+| `PackageSource` | Ordered map of package-relative virtual path to bytes |
+| `PackageRepository` | Preparation-time package cache and download boundary |
 | `PreparedTemplate` | Opaque compiler-owned, template-invariant Typst state |
 | `PreparedTemplateBundle` | A prepared template plus its optional schema |
 | `TemplateRegistry` | In-memory ID-to-prepared-bundle map built at startup and updated by watch mode |
@@ -46,7 +50,7 @@ filesystem loader belongs to `typrest-server` and implements the core `TemplateL
 ```text
 FilesystemLoader
   -> TemplateBundle
-  -> PdfCompiler::prepare
+  -> PdfCompiler::prepare -> PackageRepository
   -> generated warmup payload
   -> PdfCompiler::compile_prepared
   -> TemplateRegistry
@@ -66,7 +70,7 @@ schema supplies its deterministic sample payload; a schema-less template warms w
 
 At request time, `RenderService` looks up the prepared bundle, validates and applies schema defaults
 when a schema exists, and compiles with request-specific `sys.inputs.data`. Normal requests never
-call the loader or read files.
+call a loader or package repository, read files, or access the network.
 
 Watch mode builds candidates without holding the registry write lock. Ordinary source changes
 replace one entry atomically. Route-topology and `_shared/` changes build a complete candidate and
@@ -95,9 +99,9 @@ pub trait PdfCompiler: Send + Sync {
 }
 ```
 
-The private compiler files own Typst worlds, sources, fonts, PDF export, and diagnostic mapping.
-All public diagnostics contain owned Typrest values. The three Typst crates are exactly and jointly
-pinned in the workspace manifest.
+The private compiler files own Typst worlds, sources, fonts, package import discovery, PDF export,
+and diagnostic mapping. All public diagnostics contain owned Typrest values. Typst integration
+crates are exactly pinned to the same version in the workspace manifest.
 
 ## Error Boundaries
 
@@ -135,7 +139,10 @@ The metadata handlers read exclusively from `TemplateRegistry`. The current serv
 - Template paths remain virtual and relative throughout the compiler boundary.
 - Startup validates all discovered templates in deterministic ID order.
 - Compiler warnings are retained and reported but do not fail otherwise successful compilation.
-- Unsupported Typst packages resolve as missing virtual files; no network package fetch occurs.
+- Literal, fully versioned `@preview` imports resolve during preparation and remain in memory for
+  request compilation.
+- Package coordinates remain separate virtual roots; package and project paths never collide.
+- Other package namespaces and dynamic package import expressions are unsupported.
 
 See the [architectural decision records](adr/README.md) for rationale and the
 [testing guide](testing.md) for the tests that enforce these boundaries.

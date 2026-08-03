@@ -83,6 +83,8 @@ additional operational model:
 - [ ] Implement filesystem and remote Store backends
 - [ ] Add Store-aware CLI commands and tagged render routes
 
-Authentication, SDKs, S3, garbage collection, compilation caches, and Typst Universe packages also
-remain out of scope until separately designed and accepted in an ADR under
+Literal, versioned `@preview` Typst Universe imports are implemented with preparation-time download
+and a project-local cache. Authentication, SDKs, S3, garbage collection, compilation caches, other
+package namespaces, custom registries, and package lockfiles remain out of scope until separately
+designed and accepted in an ADR under
 [`docs/adr/`](docs/adr/README.md).

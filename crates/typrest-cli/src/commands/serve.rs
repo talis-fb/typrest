@@ -18,7 +18,7 @@ pub(crate) async fn run_serve(
         return false;
     };
     let reporter = DiagnosticReporter::new(output_format, color, &config.templates_root);
-    let server_config = ServerConfig::new(&config.templates_root, port)
+    let server_config = ServerConfig::new(&config.templates_root, &config.package_cache_dir, port)
         .with_host(hostname)
         .with_watch(watch)
         .with_web_ui(config.web_ui);

@@ -33,5 +33,7 @@ tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt", "json"] }
 typst = "=0.15.1"
 typst-assets = { version = "=0.15.1", features = ["fonts"] }
+typst-kit = { version = "=0.15.1", default-features = false, features = ["system-downloader", "system-packages", "vendor-openssl"] }
 typst-pdf = "=0.15.1"
+typst-syntax = "=0.15.1"
 insta = "1"

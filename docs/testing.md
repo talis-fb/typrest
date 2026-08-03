@@ -40,6 +40,7 @@ source changes must include the rebuilt output; never edit it by hand.
 | Core domain | Direct unit assertions using `MemoryLoader` and mock compilers |
 | Schema | Parsing, structural consistency, validation order, defaults, and paths |
 | Compiler ACL | Real Typst compilation, fonts, imports, payload injection, diagnostics, export |
+| Packages | In-memory fixtures, transitive imports, cache loading, and no request-time I/O |
 | Registry | Startup aggregation, warmup samples, prepared reuse, replacement behavior |
 | Server | Router, status/error mapping, metadata, render responses, startup, watch mode |
 | CLI | Clap parsing, project discovery, configuration, scaffolding, check behavior |
@@ -48,6 +49,7 @@ source changes must include the rebuilt output; never edit it by hand.
 
 Normal core and handler tests should not invoke real Typst unless integration is the behavior under
 test. Filesystem tests use temporary directories and must not depend on global machine state.
+Package tests use in-memory or temporary cached fixtures and must not require live Universe access.
 
 ## Snapshot Policy
 

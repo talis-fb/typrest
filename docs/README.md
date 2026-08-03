@@ -13,6 +13,7 @@ the smallest relevant document before changing code or a public contract.
 | Change schemas or validation | [`schema.yml` v1 specification](schema-v1.md) | Normative specification |
 | Change startup, registry, or watch mode | [Startup template compilation](startup-template-compilation.md) | Current architecture |
 | Change the Typst integration | [Typst integration reference](typst-integration.md) | Implementation reference |
+| Change package resolution | [ADR-0011](adr/0011-resolve-preview-packages-during-preparation.md) | Accepted decision |
 | Change diagnostics or logging | [Compiler diagnostics and logging](diagnostics.md) | Current contract |
 | Add or update tests | [Testing guide](testing.md) | Development guide |
 | Use or develop the Web UI | [Web UI development guide](webui-development.md) | Development guide |

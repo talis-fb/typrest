@@ -1,4 +1,5 @@
 mod fonts;
+mod packages;
 mod prepared_template;
 mod world;
 
@@ -8,7 +9,7 @@ use async_trait::async_trait;
 
 use crate::{
     CompilationDiagnostic, CompilationError, CompilationReport, DiagnosticSeverity, Document,
-    TemplateSource,
+    PackageRepository, TemplateSource,
 };
 
 use self::fonts::FontRegistry;
@@ -29,13 +30,20 @@ pub trait PdfCompiler: Send + Sync {
 #[derive(Clone)]
 pub struct TypstCompiler {
     fonts: Arc<FontRegistry>,
+    packages: Option<Arc<dyn PackageRepository>>,
 }
 
 impl TypstCompiler {
     pub fn new() -> Self {
         Self {
             fonts: Arc::new(FontRegistry::new()),
+            packages: None,
         }
+    }
+
+    pub fn with_package_repository(mut self, packages: Arc<dyn PackageRepository>) -> Self {
+        self.packages = Some(packages);
+        self
     }
 }
 
@@ -48,8 +56,9 @@ impl Default for TypstCompiler {
 #[async_trait]
 impl PdfCompiler for TypstCompiler {
     async fn prepare(&self, source: &TemplateSource) -> Result<PreparedTemplate, CompilationError> {
+        let packages = packages::resolve(source, self.packages.as_deref()).await?;
         Ok(PreparedTemplate {
-            inner: Some(world::prepare(source, &self.fonts)?),
+            inner: Some(world::prepare(source, packages, &self.fonts)?),
         })
     }
 
@@ -79,8 +88,64 @@ fn compilation_error(message: impl Into<String>) -> CompilationError {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
     use std::fs;
     use std::path::Path;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use async_trait::async_trait;
+    use bytes::Bytes;
+    use serde_json::json;
+
+    use crate::{
+        PackageCoordinate, PackageRepository, PackageResolutionError, PackageSource, PdfCompiler,
+        TemplateSource, TypstCompiler,
+    };
+
+    struct MemoryPackages {
+        packages: BTreeMap<PackageCoordinate, Arc<PackageSource>>,
+        resolutions: AtomicUsize,
+    }
+
+    #[async_trait]
+    impl PackageRepository for MemoryPackages {
+        async fn resolve(
+            &self,
+            package: &PackageCoordinate,
+        ) -> Result<Arc<PackageSource>, PackageResolutionError> {
+            self.resolutions.fetch_add(1, Ordering::SeqCst);
+            self.packages
+                .get(package)
+                .cloned()
+                .ok_or_else(|| PackageResolutionError::NotFound {
+                    package: package.clone(),
+                })
+        }
+    }
+
+    fn coordinate(name: &str) -> PackageCoordinate {
+        PackageCoordinate::new("preview", name, "1.0.0")
+    }
+
+    fn package(name: &str, library: &str) -> Arc<PackageSource> {
+        Arc::new(PackageSource::new(BTreeMap::from([
+            (
+                "typst.toml".to_owned(),
+                Bytes::from(format!(
+                    "[package]\nname = \"{name}\"\nversion = \"1.0.0\"\nentrypoint = \"lib.typ\"\n"
+                )),
+            ),
+            ("lib.typ".to_owned(), Bytes::from(library.to_owned())),
+        ])))
+    }
+
+    fn source(main: &str) -> TemplateSource {
+        TemplateSource::new(BTreeMap::from([(
+            "main.typ".to_owned(),
+            Bytes::from(main.to_owned()),
+        )]))
+    }
 
     #[test]
     fn typst_imports_are_confined_to_private_compiler_files() {
@@ -102,6 +167,89 @@ mod tests {
                 .collect::<Vec<_>>()
                 .join(", ")
         );
+    }
+
+    #[test]
+    fn prepares_transitive_packages_and_never_resolves_during_render() {
+        let packages = Arc::new(MemoryPackages {
+            packages: BTreeMap::from([
+                (
+                    coordinate("fixture"),
+                    package(
+                        "fixture",
+                        r#"#import "@preview/dependency:1.0.0": greeting
+#let message = greeting"#,
+                    ),
+                ),
+                (
+                    coordinate("dependency"),
+                    package("dependency", "#let greeting = [Hello from a package]"),
+                ),
+            ]),
+            resolutions: AtomicUsize::new(0),
+        });
+        let compiler = TypstCompiler::new().with_package_repository(packages.clone());
+        let prepared = futures_executor::block_on(compiler.prepare(&source(
+            r#"#import "@preview/fixture:1.0.0": message
+#message"#,
+        )))
+        .unwrap();
+
+        assert_eq!(packages.resolutions.load(Ordering::SeqCst), 2);
+        let first =
+            futures_executor::block_on(compiler.compile_prepared(&prepared, &json!({}))).unwrap();
+        let second =
+            futures_executor::block_on(compiler.compile_prepared(&prepared, &json!({}))).unwrap();
+
+        assert!(first.bytes().starts_with(b"%PDF"));
+        assert!(second.bytes().starts_with(b"%PDF"));
+        assert_eq!(packages.resolutions.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn package_diagnostics_include_the_coordinate() {
+        let packages = Arc::new(MemoryPackages {
+            packages: BTreeMap::from([(
+                coordinate("broken"),
+                package("broken", "#let value = missing-name"),
+            )]),
+            resolutions: AtomicUsize::new(0),
+        });
+        let compiler = TypstCompiler::new().with_package_repository(packages);
+        let prepared = futures_executor::block_on(compiler.prepare(&source(
+            r#"#import "@preview/broken:1.0.0": value
+#value"#,
+        )))
+        .unwrap();
+        let error = futures_executor::block_on(compiler.compile_prepared(&prepared, &json!({})))
+            .unwrap_err();
+
+        assert!(
+            error
+                .report()
+                .diagnostics()
+                .iter()
+                .filter_map(|diagnostic| diagnostic.location.as_ref())
+                .any(|location| location.path == "@preview/broken:1.0.0/lib.typ")
+        );
+    }
+
+    #[test]
+    fn rejects_unsupported_package_namespaces_during_prepare() {
+        let packages = Arc::new(MemoryPackages {
+            packages: BTreeMap::new(),
+            resolutions: AtomicUsize::new(0),
+        });
+        let compiler = TypstCompiler::new().with_package_repository(packages.clone());
+        let error = match futures_executor::block_on(
+            compiler.prepare(&source(r#"#import "@local/fixture:1.0.0""#)),
+        ) {
+            Ok(_) => panic!("unsupported package namespace should fail preparation"),
+            Err(error) => error,
+        };
+
+        assert!(error.primary_message().contains("only '@preview'"));
+        assert_eq!(packages.resolutions.load(Ordering::SeqCst), 0);
     }
 
     fn find_typst_imports(root: &Path, allowed: &Path, violations: &mut Vec<std::path::PathBuf>) {

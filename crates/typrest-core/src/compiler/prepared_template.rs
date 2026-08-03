@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use typst::{foundations::Bytes, syntax::Source};
 
-use crate::{Schema, compiler::fonts::LoadedFonts};
+use crate::{Schema, compiler::fonts::LoadedFonts, compiler::packages::PreparedPackages};
 
 pub struct PreparedTemplate {
     pub(super) inner: Option<PreparedTemplateInner>,
@@ -19,6 +19,7 @@ impl PreparedTemplate {
 pub(super) struct PreparedTemplateInner {
     pub(super) main: Source,
     pub(super) files: BTreeMap<String, Bytes>,
+    pub(super) packages: PreparedPackages,
     pub(super) fonts: LoadedFonts,
 }
 

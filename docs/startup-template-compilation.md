@@ -15,7 +15,8 @@ request-specific.
 2. Call `TemplateLoader::list()` to recursively discover template IDs in deterministic order.
 3. Load each `TemplateBundle`, including template-local and `_shared/` files.
 4. Parse an optional schema while preserving load errors as `LoaderError` variants.
-5. Call `PdfCompiler::prepare()` to build reusable compiler state.
+5. Call `PdfCompiler::prepare()` to discover, cache, and load literal `@preview` package imports and
+   build reusable compiler state.
 6. Generate a deterministic payload from the schema, or use `{}` without a schema.
 7. Validate the generated payload when a schema exists.
 8. Run a real `compile_prepared()` and PDF export.
@@ -67,8 +68,8 @@ filesystem or reparse schemas.
 5. The compiler builds request-specific `sys.inputs.data` and reuses the prepared template.
 6. The handler returns PDF bytes or maps `RenderError` to structured JSON.
 
-Normal requests never read template files, call `TemplateLoader::load()`, rebuild template fonts,
-or reconstruct the template source map.
+Normal requests never read template or package files, call `TemplateLoader::load()` or
+`PackageRepository::resolve()`, rebuild fonts, reconstruct source maps, or access the network.
 
 ## Watch Mode
 
@@ -76,6 +77,7 @@ Filesystem notifications are processed by one asynchronous worker so older reloa
 after newer changes and overwrite them.
 
 - A template-local change reloads, prepares, validates, and warms that template.
+- A new package import may download during preparation; failure leaves the previous entry active.
 - A route-topology or `_shared/` change builds a complete candidate registry after a short debounce.
 - The candidate is built without holding the registry write lock.
 - Success swaps the affected entry or complete registry with one short write operation.

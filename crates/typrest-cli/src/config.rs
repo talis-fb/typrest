@@ -9,10 +9,13 @@ use typrest_server::output::{
 };
 
 pub const CONFIG_FILE: &str = "typrest.toml";
+pub const PROJECT_DATA_DIR: &str = ".typrest";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectConfig {
+    pub project_root: PathBuf,
     pub templates_root: PathBuf,
+    pub package_cache_dir: PathBuf,
     pub web_ui: bool,
 }
 
@@ -79,7 +82,9 @@ pub fn load_project_config(project_root: &Path) -> std::io::Result<ProjectConfig
     }
 
     Ok(ProjectConfig {
+        project_root: project_root.to_path_buf(),
         templates_root,
+        package_cache_dir: project_root.join(PROJECT_DATA_DIR).join("packages"),
         web_ui: config.web_ui,
     })
 }
@@ -160,7 +165,7 @@ fn invalid_config<T>(message: String) -> std::io::Result<T> {
 
 #[cfg(test)]
 mod tests {
-    use super::{find_project_root, load_project_config, parse_project_config};
+    use super::{PROJECT_DATA_DIR, find_project_root, load_project_config, parse_project_config};
 
     #[test]
     fn load_project_config_resolves_templates_root() {
@@ -174,7 +179,12 @@ mod tests {
 
         let config = load_project_config(root.path()).unwrap();
 
+        assert_eq!(config.project_root, root.path());
         assert_eq!(config.templates_root, root.path().join("templates"));
+        assert_eq!(
+            config.package_cache_dir,
+            root.path().join(PROJECT_DATA_DIR).join("packages")
+        );
         assert!(!config.web_ui);
     }
 

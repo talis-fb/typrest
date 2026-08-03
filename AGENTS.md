@@ -38,9 +38,10 @@ accepted decisions; record a superseding ADR under `docs/adr/`.
 
 ## Critical Architecture Rules
 
-- Filesystem mode is the only implemented mode. Do not implement Store mode, tags, publishing,
-  authentication, SDKs, S3, a compilation cache, or Typst Universe packages without an explicit
-  decision and scope change.
+- Filesystem mode is the only implemented mode. Literal, fully versioned `@preview` packages resolve
+  during preparation. Do not implement Store mode, tags, publishing, authentication, SDKs, S3, a
+  compilation cache, other package namespaces, or custom registries without an explicit decision
+  and scope change.
 - HTTP handlers never read template files. Startup and watch mode use `TemplateLoader`; requests
   use `TemplateRegistry` through `RenderService`.
 - A template requires `main.typ`. `schema.yml` is optional; legacy `schema.json` is accepted, but a
@@ -50,8 +51,8 @@ accepted decisions; record a superseding ADR under `docs/adr/`.
   errors.
 - Only files under `crates/typrest-core/src/compiler/` may import `typst::*` or `typst_pdf::*`.
   Public compiler types must not expose Typst types.
-- `typst`, `typst-pdf`, and `typst-assets` stay exactly pinned to the same version and are upgraded
-  together.
+- `typst`, `typst-pdf`, `typst-assets`, `typst-kit`, and `typst-syntax` stay exactly pinned to the
+  same version and are upgraded together.
 - Filesystem template IDs are derived recursively from the first non-root folder containing
   `main.typ`. Route discovery skips folders beginning with `_`; selected template bundles do not.
 - `_shared/` files are assembled into each `TemplateSource` by the filesystem loader. Relative
@@ -83,6 +84,7 @@ implemented `/healthz` or `/templates` aliases.
   generic string error from a handler.
 - Tests for core behavior should use `MemoryLoader` and mock compilers. Keep real Typst integration
   tests inside the compiler ACL or explicit end-to-end coverage.
+- Define named constants for shared project-specific values instead of repeating magic strings.
 - Preserve unrelated user changes in a dirty worktree and keep changes scoped to the task.
 
 ## Validation Commands

@@ -9,8 +9,9 @@ therefore confined to `crates/typrest-core/src/compiler/`. Outside that director
 Typrest-owned types such as `PdfCompiler`, `PreparedTemplate`, `Document`, and
 `CompilationDiagnostic`.
 
-The workspace `Cargo.toml` is the canonical dependency source. `typst`, `typst-pdf`, and
-`typst-assets` are pinned exactly to one matching version and upgraded together.
+The workspace `Cargo.toml` is the canonical dependency source. `typst`, `typst-pdf`,
+`typst-assets`, `typst-kit`, and `typst-syntax` are pinned exactly to one matching version and
+upgraded together.
 
 ## Data Injection
 
@@ -33,6 +34,7 @@ are request-specific.
 - default fonts from `typst-assets`;
 - custom `.ttf` and `.otf` fonts found under template `assets/`;
 - stable virtual paths required for imports and diagnostics.
+- the complete direct and transitive `@preview` package source closure.
 
 `PdfCompiler::compile_prepared()` borrows that state, builds request inputs, calls
 `typst::compile`, maps warnings and errors, and exports with `typst-pdf`. It returns `Document` with
@@ -45,12 +47,13 @@ The private `TemplateWorld` implements Typst's `World` interface:
 - `main()` returns the `main.typ` virtual file identifier;
 - `source()` returns UTF-8 Typst source from the in-memory file map;
 - `file()` returns non-source bytes such as images and fonts;
+- project and package virtual roots use separate prepared source maps;
 - `book()` and `font()` expose the prepared font registry;
 - `library()` exposes the request-specific standard library and inputs;
 - `today()` currently returns no date.
 
-Typst performs no automatic filesystem access. Every source, image, font, and imported file must
-already exist in `TemplateSource`.
+Typst performs no automatic filesystem access during compilation. Every project and package source,
+image, font, and imported file is already present in prepared state.
 
 ## Virtual Files and Imports
 
@@ -65,8 +68,13 @@ imported files to rooted virtual project paths, so an import such as:
 resolves only against the prepared in-memory map. `_shared/` content is already included by the
 filesystem loader before the compiler receives the source.
 
-Package imports such as `@preview/...` are unsupported. No network or package cache lookup occurs;
-they fail as missing virtual files.
+Literal imports such as `#import "@preview/cetz:0.5.2"` are discovered during preparation. Missing
+packages are downloaded through `PackageRepository` into `<project>/.typrest/packages`; direct and
+transitive package files are then retained in memory. Package-rooted diagnostics use paths such as
+`@preview/cetz:0.5.2/src/lib.typ` and never expose the physical cache.
+
+Only the `preview` namespace and fully versioned literal imports are supported. Request compilation
+never reads the cache or downloads a package.
 
 ## Diagnostics and Export
 
@@ -82,7 +90,7 @@ contract.
 
 When upgrading Typst:
 
-1. change the three exact workspace versions together;
+1. change all exact Typst integration versions together;
 2. adapt `world.rs`, `fonts.rs`, and private prepared state as required;
 3. keep public signatures free of Typst types;
 4. run compiler, diagnostics, font, import, payload, and PDF export tests;

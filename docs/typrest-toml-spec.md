@@ -105,6 +105,7 @@ templates_root = "templates"
 
 ## Non-goals
 
-This format does not define ports, hostnames, watch settings, store backends, authentication,
-per-template overrides, or environment-specific configuration. Update this specification before
-adding any of those fields.
+This format does not define ports, hostnames, watch settings, package policy or cache paths, store
+backends, authentication, per-template overrides, or environment-specific configuration. The
+initial `@preview` package support is automatic and always uses `<project>/.typrest/packages`.
+Update this specification before adding any related fields.

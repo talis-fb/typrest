@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use typrest_core::{TemplateRegistry, TypstCompiler};
 use typrest_server::{
     loader::filesystem::FilesystemLoader,
@@ -5,6 +7,7 @@ use typrest_server::{
         ColorChoice as ServerColorChoice, DiagnosticContext, DiagnosticReporter, OutputFormat,
         log_check_success,
     },
+    package::UniversePackageRepository,
 };
 
 use crate::config::load_config;
@@ -16,7 +19,8 @@ pub(crate) async fn run_check(output_format: OutputFormat, color: ServerColorCho
     let reporter = DiagnosticReporter::new(output_format, color, &config.templates_root);
 
     let loader = FilesystemLoader::new(&config.templates_root);
-    let compiler = TypstCompiler::new();
+    let packages = Arc::new(UniversePackageRepository::new(&config.package_cache_dir));
+    let compiler = TypstCompiler::new().with_package_repository(packages);
     let registry_build_result = TemplateRegistry::build(&loader, &compiler).await;
 
     match registry_build_result {

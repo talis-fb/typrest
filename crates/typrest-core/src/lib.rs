@@ -4,6 +4,7 @@ pub mod compiler;
 mod diagnostic;
 mod errors;
 pub mod loader;
+mod package;
 mod registry;
 pub mod render;
 mod render_request;
@@ -19,6 +20,7 @@ pub use diagnostic::{
 };
 pub use errors::{CompilationError, RenderError, ValidationError};
 pub use loader::{LoaderError, TemplateLoader};
+pub use package::{PackageCoordinate, PackageRepository, PackageResolutionError, PackageSource};
 pub use registry::{TemplateRegistry, TemplateRegistryBuildFailure, TemplateRegistryError};
 pub use render::RenderService;
 pub use render_request::RenderRequest;

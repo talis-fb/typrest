@@ -19,6 +19,8 @@ thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+typst-kit.workspace = true
+typst-syntax.workspace = true
 
 [dev-dependencies]
 futures-executor.workspace = true

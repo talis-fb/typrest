@@ -17,11 +17,13 @@ use crate::{
 };
 
 use super::fonts::FontRegistry;
+use super::packages::{self, PreparedPackages};
 
 const MAIN_TYP: &str = "main.typ";
 
 pub(super) fn prepare(
     source: &TemplateSource,
+    packages: PreparedPackages,
     fonts: &FontRegistry,
 ) -> Result<PreparedTemplateInner, CompilationError> {
     let files = source
@@ -40,6 +42,7 @@ pub(super) fn prepare(
     Ok(PreparedTemplateInner {
         main,
         files,
+        packages,
         fonts: fonts.for_source(source),
     })
 }
@@ -117,29 +120,18 @@ impl World for TemplateWorld<'_> {
             return Ok(self.template.main.clone());
         }
 
-        let path = id.vpath().get_without_slash();
-        let bytes = self
-            .template
-            .files
-            .get(path)
-            .ok_or_else(|| FileError::NotFound(PathBuf::from(path)))?;
+        let bytes = self.file_bytes(id)?;
         let text = std::str::from_utf8(bytes).map_err(|_| FileError::InvalidUtf8)?;
 
         Ok(Source::new(id, text.to_owned()))
     }
 
     fn file(&self, id: FileId) -> FileResult<Bytes> {
-        let path = id.vpath().get_without_slash();
-
         if id == self.template.main.id() {
             return Ok(Bytes::from_string(self.template.main.text().to_owned()));
         }
 
-        self.template
-            .files
-            .get(path)
-            .cloned()
-            .ok_or_else(|| FileError::NotFound(PathBuf::from(path)))
+        self.file_bytes(id).cloned()
     }
 
     fn font(&self, index: usize) -> Option<Font> {
@@ -148,6 +140,20 @@ impl World for TemplateWorld<'_> {
 
     fn today(&self, _offset: Option<Duration>) -> Option<Datetime> {
         None
+    }
+}
+
+impl TemplateWorld<'_> {
+    fn file_bytes(&self, id: FileId) -> FileResult<&Bytes> {
+        let path = id.vpath().get_without_slash();
+        let bytes = match id.root() {
+            VirtualRoot::Project => self.template.files.get(path),
+            root @ VirtualRoot::Package(_) => packages::coordinate(root)
+                .and_then(|package| self.template.packages.get(&package))
+                .and_then(|package| package.file(path)),
+        };
+
+        bytes.ok_or_else(|| FileError::NotFound(PathBuf::from(path)))
     }
 }
 
@@ -205,12 +211,21 @@ fn map_location(span: DiagSpan, world: &TemplateWorld) -> Option<DiagnosticLocat
     let (end_line, end_column) = source.lines().byte_to_line_column(range.end)?;
 
     Some(DiagnosticLocation::with_source(
-        id.vpath().get_without_slash(),
+        diagnostic_path(id),
         position(start_line, start_column)?,
         position(end_line, end_column)?,
         Arc::from(source.text()),
         range,
     ))
+}
+
+fn diagnostic_path(id: FileId) -> String {
+    match id.root() {
+        VirtualRoot::Project => id.vpath().get_without_slash().to_owned(),
+        VirtualRoot::Package(package) => {
+            format!("{package}{}", id.vpath().get_with_slash())
+        }
+    }
 }
 
 fn position(line: usize, column: usize) -> Option<DiagnosticPosition> {
@@ -260,6 +275,7 @@ mod tests {
 Hello
 "#,
             ),
+            BTreeMap::new(),
             &fonts,
         )
         .unwrap();
@@ -279,6 +295,7 @@ Hello
 Hello #data.name
 "#,
             ),
+            BTreeMap::new(),
             &fonts,
         )
         .unwrap();
@@ -291,7 +308,7 @@ Hello #data.name
     #[test]
     fn maps_syntax_errors_to_compilation_error() {
         let fonts = FontRegistry::new();
-        let template = prepare(&source("#let broken ="), &fonts).unwrap();
+        let template = prepare(&source("#let broken ="), BTreeMap::new(), &fonts).unwrap();
         let error = compile_prepared(&template, &json!({})).unwrap_err();
 
         assert!(matches!(error, CompilationError::Failed(_)));
@@ -303,7 +320,7 @@ Hello #data.name
     #[test]
     fn preserves_all_typst_errors() {
         let fonts = FontRegistry::new();
-        let template = prepare(&source("#first\n#second"), &fonts).unwrap();
+        let template = prepare(&source("#first\n#second"), BTreeMap::new(), &fonts).unwrap();
         let world = TemplateWorld::new(&template, &json!({}));
         let span = template.main.root().span();
         let errors = [
@@ -325,7 +342,7 @@ Hello #data.name
     #[test]
     fn captures_successful_compilation_warnings() {
         let fonts = FontRegistry::new();
-        let template = prepare(&source("<orphan>"), &fonts).unwrap();
+        let template = prepare(&source("<orphan>"), BTreeMap::new(), &fonts).unwrap();
         let compiled = compile_prepared(&template, &json!({})).unwrap();
 
         assert_eq!(compiled.warnings.len(), 1);
@@ -336,7 +353,7 @@ Hello #data.name
     #[test]
     fn maps_hints_traces_ranges_and_source_text() {
         let fonts = FontRegistry::new();
-        let template = prepare(&source("#let value = 1"), &fonts).unwrap();
+        let template = prepare(&source("#let value = 1"), BTreeMap::new(), &fonts).unwrap();
         let world = TemplateWorld::new(&template, &json!({}));
         let span = template.main.root().span();
         let diagnostic = SourceDiagnostic::error(span, "broken")
@@ -360,7 +377,8 @@ Hello #data.name
     #[test]
     fn maps_missing_imports_to_compilation_error() {
         let fonts = FontRegistry::new();
-        let template = prepare(&source(r#"#import "missing.typ""#), &fonts).unwrap();
+        let template =
+            prepare(&source(r#"#import "missing.typ""#), BTreeMap::new(), &fonts).unwrap();
         let error = compile_prepared(&template, &json!({})).unwrap_err();
 
         assert!(matches!(error, CompilationError::Failed(_)));
@@ -378,6 +396,7 @@ Hello #data.name
 Hello #data.name
 "#,
             ),
+            BTreeMap::new(),
             &fonts,
         )
         .unwrap();
@@ -392,7 +411,7 @@ Hello #data.name
     #[test]
     fn prepare_rejects_missing_main() {
         let fonts = FontRegistry::new();
-        let error = match prepare(&TemplateSource::default(), &fonts) {
+        let error = match prepare(&TemplateSource::default(), BTreeMap::new(), &fonts) {
             Ok(_) => panic!("missing main.typ should fail"),
             Err(error) => error,
         };

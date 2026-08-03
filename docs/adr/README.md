@@ -25,6 +25,7 @@ accepted decision.
 | [ADR-0008](0008-embed-tracked-development-web-ui.md) | Embed the tracked development Web UI | 2026-07 | Superseded in part by ADR-0009 |
 | [ADR-0009](0009-gate-static-web-ui-routes.md) | Gate static Web UI routes, not metadata routes | 2026-08 | Superseded in part by ADR-0010 |
 | [ADR-0010](0010-derive-template-ids-from-folder-routes.md) | Derive template IDs and direct routes from folders | 2026-08 | Accepted |
+| [ADR-0011](0011-resolve-preview-packages-during-preparation.md) | Resolve preview packages during preparation | 2026-08 | Accepted |
 
 ## Adding a Decision
 

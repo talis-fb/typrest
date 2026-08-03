@@ -4,6 +4,7 @@ use std::path::PathBuf;
 #[derive(Debug, Clone)]
 pub struct ServerConfig {
     pub templates_dir: PathBuf,
+    pub package_cache_dir: PathBuf,
     pub port: u16,
     pub host: [u8; 4],
     pub watch: bool,
@@ -12,9 +13,14 @@ pub struct ServerConfig {
 }
 
 impl ServerConfig {
-    pub fn new(templates_dir: impl Into<PathBuf>, port: u16) -> Self {
+    pub fn new(
+        templates_dir: impl Into<PathBuf>,
+        package_cache_dir: impl Into<PathBuf>,
+        port: u16,
+    ) -> Self {
         Self {
             templates_dir: templates_dir.into(),
+            package_cache_dir: package_cache_dir.into(),
             port,
             host: [0, 0, 0, 0],
             watch: false,

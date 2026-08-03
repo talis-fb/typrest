@@ -30,6 +30,8 @@ A Typrest project contains a `typrest.toml` at its root and a templates director
 ```text
 project/
   typrest.toml
+  .typrest/                 # generated package cache, when needed
+    packages/
   templates/
     financial/
       invoice/
@@ -112,6 +114,10 @@ typrest check
 After project discovery, `check` lists, loads, prepares, warm-compiles, and PDF-exports every
 template using the same registry build as server startup. Failures are collected and reported in
 deterministic template-ID order.
+
+Literal, fully versioned `@preview` imports are downloaded when absent from the project-local
+`.typrest/packages` cache. Package resolution failures make the check fail. Generated `.typrest/`
+content should not be committed.
 
 Warnings are displayed and return exit status `0`. Configuration, load, schema, compilation, or
 export failure returns exit status `1`.

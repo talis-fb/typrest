@@ -84,6 +84,17 @@ Templates read the request payload from `sys.inputs.data`:
 = Welcome, #data.name
 ```
 
+Templates may also import literal, fully versioned packages from Typst Universe:
+
+```typst
+#import "@preview/cetz:0.5.2"
+```
+
+`check`, startup, and watch preparation download missing `@preview` packages into the project-local
+`.typrest/packages` cache. Prepared package files remain in memory, so render requests do not read
+the cache or access the network. Other namespaces and dynamic package import expressions are not
+yet supported; generated `.typrest/` content should not be committed.
+
 See the complete [`schema.yml` v1 specification](docs/schema-v1.md) and the
 [`typrest.toml` specification](docs/typrest-toml-spec.md).
 
