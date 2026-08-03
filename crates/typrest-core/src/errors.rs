@@ -2,7 +2,7 @@ use thiserror::Error;
 
 use crate::{
     CompilationDiagnostic, CompilationReport, DiagnosticLocation, DiagnosticPosition,
-    DiagnosticSeverity, TemplateName,
+    DiagnosticSeverity, TemplateId,
 };
 
 #[derive(Clone, Debug, Eq, Error, PartialEq)]
@@ -78,7 +78,7 @@ fn primary_message(report: &CompilationReport) -> &str {
 #[derive(Clone, Debug, Error, PartialEq)]
 pub enum RenderError {
     #[error("template '{0}' was not found")]
-    TemplateNotFound(TemplateName),
+    TemplateNotFound(TemplateId),
 
     #[error("payload validation failed")]
     ValidationError(Vec<ValidationError>),

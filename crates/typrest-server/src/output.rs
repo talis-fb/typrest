@@ -13,7 +13,7 @@ use tracing::{Level, error, event, info};
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::util::SubscriberInitExt;
 use typrest_core::{
-    CompilationDiagnostic, CompilationError, DiagnosticSeverity, TemplateName, TemplateRegistry,
+    CompilationDiagnostic, CompilationError, DiagnosticSeverity, TemplateId, TemplateRegistry,
     TemplateRegistryBuildFailure, TemplateRegistryError, WithWarnings,
 };
 
@@ -116,7 +116,7 @@ impl DiagnosticReporter {
         &self,
         context: DiagnosticContext,
         stage: DiagnosticStage,
-        template: &TemplateName,
+        template: &TemplateId,
         error: &CompilationError,
     ) {
         for diagnostic in error.report().diagnostics() {
@@ -128,7 +128,7 @@ impl DiagnosticReporter {
         &self,
         context: DiagnosticContext,
         stage: DiagnosticStage,
-        template: &TemplateName,
+        template: &TemplateId,
         warnings: &[CompilationDiagnostic],
     ) {
         for diagnostic in warnings {
@@ -140,7 +140,7 @@ impl DiagnosticReporter {
         &self,
         context: DiagnosticContext,
         stage: DiagnosticStage,
-        template: Option<&TemplateName>,
+        template: Option<&TemplateId>,
         message: &str,
     ) {
         match self.format {
@@ -187,7 +187,7 @@ impl DiagnosticReporter {
         &self,
         context: DiagnosticContext,
         stage: DiagnosticStage,
-        template: Option<&TemplateName>,
+        template: Option<&TemplateId>,
         diagnostic: &CompilationDiagnostic,
     ) {
         let report_id = self.next_report_id.fetch_add(1, Ordering::Relaxed);
@@ -197,7 +197,7 @@ impl DiagnosticReporter {
         }
     }
 
-    fn report_pretty(&self, template: Option<&TemplateName>, diagnostic: &CompilationDiagnostic) {
+    fn report_pretty(&self, template: Option<&TemplateId>, diagnostic: &CompilationDiagnostic) {
         let Some(location) = diagnostic.location.as_ref() else {
             let level = match diagnostic.severity {
                 DiagnosticSeverity::Error => "error",
@@ -277,7 +277,7 @@ impl DiagnosticReporter {
         report_id: u64,
         context: DiagnosticContext,
         stage: DiagnosticStage,
-        template: Option<&TemplateName>,
+        template: Option<&TemplateId>,
         diagnostic: &CompilationDiagnostic,
     ) {
         emit_json_diagnostic(report_id, context, stage, template, diagnostic);
@@ -306,12 +306,15 @@ impl DiagnosticReporter {
         }
     }
 
-    fn display_path(&self, template: Option<&TemplateName>, virtual_path: &str) -> PathBuf {
+    fn display_path(&self, template: Option<&TemplateId>, virtual_path: &str) -> PathBuf {
         if virtual_path.starts_with("_shared/") {
             self.templates_root.join(virtual_path)
         } else if let Some(template) = template {
-            self.templates_root
-                .join(template.as_str())
+            template
+                .segments()
+                .fold(self.templates_root.as_ref().clone(), |path, segment| {
+                    path.join(segment)
+                })
                 .join(virtual_path)
         } else {
             PathBuf::from(virtual_path)
@@ -406,7 +409,7 @@ pub fn log_check_success(format: OutputFormat, build: &WithWarnings<TemplateRegi
             info!(
                 target: "typrest_server",
                 event = "templates.check.completed",
-                template_count = build.value().names().len(),
+                template_count = build.value().ids().len(),
                 warning_count = build.warnings().len(),
                 status = "ok",
                 "templates compiled successfully"
@@ -419,7 +422,7 @@ fn emit_json_diagnostic(
     report_id: u64,
     context: DiagnosticContext,
     stage: DiagnosticStage,
-    template: Option<&TemplateName>,
+    template: Option<&TemplateId>,
     diagnostic: &CompilationDiagnostic,
 ) {
     match diagnostic.severity {
@@ -451,7 +454,7 @@ fn emit_json_primary<L: JsonDiagnosticLevel>(
     report_id: u64,
     context: DiagnosticContext,
     stage: DiagnosticStage,
-    template: Option<&TemplateName>,
+    template: Option<&TemplateId>,
     diagnostic: &CompilationDiagnostic,
 ) {
     if let Some(location) = &diagnostic.location {
@@ -568,7 +571,7 @@ fn emit_json_related(
     related_index: usize,
     context: DiagnosticContext,
     stage: DiagnosticStage,
-    template: Option<&TemplateName>,
+    template: Option<&TemplateId>,
     related: &typrest_core::RelatedDiagnostic,
 ) {
     if let Some(location) = &related.location {

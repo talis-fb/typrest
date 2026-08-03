@@ -1,10 +1,11 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
+use notify::event::ModifyKind;
+use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use tokio::sync::mpsc;
 use tracing::{error, info, warn};
-use typrest_core::{PdfCompiler, TemplateLoader, TemplateName, TemplateRegistry};
+use typrest_core::{PdfCompiler, TemplateId, TemplateRegistry};
 
 use crate::loader::filesystem::FilesystemLoader;
 use crate::output::{DiagnosticContext, DiagnosticReporter, DiagnosticStage};
@@ -41,8 +42,13 @@ pub fn start_template_watcher(
     watcher.watch(&watch_root, RecursiveMode::Recursive)?;
     let worker = tokio::spawn(async move {
         while let Some(result) = receiver.recv().await {
-            handle_event(
-                result,
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            let mut results = vec![result];
+            while let Ok(result) = receiver.try_recv() {
+                results.push(result);
+            }
+            handle_events(
+                results,
                 &root,
                 loader.as_ref(),
                 &registry,
@@ -60,41 +66,51 @@ pub fn start_template_watcher(
     })
 }
 
-async fn handle_event(
-    result: notify::Result<Event>,
+async fn handle_events(
+    results: Vec<notify::Result<Event>>,
     root: &Path,
     loader: &FilesystemLoader,
     registry: &TemplateRegistry,
     compiler: &dyn PdfCompiler,
     reporter: &DiagnosticReporter,
 ) {
-    let event = match result {
-        Ok(event) => event,
-        Err(error) => {
-            error!(error = %error, "template watch event failed");
-            return;
-        }
-    };
-
-    if !is_relevant_event(&event) {
-        return;
-    }
-
-    let mut saw_shared = false;
+    let mut rebuild_all = false;
     let mut templates = Vec::new();
 
-    for path in event.paths {
-        match changed_template(root, &path) {
-            Some(ChangedTemplate::Shared) => saw_shared = true,
-            Some(ChangedTemplate::Template(name)) if !templates.contains(&name) => {
-                templates.push(name);
+    for result in results {
+        let event = match result {
+            Ok(event) if is_relevant_event(&event) => event,
+            Ok(_) => continue,
+            Err(error) => {
+                error!(error = %error, "template watch event failed");
+                continue;
             }
-            Some(ChangedTemplate::Template(_)) | None => {}
+        };
+        let topology_change = is_topology_event(&event);
+
+        for path in event.paths {
+            match changed_template(root, &path) {
+                Some(ChangedTemplate::Shared) => rebuild_all = true,
+                Some(ChangedTemplate::Template(id)) if topology_change => {
+                    rebuild_all = true;
+                    if !templates.contains(&id) {
+                        templates.push(id);
+                    }
+                }
+                Some(ChangedTemplate::Template(id)) if !templates.contains(&id) => {
+                    templates.push(id);
+                }
+                Some(ChangedTemplate::Template(_)) => {}
+                None if topology_change && !is_private_discovery_path(root, &path) => {
+                    rebuild_all = true;
+                }
+                None => {}
+            }
         }
     }
 
-    if saw_shared {
-        reload_shared(loader, registry, compiler, reporter).await;
+    if rebuild_all {
+        reload_all(loader, registry, compiler, reporter).await;
         return;
     }
 
@@ -110,20 +126,43 @@ fn is_relevant_event(event: &Event) -> bool {
     )
 }
 
-async fn reload_shared(
+fn is_topology_event(event: &Event) -> bool {
+    matches!(
+        event.kind,
+        EventKind::Create(_) | EventKind::Remove(_) | EventKind::Modify(ModifyKind::Name(_))
+    ) || event.paths.iter().any(|path| {
+        path.file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name == "main.typ")
+    })
+}
+
+async fn reload_all(
     loader: &FilesystemLoader,
     registry: &TemplateRegistry,
     compiler: &dyn PdfCompiler,
     reporter: &DiagnosticReporter,
 ) {
-    match loader.list().await {
-        Ok(templates) => {
-            for template in templates {
-                reload_template(loader, registry, compiler, &template, reporter).await;
-            }
-            info!("shared template files changed");
+    match TemplateRegistry::build(loader, compiler).await {
+        Ok(build) => {
+            reporter.report_build(DiagnosticContext::Watch, &build);
+            let template_count = build.value().ids().len();
+            registry.replace_all(build.value());
+            info!(
+                event = "template.registry.rebuilt",
+                template_count,
+                warning_count = build.warnings().len(),
+                "template registry rebuilt"
+            );
         }
-        Err(error) => warn!(error = %error, "failed to list templates after shared file change"),
+        Err(build_error) => {
+            reporter.report_build_error(DiagnosticContext::Watch, &build_error);
+            warn!(
+                event = "template.registry.rebuild.failed",
+                last_known_good = true,
+                "template registry rebuild failed; keeping last known good version"
+            );
+        }
     }
 }
 
@@ -131,7 +170,7 @@ async fn reload_template(
     loader: &FilesystemLoader,
     registry: &TemplateRegistry,
     compiler: &dyn PdfCompiler,
-    template: &TemplateName,
+    template: &TemplateId,
     reporter: &DiagnosticReporter,
 ) {
     match registry.reload(loader, compiler, template).await {
@@ -185,21 +224,45 @@ async fn reload_template(
 
 #[derive(Debug, Eq, PartialEq)]
 pub(crate) enum ChangedTemplate {
-    Template(TemplateName),
+    Template(TemplateId),
     Shared,
 }
 
 pub(crate) fn changed_template(root: &Path, path: &Path) -> Option<ChangedTemplate> {
     let relative_path = path.strip_prefix(root).ok()?;
-    let first_segment = relative_path.components().next()?.as_os_str().to_str()?;
+    let mut template_path = root.to_owned();
+    let mut segments = Vec::new();
 
-    if first_segment == "_shared" {
-        return Some(ChangedTemplate::Shared);
+    for component in relative_path.components() {
+        let segment = component.as_os_str().to_str()?;
+        if segments.is_empty() && segment == "_shared" {
+            return Some(ChangedTemplate::Shared);
+        }
+        if segment.starts_with('_') {
+            return None;
+        }
+
+        template_path.push(segment);
+        segments.push(segment);
+        if template_path.join("main.typ").is_file() {
+            return TemplateId::new(segments.join("/"))
+                .ok()
+                .map(ChangedTemplate::Template);
+        }
     }
 
-    TemplateName::new(first_segment.to_owned())
-        .ok()
-        .map(ChangedTemplate::Template)
+    None
+}
+
+fn is_private_discovery_path(root: &Path, path: &Path) -> bool {
+    path.strip_prefix(root).ok().is_some_and(|relative_path| {
+        relative_path.components().any(|component| {
+            component
+                .as_os_str()
+                .to_str()
+                .is_some_and(|segment| segment.starts_with('_'))
+        })
+    })
 }
 
 #[cfg(test)]
@@ -212,14 +275,14 @@ mod tests {
     use bytes::Bytes;
     use tempfile::tempdir;
     use typrest_core::{
-        CompilationError, Document, PdfCompiler, PreparedTemplate, TemplateName, TemplateRegistry,
+        CompilationError, Document, PdfCompiler, PreparedTemplate, TemplateId, TemplateRegistry,
         TemplateSource,
     };
 
     use crate::loader::filesystem::FilesystemLoader;
     use crate::output::{ColorChoice, DiagnosticReporter, OutputFormat};
 
-    use super::{ChangedTemplate, changed_template, reload_shared, reload_template};
+    use super::{ChangedTemplate, changed_template, reload_all, reload_template};
 
     struct MockCompiler {
         fail: AtomicBool,
@@ -259,24 +322,21 @@ mod tests {
 
     #[test]
     fn resolves_template_path() {
+        let root = tempdir().unwrap();
+        write_template(root.path(), "financial/invoice", "invoice");
         assert_eq!(
-            changed_template(
-                Path::new("/templates"),
-                Path::new("/templates/invoice/main.typ")
-            ),
+            changed_template(root.path(), &root.path().join("financial/invoice/main.typ")),
             Some(ChangedTemplate::Template(
-                TemplateName::new("invoice").unwrap()
+                TemplateId::new("financial/invoice").unwrap()
             ))
         );
     }
 
     #[test]
     fn resolves_shared_path() {
+        let root = tempdir().unwrap();
         assert_eq!(
-            changed_template(
-                Path::new("/templates"),
-                Path::new("/templates/_shared/brand.typ")
-            ),
+            changed_template(root.path(), &root.path().join("_shared/brand.typ")),
             Some(ChangedTemplate::Shared)
         );
     }
@@ -290,13 +350,28 @@ mod tests {
     }
 
     #[test]
-    fn ignores_invalid_template_names() {
+    fn ignores_private_discovery_paths() {
+        let root = tempdir().unwrap();
+        write_template(root.path(), "_draft/invoice", "draft");
+        assert_eq!(
+            changed_template(root.path(), &root.path().join("_draft/invoice/main.typ")),
+            None
+        );
+    }
+
+    #[test]
+    fn resolves_private_source_below_active_template() {
+        let root = tempdir().unwrap();
+        write_template(root.path(), "invoice", "invoice");
+
         assert_eq!(
             changed_template(
-                Path::new("/templates"),
-                Path::new("/templates/not.valid/main.typ")
+                root.path(),
+                &root.path().join("invoice/_components/header.typ")
             ),
-            None
+            Some(ChangedTemplate::Template(
+                TemplateId::new("invoice").unwrap()
+            ))
         );
     }
 
@@ -310,7 +385,7 @@ mod tests {
             fail: AtomicBool::new(false),
             prepares: AtomicUsize::new(0),
         };
-        let name = TemplateName::new("invoice").unwrap();
+        let name = TemplateId::new("invoice").unwrap();
         let reporter =
             DiagnosticReporter::new(OutputFormat::Pretty, ColorChoice::Never, root.path());
 
@@ -351,7 +426,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn shared_reload_rebuilds_every_template() {
+    async fn full_reload_rebuilds_every_template_atomically() {
         let root = tempdir().unwrap();
         write_template(root.path(), "invoice", "invoice");
         write_template(root.path(), "welcome", "welcome");
@@ -364,11 +439,82 @@ mod tests {
         let reporter =
             DiagnosticReporter::new(OutputFormat::Pretty, ColorChoice::Never, root.path());
 
-        reload_shared(&loader, &registry, &compiler, &reporter).await;
+        reload_all(&loader, &registry, &compiler, &reporter).await;
         let first_count = compiler.prepares.load(Ordering::SeqCst);
-        reload_shared(&loader, &registry, &compiler, &reporter).await;
+        reload_all(&loader, &registry, &compiler, &reporter).await;
 
         assert_eq!(first_count, 2);
         assert_eq!(compiler.prepares.load(Ordering::SeqCst), 4);
+        assert_eq!(registry.ids().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn failed_full_reload_keeps_complete_previous_registry() {
+        let root = tempdir().unwrap();
+        write_template(root.path(), "financial/invoice", "invoice");
+        write_template(root.path(), "financial/report", "report");
+        let loader = FilesystemLoader::new(root.path());
+        let registry = TemplateRegistry::default();
+        let compiler = MockCompiler {
+            fail: AtomicBool::new(false),
+            prepares: AtomicUsize::new(0),
+        };
+        let reporter =
+            DiagnosticReporter::new(OutputFormat::Pretty, ColorChoice::Never, root.path());
+        reload_all(&loader, &registry, &compiler, &reporter).await;
+        let previous_names = registry.ids();
+
+        fs::write(root.path().join("financial/main.typ"), "financial").unwrap();
+        compiler.fail.store(true, Ordering::SeqCst);
+        reload_all(&loader, &registry, &compiler, &reporter).await;
+
+        assert_eq!(registry.ids(), previous_names);
+    }
+
+    #[tokio::test]
+    async fn full_reload_reconciles_ancestor_entrypoint_topology() {
+        let root = tempdir().unwrap();
+        write_template(root.path(), "financial/invoice", "invoice");
+        write_template(root.path(), "financial/report", "report");
+        let loader = FilesystemLoader::new(root.path());
+        let registry = TemplateRegistry::default();
+        let compiler = MockCompiler {
+            fail: AtomicBool::new(false),
+            prepares: AtomicUsize::new(0),
+        };
+        let reporter =
+            DiagnosticReporter::new(OutputFormat::Pretty, ColorChoice::Never, root.path());
+
+        reload_all(&loader, &registry, &compiler, &reporter).await;
+        assert_eq!(
+            registry
+                .ids()
+                .into_iter()
+                .map(TemplateId::into_inner)
+                .collect::<Vec<_>>(),
+            ["financial/invoice", "financial/report"]
+        );
+
+        fs::write(root.path().join("financial/main.typ"), "financial").unwrap();
+        reload_all(&loader, &registry, &compiler, &reporter).await;
+        assert_eq!(
+            registry
+                .ids()
+                .into_iter()
+                .map(TemplateId::into_inner)
+                .collect::<Vec<_>>(),
+            ["financial"]
+        );
+
+        fs::remove_file(root.path().join("financial/main.typ")).unwrap();
+        reload_all(&loader, &registry, &compiler, &reporter).await;
+        assert_eq!(
+            registry
+                .ids()
+                .into_iter()
+                .map(TemplateId::into_inner)
+                .collect::<Vec<_>>(),
+            ["financial/invoice", "financial/report"]
+        );
     }
 }

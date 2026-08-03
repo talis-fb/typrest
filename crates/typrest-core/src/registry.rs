@@ -4,7 +4,7 @@ use std::sync::{Arc, RwLock};
 use thiserror::Error;
 
 use crate::{
-    CompilationError, LoaderError, PdfCompiler, TemplateLoader, TemplateName, ValidationError,
+    CompilationError, LoaderError, PdfCompiler, TemplateId, TemplateLoader, ValidationError,
     WithWarnings, validate_with_defaults,
 };
 
@@ -12,7 +12,7 @@ use crate::compiler::PreparedTemplateBundle;
 
 #[derive(Clone, Default)]
 pub struct TemplateRegistry {
-    entries: Arc<RwLock<BTreeMap<TemplateName, Arc<PreparedTemplateBundle>>>>,
+    entries: Arc<RwLock<BTreeMap<TemplateId, Arc<PreparedTemplateBundle>>>>,
 }
 
 impl TemplateRegistry {
@@ -65,25 +65,25 @@ impl TemplateRegistry {
         &self,
         loader: &dyn TemplateLoader,
         compiler: &dyn PdfCompiler,
-        name: &TemplateName,
+        template_id: &TemplateId,
     ) -> Result<WithWarnings<()>, TemplateRegistryError> {
-        let bundle = prepare_template_bundle(loader, compiler, name).await?;
+        let bundle = prepare_template_bundle(loader, compiler, template_id).await?;
 
         let (prepared_template_bundle, warnings) = bundle.into_parts();
 
-        self.replace(name.clone(), prepared_template_bundle);
+        self.replace(template_id.clone(), prepared_template_bundle);
         Ok(WithWarnings::new((), warnings))
     }
 
-    pub fn get(&self, name: &TemplateName) -> Option<Arc<PreparedTemplateBundle>> {
+    pub fn get(&self, template_id: &TemplateId) -> Option<Arc<PreparedTemplateBundle>> {
         self.entries
             .read()
             .expect("template registry lock poisoned")
-            .get(name)
+            .get(template_id)
             .cloned()
     }
 
-    pub fn names(&self) -> Vec<TemplateName> {
+    pub fn ids(&self) -> Vec<TemplateId> {
         self.entries
             .read()
             .expect("template registry lock poisoned")
@@ -92,36 +92,48 @@ impl TemplateRegistry {
             .collect()
     }
 
-    fn replace(&self, name: TemplateName, entry: PreparedTemplateBundle) {
+    pub fn replace_all(&self, candidate: &TemplateRegistry) {
+        let entries = candidate
+            .entries
+            .read()
+            .expect("candidate template registry lock poisoned")
+            .clone();
+        *self
+            .entries
+            .write()
+            .expect("template registry lock poisoned") = entries;
+    }
+
+    fn replace(&self, template_id: TemplateId, entry: PreparedTemplateBundle) {
         self.entries
             .write()
             .expect("template registry lock poisoned")
-            .insert(name, Arc::new(entry));
+            .insert(template_id, Arc::new(entry));
     }
 
     #[cfg(any(test, feature = "test-util"))]
     #[doc(hidden)]
-    pub fn insert_for_test(&self, name: TemplateName, entry: PreparedTemplateBundle) {
-        self.replace(name, entry);
+    pub fn insert_for_test(&self, template_id: TemplateId, entry: PreparedTemplateBundle) {
+        self.replace(template_id, entry);
     }
 }
 
 async fn prepare_template_bundle(
     loader: &dyn TemplateLoader,
     compiler: &dyn PdfCompiler,
-    name: &TemplateName,
+    template_id: &TemplateId,
 ) -> Result<WithWarnings<PreparedTemplateBundle>, TemplateRegistryError> {
     let bundle = loader
-        .load(name)
+        .load(template_id)
         .await
         .map_err(|source| TemplateRegistryError::Load {
-            template: name.clone(),
+            template: template_id.clone(),
             source,
         })?;
 
     let prepared = compiler.prepare(&bundle.source).await.map_err(|source| {
         TemplateRegistryError::Prepare {
-            template: name.clone(),
+            template: template_id.clone(),
             source,
         }
     })?;
@@ -130,7 +142,7 @@ async fn prepare_template_bundle(
             let sample = schema.sample_payload();
             validate_with_defaults(schema, &sample).map_err(|violations| {
                 TemplateRegistryError::SamplePayload {
-                    template: name.clone(),
+                    template: template_id.clone(),
                     violations,
                 }
             })?
@@ -142,7 +154,7 @@ async fn prepare_template_bundle(
         .compile_prepared(&prepared, &sample)
         .await
         .map_err(|source| TemplateRegistryError::Warmup {
-            template: name.clone(),
+            template: template_id.clone(),
             source,
         })?;
 
@@ -151,7 +163,7 @@ async fn prepare_template_bundle(
         .iter()
         .cloned()
         .map(|mut diagnostic| {
-            diagnostic.template = Some(name.clone());
+            diagnostic.template = Some(template_id.clone());
             diagnostic
         })
         .collect();
@@ -174,27 +186,27 @@ pub enum TemplateRegistryError {
 
     #[error("template '{template}' failed to load: {source}")]
     Load {
-        template: TemplateName,
+        template: TemplateId,
         #[source]
         source: LoaderError,
     },
 
     #[error("template '{template}' failed to prepare: {source}")]
     Prepare {
-        template: TemplateName,
+        template: TemplateId,
         #[source]
         source: CompilationError,
     },
 
     #[error("template '{template}' could not generate a valid startup payload: {violations:?}")]
     SamplePayload {
-        template: TemplateName,
+        template: TemplateId,
         violations: Vec<ValidationError>,
     },
 
     #[error("template '{template}' failed warmup compilation: {source}")]
     Warmup {
-        template: TemplateName,
+        template: TemplateId,
         #[source]
         source: CompilationError,
     },
@@ -230,7 +242,7 @@ mod tests {
     use crate::{
         CompilationDiagnostic, CompilationError, DiagnosticSeverity, Document, LoaderError,
         PdfCompiler, PreparedTemplate, RenderRequest, RenderService, Schema, TemplateBundle,
-        TemplateLoader, TemplateName, TemplateSource,
+        TemplateId, TemplateLoader, TemplateSource,
     };
 
     use super::TemplateRegistry;
@@ -242,13 +254,13 @@ mod tests {
 
     #[async_trait]
     impl TemplateLoader for CountingLoader {
-        async fn load(&self, _: &TemplateName) -> Result<TemplateBundle, LoaderError> {
+        async fn load(&self, _: &TemplateId) -> Result<TemplateBundle, LoaderError> {
             self.loads.fetch_add(1, Ordering::SeqCst);
             Ok(self.bundle.clone())
         }
 
-        async fn list(&self) -> Result<Vec<TemplateName>, LoaderError> {
-            Ok(vec![TemplateName::new("invoice").unwrap()])
+        async fn list(&self) -> Result<Vec<TemplateId>, LoaderError> {
+            Ok(vec![TemplateId::new("invoice").unwrap()])
         }
     }
 
@@ -261,14 +273,14 @@ mod tests {
 
     #[async_trait]
     impl TemplateLoader for FailingLoader {
-        async fn load(&self, name: &TemplateName) -> Result<TemplateBundle, LoaderError> {
+        async fn load(&self, name: &TemplateId) -> Result<TemplateBundle, LoaderError> {
             Err(LoaderError::IoError(format!("{name} is broken")))
         }
 
-        async fn list(&self) -> Result<Vec<TemplateName>, LoaderError> {
+        async fn list(&self) -> Result<Vec<TemplateId>, LoaderError> {
             Ok(vec![
-                TemplateName::new("first").unwrap(),
-                TemplateName::new("second").unwrap(),
+                TemplateId::new("first").unwrap(),
+                TemplateId::new("second").unwrap(),
             ])
         }
     }
@@ -357,16 +369,16 @@ mod tests {
         assert_eq!(compiler.compiles.load(Ordering::SeqCst), 1);
         assert_eq!(
             registry
-                .names()
+                .ids()
                 .iter()
-                .map(TemplateName::as_str)
+                .map(TemplateId::as_str)
                 .collect::<Vec<_>>(),
             vec!["invoice"]
         );
 
         let service = RenderService::new(registry, compiler.clone());
         let document = futures_executor::block_on(service.render(RenderRequest::new(
-            TemplateName::new("invoice").unwrap(),
+            TemplateId::new("invoice").unwrap(),
             json!({ "name": "Ada" }),
         )))
         .unwrap();
@@ -459,7 +471,7 @@ mod tests {
         assert_eq!(build.warnings().len(), 1);
         assert_eq!(
             build.warnings()[0].template,
-            Some(TemplateName::new("invoice").unwrap())
+            Some(TemplateId::new("invoice").unwrap())
         );
         assert_eq!(build.warnings()[0].message, "careful");
     }

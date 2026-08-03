@@ -26,12 +26,12 @@ export interface Schema {
 }
 
 export interface TemplateSummary {
-  name: string;
+  id: string;
   hasSchema: boolean;
 }
 
 export interface TemplateMetadata {
-  name: string;
+  id: string;
   schema: Schema | null;
 }
 
@@ -75,24 +75,24 @@ export async function listTemplates(signal?: AbortSignal): Promise<TemplateSumma
 }
 
 export async function getTemplate(
-  name: string,
+  id: string,
   signal?: AbortSignal,
 ): Promise<TemplateMetadata> {
-  const response = await fetch(`/_api/templates/${encodeURIComponent(name)}`, { signal });
+  const response = await fetch(`/_api/templates/${encodeTemplateId(id)}`, { signal });
   if (!response.ok) {
-    throw await requestError(response, `Could not load template "${name}"`);
+    throw await requestError(response, `Could not load template "${id}"`);
   }
   return (await response.json()) as TemplateMetadata;
 }
 
 export async function renderTemplate(
-  name: string,
+  id: string,
   payload: JsonValue,
   signal?: AbortSignal,
 ): Promise<Blob> {
   let response: Response;
   try {
-    response = await fetch(`/render/${encodeURIComponent(name)}`, {
+    response = await fetch(`/${encodeTemplateId(id)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -110,6 +110,14 @@ export async function renderTemplate(
   }
 
   return response.blob();
+}
+
+export function encodeTemplateId(id: string): string {
+  return id.split("/").map(encodeURIComponent).join("/");
+}
+
+export function templatePdfFilename(id: string): string {
+  return `${id.replaceAll("/", "--")}.pdf`;
 }
 
 async function requestError(response: Response, fallback: string): Promise<ApiRequestError> {

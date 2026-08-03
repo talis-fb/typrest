@@ -1,7 +1,8 @@
 <script lang="ts">
   import type { ApiRequestError } from "../api";
+  import { templatePdfFilename } from "../api";
 
-  export let templateName: string;
+  export let templateId: string;
   export let blobUrl: string | null = null;
   export let rendering = false;
   export let error: ApiRequestError | null = null;
@@ -15,7 +16,11 @@
         <p class="text-xs text-base-content/55">Latest successful render</p>
       </div>
       {#if blobUrl}
-        <a class="btn btn-outline btn-sm" href={blobUrl} download={`${templateName}.pdf`}>
+        <a
+          class="btn btn-outline btn-sm"
+          href={blobUrl}
+          download={templatePdfFilename(templateId)}
+        >
           Download PDF
         </a>
       {/if}
@@ -72,7 +77,7 @@
         <iframe
           class="pdf-frame h-full w-full bg-white"
           src={blobUrl}
-          title={`PDF preview for ${templateName}`}
+          title={`PDF preview for ${templateId}`}
         ></iframe>
       {:else}
         <div class="pdf-frame grid place-items-center p-8 text-center">

@@ -1,7 +1,7 @@
 use std::ops::Range;
 use std::sync::Arc;
 
-use crate::TemplateName;
+use crate::TemplateId;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DiagnosticSeverity {
@@ -87,7 +87,7 @@ impl RelatedDiagnostic {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CompilationDiagnostic {
-    pub template: Option<TemplateName>,
+    pub template: Option<TemplateId>,
     pub severity: DiagnosticSeverity,
     pub message: String,
     pub location: Option<DiagnosticLocation>,

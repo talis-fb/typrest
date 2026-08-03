@@ -64,7 +64,7 @@
     }
   }
 
-  async function selectTemplate(name: string, updateUrl = true) {
+  async function selectTemplate(id: string, updateUrl = true) {
     loadController?.abort();
     const controller = new AbortController();
     loadController = controller;
@@ -74,16 +74,16 @@
     revokeBlob();
 
     try {
-      selected = await getTemplate(name, controller.signal);
+      selected = await getTemplate(id, controller.signal);
       if (updateUrl) {
         const url = new URL(window.location.href);
-        url.searchParams.set("template", name);
+        url.searchParams.set("template", id);
         window.history.pushState({}, "", url);
       }
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
       selected = null;
-      pageError = error instanceof Error ? error.message : `Could not open "${name}"`;
+      pageError = error instanceof Error ? error.message : `Could not open "${id}"`;
     } finally {
       if (loadController === controller) loadingTemplate = false;
     }
@@ -108,7 +108,7 @@
     renderError = null;
 
     try {
-      const blob = await renderTemplate(selected.name, payload, controller.signal);
+      const blob = await renderTemplate(selected.id, payload, controller.signal);
       revokeBlob();
       blobUrl = URL.createObjectURL(blob);
     } catch (error) {
@@ -129,7 +129,7 @@
 </script>
 
 <svelte:head>
-  <title>{selected ? `${selected.name} · Typrest` : "Typrest Web UI"}</title>
+  <title>{selected ? `${selected.id} · Typrest` : "Typrest Web UI"}</title>
 </svelte:head>
 
 <header class="sticky top-0 z-30 border-b border-base-300/80 bg-base-100/90 backdrop-blur">
@@ -171,18 +171,18 @@
         <div class="flex items-center gap-3">
           <button type="button" class="btn btn-ghost btn-sm" on:click={closeTemplate}>← Templates</button>
           <span class="text-base-content/30">/</span>
-          <h1 class="font-mono text-lg font-semibold">{selected.name}</h1>
+          <h1 class="font-mono text-lg font-semibold">{selected.id}</h1>
           <span class="badge badge-sm badge-ghost">{selected.schema ? "Schema v1" : "No schema"}</span>
         </div>
-        <code class="rounded-lg bg-base-300/60 px-2 py-1 text-xs">POST /render/{selected.name}</code>
+        <code class="rounded-lg bg-base-300/60 px-2 py-1 text-xs">POST /{selected.id}</code>
       </div>
 
       <div class="workspace-height grid gap-4 lg:grid-cols-[minmax(22rem,0.9fr)_minmax(28rem,1.35fr)]">
-        {#key selected.name}
+        {#key selected.id}
           <PayloadEditor template={selected} {rendering} on:render={(event) => render(event.detail)} />
         {/key}
         <PdfPreview
-          templateName={selected.name}
+          templateId={selected.id}
           {blobUrl}
           {rendering}
           error={renderError}

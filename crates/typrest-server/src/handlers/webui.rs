@@ -10,7 +10,7 @@ use rust_embed::Embed;
 struct WebUiAssets;
 
 pub async fn webui_redirect() -> Redirect {
-    Redirect::permanent("/webui/")
+    Redirect::permanent("/_webui/")
 }
 
 pub async fn webui_index() -> Response {
@@ -19,6 +19,10 @@ pub async fn webui_index() -> Response {
 
 pub async fn webui_asset(Path(path): Path<String>) -> Response {
     embedded_response(&path, true)
+}
+
+pub async fn webui_not_found() -> StatusCode {
+    StatusCode::NOT_FOUND
 }
 
 fn embedded_response(path: &str, cache_asset: bool) -> Response {

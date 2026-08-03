@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use thiserror::Error;
 use typrest_core::{
-    LoaderError, Schema, TemplateBundle, TemplateLoader, TemplateName, TemplateSource,
+    LoaderError, Schema, TemplateBundle, TemplateId, TemplateLoader, TemplateSource,
 };
 
 #[derive(Clone, Debug)]
@@ -23,8 +23,10 @@ impl FilesystemLoader {
         &self.root
     }
 
-    pub(crate) fn load_sync(&self, name: &TemplateName) -> Result<TemplateBundle, LoaderError> {
-        let template_dir = self.root.join(name.as_str());
+    pub(crate) fn load_sync(&self, name: &TemplateId) -> Result<TemplateBundle, LoaderError> {
+        let template_dir = name
+            .segments()
+            .fold(self.root.clone(), |path, segment| path.join(segment));
 
         if !template_dir.is_dir() {
             return Err(LoaderError::TemplateNotFound(name.clone()));
@@ -76,41 +78,13 @@ impl FilesystemLoader {
         })
     }
 
-    pub(crate) fn list_sync(&self) -> Result<Vec<TemplateName>, LoaderError> {
-        let entries = fs::read_dir(&self.root).map_err(|error| FilesystemLoaderError::ReadDir {
-            path: self.root.clone(),
-            error,
-        })?;
-        let mut names = Vec::new();
-
-        for entry in entries {
-            let entry = entry.map_err(|error| FilesystemLoaderError::ReadDir {
-                path: self.root.clone(),
-                error,
-            })?;
-
-            if !entry
-                .file_type()
-                .map_err(|error| FilesystemLoaderError::ReadDir {
-                    path: entry.path(),
-                    error,
-                })?
-                .is_dir()
-            {
-                continue;
-            }
-
-            let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
-                continue;
-            };
-
-            if name == "_shared" {
-                continue;
-            }
-
-            names.push(TemplateName::new(name)?);
+    pub(crate) fn list_sync(&self) -> Result<Vec<TemplateId>, LoaderError> {
+        if self.root.join("main.typ").is_file() {
+            return Err(FilesystemLoaderError::RootMain.into());
         }
 
+        let mut names = Vec::new();
+        discover_templates(&self.root, &self.root, &[], &mut names)?;
         names.sort();
         Ok(names)
     }
@@ -118,27 +92,30 @@ impl FilesystemLoader {
 
 #[async_trait]
 impl TemplateLoader for FilesystemLoader {
-    async fn load(&self, name: &TemplateName) -> Result<TemplateBundle, LoaderError> {
+    async fn load(&self, name: &TemplateId) -> Result<TemplateBundle, LoaderError> {
         self.load_sync(name)
     }
 
-    async fn list(&self) -> Result<Vec<TemplateName>, LoaderError> {
+    async fn list(&self) -> Result<Vec<TemplateId>, LoaderError> {
         self.list_sync()
     }
 }
 
 #[derive(Debug, Error)]
 enum FilesystemLoaderError {
+    #[error("templates/main.typ cannot define an unnamed template; move it into a named folder")]
+    RootMain,
+
     #[error("template '{template}' is missing main.typ")]
-    MissingMain { template: TemplateName },
+    MissingMain { template: TemplateId },
 
     #[error(
         "template '{template}' contains both schema.yml and schema.json; keep only one schema definition"
     )]
-    ConflictingSchemaFiles { template: TemplateName },
+    ConflictingSchemaFiles { template: TemplateId },
 
     #[error("template '{template}' contains unsupported schema.yaml; rename it to schema.yml")]
-    UnsupportedSchemaFilename { template: TemplateName },
+    UnsupportedSchemaFilename { template: TemplateId },
 
     #[error("failed to read '{path}': {error}")]
     Read {
@@ -156,6 +133,57 @@ enum FilesystemLoaderError {
 
     #[error("template path '{path}' is not valid UTF-8")]
     NonUtf8Path { path: PathBuf },
+}
+
+fn discover_templates(
+    root: &Path,
+    current_dir: &Path,
+    parent_segments: &[String],
+    names: &mut Vec<TemplateId>,
+) -> Result<(), LoaderError> {
+    let entries = fs::read_dir(current_dir).map_err(|error| FilesystemLoaderError::ReadDir {
+        path: current_dir.to_owned(),
+        error,
+    })?;
+
+    for entry in entries {
+        let entry = entry.map_err(|error| FilesystemLoaderError::ReadDir {
+            path: current_dir.to_owned(),
+            error,
+        })?;
+        let path = entry.path();
+        let file_type = entry
+            .file_type()
+            .map_err(|error| FilesystemLoaderError::ReadDir {
+                path: path.clone(),
+                error,
+            })?;
+        if !file_type.is_dir() {
+            continue;
+        }
+
+        let segment = entry
+            .file_name()
+            .to_str()
+            .map(str::to_owned)
+            .ok_or_else(|| FilesystemLoaderError::NonUtf8Path { path: path.clone() })?;
+        if segment.starts_with('_') {
+            continue;
+        }
+
+        let mut segments = parent_segments.to_vec();
+        segments.push(segment);
+        let id = TemplateId::new(segments.join("/"))?;
+        if path.join("main.typ").is_file() {
+            names.push(id);
+            continue;
+        }
+
+        debug_assert!(path.starts_with(root));
+        discover_templates(root, &path, &segments, names)?;
+    }
+
+    Ok(())
 }
 
 fn read_schema(
@@ -247,10 +275,11 @@ fn render_path(prefix: &str, relative_path: &Path) -> Result<String, LoaderError
 mod tests {
     use std::fs;
 
+    use bytes::Bytes;
     use futures_executor::block_on;
     use tempfile::tempdir;
 
-    use typrest_core::{TemplateLoader, TemplateName};
+    use typrest_core::{TemplateId, TemplateLoader};
 
     use super::FilesystemLoader;
 
@@ -274,7 +303,7 @@ mod tests {
         write(&root.path().join("_shared/brand.typ"), "brand");
 
         let loader = FilesystemLoader::new(root.path());
-        let bundle = block_on(loader.load(&TemplateName::new("invoice").unwrap())).unwrap();
+        let bundle = block_on(loader.load(&TemplateId::new("invoice").unwrap())).unwrap();
 
         assert!(bundle.source.files().contains_key("main.typ"));
         assert!(bundle.source.files().contains_key("schema.yml"));
@@ -289,7 +318,7 @@ mod tests {
         write(&root.path().join("welcome/main.typ"), "Hello");
 
         let loader = FilesystemLoader::new(root.path());
-        let bundle = block_on(loader.load(&TemplateName::new("welcome").unwrap())).unwrap();
+        let bundle = block_on(loader.load(&TemplateId::new("welcome").unwrap())).unwrap();
 
         assert!(bundle.schema.is_none());
         assert!(bundle.source.files().contains_key("main.typ"));
@@ -305,7 +334,7 @@ mod tests {
         );
 
         let loader = FilesystemLoader::new(root.path());
-        let bundle = block_on(loader.load(&TemplateName::new("invoice").unwrap())).unwrap();
+        let bundle = block_on(loader.load(&TemplateId::new("invoice").unwrap())).unwrap();
 
         assert_eq!(bundle.schema.as_ref().unwrap().schema_version, "v1");
         assert!(bundle.source.files().contains_key("schema.json"));
@@ -325,7 +354,7 @@ mod tests {
         );
 
         let loader = FilesystemLoader::new(root.path());
-        let error = block_on(loader.load(&TemplateName::new("invoice").unwrap())).unwrap_err();
+        let error = block_on(loader.load(&TemplateId::new("invoice").unwrap())).unwrap_err();
 
         assert!(
             error
@@ -344,7 +373,7 @@ mod tests {
         );
 
         let loader = FilesystemLoader::new(root.path());
-        let error = block_on(loader.load(&TemplateName::new("invoice").unwrap())).unwrap_err();
+        let error = block_on(loader.load(&TemplateId::new("invoice").unwrap())).unwrap_err();
 
         assert!(error.to_string().contains("rename it to schema.yml"));
     }
@@ -370,6 +399,121 @@ mod tests {
         assert_eq!(
             names.iter().map(|name| name.as_str()).collect::<Vec<_>>(),
             vec!["invoice", "welcome"]
+        );
+    }
+
+    #[test]
+    fn discovers_nested_templates_in_route_order() {
+        let root = tempdir().unwrap();
+        for id in [
+            "financial/invoice",
+            "financial/report",
+            "support/leads/welcome",
+            "support/leads/feedback",
+            "birthday-cart",
+        ] {
+            write(&root.path().join(id).join("main.typ"), id);
+        }
+
+        let names = block_on(FilesystemLoader::new(root.path()).list()).unwrap();
+
+        assert_eq!(
+            names.iter().map(TemplateId::as_str).collect::<Vec<_>>(),
+            vec![
+                "birthday-cart",
+                "financial/invoice",
+                "financial/report",
+                "support/leads/feedback",
+                "support/leads/welcome",
+            ]
+        );
+    }
+
+    #[test]
+    fn shallow_template_hides_descendant_entrypoints_but_bundles_their_files() {
+        let root = tempdir().unwrap();
+        write(&root.path().join("financial/main.typ"), "Financial");
+        write(
+            &root.path().join("financial/invoice/main.typ"),
+            "Hidden invoice",
+        );
+        write(
+            &root.path().join("financial/_components/header.typ"),
+            "Header",
+        );
+
+        let loader = FilesystemLoader::new(root.path());
+        let names = block_on(loader.list()).unwrap();
+        let bundle = block_on(loader.load(&TemplateId::new("financial").unwrap())).unwrap();
+
+        assert_eq!(
+            names.iter().map(TemplateId::as_str).collect::<Vec<_>>(),
+            vec!["financial"]
+        );
+        assert!(bundle.source.files().contains_key("invoice/main.typ"));
+        assert!(bundle.source.files().contains_key("_components/header.typ"));
+    }
+
+    #[test]
+    fn skips_private_directories_during_discovery() {
+        let root = tempdir().unwrap();
+        write(&root.path().join("_draft/main.typ"), "Draft");
+        write(
+            &root.path().join("support/_draft/welcome/main.typ"),
+            "Draft welcome",
+        );
+        write(
+            &root.path().join("support/leads/welcome/main.typ"),
+            "Welcome",
+        );
+
+        let names = block_on(FilesystemLoader::new(root.path()).list()).unwrap();
+
+        assert_eq!(
+            names.iter().map(TemplateId::as_str).collect::<Vec<_>>(),
+            vec!["support/leads/welcome"]
+        );
+    }
+
+    #[test]
+    fn rejects_root_main_and_invalid_visible_directories() {
+        let root = tempdir().unwrap();
+        write(&root.path().join("main.typ"), "Unnamed");
+        let loader = FilesystemLoader::new(root.path());
+        assert!(
+            block_on(loader.list())
+                .unwrap_err()
+                .to_string()
+                .contains("unnamed")
+        );
+
+        fs::remove_file(root.path().join("main.typ")).unwrap();
+        write(
+            &root.path().join("financial reports/invoice/main.typ"),
+            "Invalid",
+        );
+        assert!(
+            block_on(loader.list())
+                .unwrap_err()
+                .to_string()
+                .contains("invalid template ID")
+        );
+    }
+
+    #[test]
+    fn global_shared_files_replace_same_path_local_files() {
+        let root = tempdir().unwrap();
+        write(&root.path().join("invoice/main.typ"), "Invoice");
+        write(&root.path().join("invoice/_shared/brand.typ"), "local");
+        write(&root.path().join("_shared/brand.typ"), "global");
+
+        let bundle =
+            block_on(FilesystemLoader::new(root.path()).load(&TemplateId::new("invoice").unwrap()))
+                .unwrap();
+
+        assert_eq!(
+            bundle.source.files().get("_shared/brand.typ").unwrap(),
+            &Bytes::from_static(b"global")
         );
     }
 }

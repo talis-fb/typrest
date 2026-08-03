@@ -1,7 +1,7 @@
 use axum::extract::{Json, Path, State};
 use axum::http::StatusCode;
 use serde::Serialize;
-use typrest_core::{Schema, TemplateName};
+use typrest_core::{Schema, TemplateId};
 
 use crate::errors::ApiError;
 use crate::server::AppState;
@@ -11,15 +11,15 @@ pub async fn list_templates(
 ) -> Result<Json<WebUiTemplatesResponse>, ApiError> {
     let templates = state
         .registry
-        .names()
+        .ids()
         .into_iter()
-        .map(|name| {
+        .map(|id| {
             let has_schema = state
                 .registry
-                .get(&name)
+                .get(&id)
                 .is_some_and(|entry| entry.schema().is_some());
             WebUiTemplateSummary {
-                name: name.into_inner(),
+                id: id.into_inner(),
                 has_schema,
             }
         })
@@ -30,25 +30,25 @@ pub async fn list_templates(
 
 pub async fn template_metadata(
     State(state): State<AppState>,
-    Path(template): Path<String>,
+    Path(template_id): Path<String>,
 ) -> Result<Json<WebUiTemplateMetadata>, ApiError> {
-    let name = TemplateName::new(template).map_err(|error| {
+    let id = TemplateId::new(template_id).map_err(|error| {
         ApiError::new(
             StatusCode::BAD_REQUEST,
-            "invalid_template_name",
+            "invalid_template_id",
             error.to_string(),
         )
     })?;
-    let entry = state.registry.get(&name).ok_or_else(|| {
+    let entry = state.registry.get(&id).ok_or_else(|| {
         ApiError::new(
             StatusCode::NOT_FOUND,
             "template_not_found",
-            format!("Template '{name}' was not found"),
+            format!("Template '{id}' was not found"),
         )
     })?;
 
     Ok(Json(WebUiTemplateMetadata {
-        name: name.into_inner(),
+        id: id.into_inner(),
         schema: entry.schema().cloned(),
     }))
 }
@@ -61,12 +61,12 @@ pub struct WebUiTemplatesResponse {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WebUiTemplateSummary {
-    pub name: String,
+    pub id: String,
     pub has_schema: bool,
 }
 
 #[derive(Serialize)]
 pub struct WebUiTemplateMetadata {
-    pub name: String,
+    pub id: String,
     pub schema: Option<Schema>,
 }

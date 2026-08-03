@@ -44,7 +44,7 @@ mod tests {
     use crate::compiler::PreparedTemplateBundle;
     use crate::{
         CompilationError, Document, PdfCompiler, PreparedTemplate, RenderError, RenderRequest,
-        Schema, TemplateName, TemplateRegistry, TemplateSource,
+        Schema, TemplateId, TemplateRegistry, TemplateSource,
     };
 
     use super::RenderService;
@@ -98,7 +98,7 @@ mod tests {
     fn registry(schema: Schema) -> TemplateRegistry {
         let registry = TemplateRegistry::default();
         registry.insert_for_test(
-            TemplateName::new("invoice").unwrap(),
+            TemplateId::new("invoice").unwrap(),
             PreparedTemplateBundle::new(schema, PreparedTemplate::for_test()),
         );
         registry
@@ -112,7 +112,7 @@ mod tests {
         let service = RenderService::new(registry(schema(json!({}))), compiler);
 
         let document = futures_executor::block_on(service.render(RenderRequest::new(
-            TemplateName::new("invoice").unwrap(),
+            TemplateId::new("invoice").unwrap(),
             json!({}),
         )))
         .unwrap();
@@ -136,7 +136,7 @@ mod tests {
         );
 
         let error = futures_executor::block_on(service.render(RenderRequest::new(
-            TemplateName::new("invoice").unwrap(),
+            TemplateId::new("invoice").unwrap(),
             json!({}),
         )))
         .unwrap_err();
@@ -153,7 +153,7 @@ mod tests {
         let service = RenderService::new(TemplateRegistry::default(), compiler);
 
         let error = futures_executor::block_on(service.render(RenderRequest::new(
-            TemplateName::new("missing").unwrap(),
+            TemplateId::new("missing").unwrap(),
             json!({}),
         )))
         .unwrap_err();
@@ -170,7 +170,7 @@ mod tests {
         let service = RenderService::new(registry(schema(json!({}))), compiler);
 
         let error = futures_executor::block_on(service.render(RenderRequest::new(
-            TemplateName::new("invoice").unwrap(),
+            TemplateId::new("invoice").unwrap(),
             json!({}),
         )))
         .unwrap_err();

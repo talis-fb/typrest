@@ -32,19 +32,19 @@
         <button
           type="button"
           class="card border border-base-300 bg-base-100 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-          on:click={() => dispatch("select", template.name)}
-          aria-label={`Open ${template.name} template`}
+          on:click={() => dispatch("select", template.id)}
+          aria-label={`Open ${template.id} template`}
         >
           <span class="card-body">
             <span class="flex items-start justify-between gap-4">
               <span class="grid size-10 place-items-center rounded-xl bg-primary/10 font-mono text-sm font-bold text-primary">
-                {template.name.slice(0, 2).toUpperCase()}
+                {template.id.split("/").at(-1)?.slice(0, 2).toUpperCase()}
               </span>
               <span class:badge-success={template.hasSchema} class="badge badge-sm badge-ghost">
                 {template.hasSchema ? "Schema" : "Raw JSON"}
               </span>
             </span>
-            <span class="mt-4 font-mono text-lg font-semibold">{template.name}</span>
+            <span class="mt-4 font-mono text-lg font-semibold">{template.id}</span>
             <span class="text-sm text-base-content/55">Open template workspace</span>
           </span>
         </button>

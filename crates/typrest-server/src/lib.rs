@@ -34,7 +34,7 @@ pub async fn serve(config: ServerConfig, reporter: DiagnosticReporter) -> Result
 
     info!(
         event = "templates.startup.completed",
-        template_count = registry.names().len(),
+        template_count = registry.ids().len(),
         warning_count = warnings.len(),
         status = "ok",
         "templates compiled successfully"
@@ -82,7 +82,7 @@ mod tests {
         CompilationDiagnostic, CompilationError, CompilationReport, DiagnosticLocation,
         DiagnosticPosition, DiagnosticSeverity, Document, PdfCompiler, PreparedTemplate,
         PreparedTemplateBundle, RelatedDiagnostic, RenderService, Schema, TemplateBundle,
-        TemplateLoader, TemplateName, TemplateRegistry, TemplateRegistryError, TemplateSource,
+        TemplateId, TemplateLoader, TemplateRegistry, TemplateRegistryError, TemplateSource,
     };
 
     use crate::config::ServerConfig;
@@ -180,7 +180,7 @@ mod tests {
         Arc::new(MemoryLoader::new(
             templates
                 .into_iter()
-                .map(|(name, bundle)| (TemplateName::new(name).unwrap(), bundle))
+                .map(|(name, bundle)| (TemplateId::new(name).unwrap(), bundle))
                 .collect(),
         ))
     }
@@ -214,7 +214,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn templates_returns_template_names() {
+    async fn templates_returns_template_ids() {
         let app = app(
             memory_loader(vec![
                 ("welcome", template(schema(json!({})))),
@@ -238,8 +238,8 @@ mod tests {
             response_body(response).await,
             json!({
                 "templates": [
-                    { "name": "invoice", "hasSchema": true },
-                    { "name": "welcome", "hasSchema": true }
+                    { "id": "invoice", "hasSchema": true },
+                    { "id": "welcome", "hasSchema": true }
                 ]
             })
         );
@@ -252,7 +252,7 @@ mod tests {
             Ok(Document::new(Bytes::from_static(b"%PDF-1.4 mock"))),
         );
 
-        for uri in ["/webui", "/webui/", "/webui/assets/missing.js"] {
+        for uri in ["/", "/_webui", "/_webui/", "/_webui/assets/missing.js"] {
             let response = app
                 .clone()
                 .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
@@ -274,20 +274,28 @@ mod tests {
             .clone()
             .oneshot(
                 Request::builder()
-                    .uri("/webui")
+                    .uri("/_webui")
                     .body(Body::empty())
                     .unwrap(),
             )
             .await
             .unwrap();
         assert_eq!(redirect.status(), StatusCode::PERMANENT_REDIRECT);
-        assert_eq!(redirect.headers().get("location").unwrap(), "/webui/");
+        assert_eq!(redirect.headers().get("location").unwrap(), "/_webui/");
+
+        let root_redirect = app
+            .clone()
+            .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(root_redirect.status(), StatusCode::PERMANENT_REDIRECT);
+        assert_eq!(root_redirect.headers().get("location").unwrap(), "/_webui/");
 
         let index = app
             .clone()
             .oneshot(
                 Request::builder()
-                    .uri("/webui/")
+                    .uri("/_webui/")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -371,8 +379,8 @@ mod tests {
             response_body(list).await,
             json!({
                 "templates": [
-                    { "name": "invoice", "hasSchema": true },
-                    { "name": "welcome", "hasSchema": false }
+                    { "id": "invoice", "hasSchema": true },
+                    { "id": "welcome", "hasSchema": false }
                 ]
             })
         );
@@ -388,7 +396,7 @@ mod tests {
             .await
             .unwrap();
         let invoice_body = response_body(invoice).await;
-        assert_eq!(invoice_body["name"], "invoice");
+        assert_eq!(invoice_body["id"], "invoice");
         assert_eq!(invoice_body["schema"]["schemaVersion"], "v1");
         assert_eq!(
             invoice_body["schema"]["request"]["body"]["properties"]["name"]["type"],
@@ -411,12 +419,12 @@ mod tests {
             .unwrap();
         assert_eq!(
             response_body(welcome).await,
-            json!({ "name": "welcome", "schema": null })
+            json!({ "id": "welcome", "schema": null })
         );
     }
 
     #[tokio::test]
-    async fn web_ui_metadata_rejects_invalid_and_missing_names() {
+    async fn web_ui_metadata_rejects_invalid_and_missing_ids() {
         let app = app_with_web_ui(
             memory_loader(Vec::new()),
             Ok(Document::new(Bytes::from_static(b"%PDF-1.4 mock"))),
@@ -448,9 +456,42 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn metadata_resolves_nested_template_ids() {
+        let app = app(
+            memory_loader(vec![("financial/invoice", template(schema(json!({}))))]),
+            Ok(Document::new(Bytes::from_static(b"%PDF-1.4 mock"))),
+        );
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/_api/templates/financial/invoice")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response_body(response).await["id"], "financial/invoice");
+
+        let encoded_separator = app
+            .oneshot(
+                Request::builder()
+                    .uri("/_api/templates/financial%2Finvoice")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(encoded_separator.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
     async fn render_returns_pdf() {
         let first_app = app(
-            memory_loader(vec![("invoice", template(schema(json!({}))))]),
+            memory_loader(vec![("financial/invoice", template(schema(json!({}))))]),
             Ok(Document::new(Bytes::from_static(b"%PDF-1.4 mock"))),
         );
 
@@ -458,7 +499,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method(Method::POST)
-                    .uri("/render/invoice")
+                    .uri("/financial/invoice")
                     .header("content-type", "application/json")
                     .body(Body::from("{}"))
                     .unwrap(),
@@ -492,7 +533,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method(Method::POST)
-                    .uri("/render/welcome")
+                    .uri("/welcome")
                     .header("content-type", "application/json")
                     .body(Body::from(r#"["not an object"]"#))
                     .unwrap(),
@@ -513,7 +554,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method(Method::POST)
-                    .uri("/render/welcome")
+                    .uri("/welcome")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -533,7 +574,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method(Method::POST)
-                    .uri("/render/missing")
+                    .uri("/missing")
                     .header("content-type", "application/json")
                     .body(Body::from("{}"))
                     .unwrap(),
@@ -545,6 +586,59 @@ mod tests {
         assert_eq!(
             response_body(response).await["error"],
             json!("template_not_found")
+        );
+    }
+
+    #[tokio::test]
+    async fn render_has_no_legacy_prefix_alias_and_rejects_reserved_ids() {
+        let app = app(
+            memory_loader(vec![("invoice", template(schema(json!({}))))]),
+            Ok(Document::new(Bytes::from_static(b"%PDF-1.4 mock"))),
+        );
+
+        let legacy = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/render/invoice")
+                    .header("content-type", "application/json")
+                    .body(Body::from("{}"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(legacy.status(), StatusCode::NOT_FOUND);
+
+        let trailing_slash = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/invoice/")
+                    .header("content-type", "application/json")
+                    .body(Body::from("{}"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(trailing_slash.status(), StatusCode::BAD_REQUEST);
+
+        let reserved = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/_private/invoice")
+                    .header("content-type", "application/json")
+                    .body(Body::from("{}"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(reserved.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            response_body(reserved).await["error"],
+            "invalid_template_id"
         );
     }
 
@@ -567,7 +661,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method(Method::POST)
-                    .uri("/render/invoice")
+                    .uri("/invoice")
                     .header("content-type", "application/json")
                     .body(Body::from("{}"))
                     .unwrap(),
@@ -599,7 +693,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method(Method::POST)
-                    .uri("/render/invoice")
+                    .uri("/invoice")
                     .header("content-type", "application/json")
                     .body(Body::from("{}"))
                     .unwrap(),
@@ -663,7 +757,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method(Method::POST)
-                    .uri("/render/invoice")
+                    .uri("/invoice")
                     .header("content-type", "application/json")
                     .body(Body::from("{}"))
                     .unwrap(),
@@ -700,7 +794,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method(Method::POST)
-                    .uri("/render/invoice")
+                    .uri("/invoice")
                     .header("content-type", "application/json")
                     .body(Body::from("{"))
                     .unwrap(),
@@ -724,13 +818,13 @@ mod tests {
 
         let build = TemplateRegistry::build(&loader, &compiler).await.unwrap();
         assert_eq!(
-            build.value().names(),
-            vec![TemplateName::new("invoice").unwrap()]
+            build.value().ids(),
+            vec![TemplateId::new("invoice").unwrap()]
         );
         assert!(
             build
                 .value()
-                .get(&TemplateName::new("invoice").unwrap())
+                .get(&TemplateId::new("invoice").unwrap())
                 .unwrap()
                 .schema()
                 .is_none()
@@ -803,7 +897,7 @@ Hello #data.name
         stream.writable().await.unwrap();
         stream
             .try_write(
-                b"POST /render/invoice HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: 14\r\nConnection: close\r\n\r\n{\"name\":\"Ada\"}",
+                b"POST /invoice HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: 14\r\nConnection: close\r\n\r\n{\"name\":\"Ada\"}",
             )
             .unwrap();
 
@@ -836,7 +930,7 @@ Hello #data.name
         assert!(names.iter().any(|name| name.as_str() == "invoice"));
         assert!(names.iter().any(|name| name.as_str() == "welcome"));
         loader
-            .load(&TemplateName::new("welcome").unwrap())
+            .load(&TemplateId::new("welcome").unwrap())
             .await
             .unwrap();
 
@@ -855,7 +949,7 @@ Hello #data.name
         let address = listener.local_addr().unwrap();
         let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
         let payload = fs::read(examples_dir.join("invoice/payload.json")).unwrap();
-        let response = post_json(address, "/render/invoice", &payload).await;
+        let response = post_json(address, "/invoice", &payload).await;
 
         server.abort();
 

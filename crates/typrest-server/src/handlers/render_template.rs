@@ -7,7 +7,7 @@ use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use serde_json::Value;
 use tracing::{info, warn};
-use typrest_core::{CompilationError, Document, RenderError, RenderRequest, TemplateName};
+use typrest_core::{CompilationError, Document, RenderError, RenderRequest, TemplateId};
 
 use crate::errors::ApiError;
 use crate::output::{DiagnosticContext, DiagnosticStage};
@@ -15,14 +15,14 @@ use crate::server::AppState;
 
 pub async fn render_template(
     State(state): State<AppState>,
-    Path(template): Path<String>,
+    Path(template_id): Path<String>,
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<Response, ApiError> {
-    let template = TemplateName::new(template).map_err(|error| {
+    let template = TemplateId::new(template_id).map_err(|error| {
         ApiError::new(
             StatusCode::BAD_REQUEST,
-            "invalid_template_name",
+            "invalid_template_id",
             error.to_string(),
         )
     })?;

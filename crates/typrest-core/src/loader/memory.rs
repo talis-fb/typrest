@@ -2,35 +2,35 @@ use std::collections::BTreeMap;
 
 use async_trait::async_trait;
 
-use crate::{TemplateBundle, TemplateName};
+use crate::{TemplateBundle, TemplateId};
 
 use super::{LoaderError, TemplateLoader};
 
 #[derive(Clone, Debug, Default)]
 pub struct MemoryLoader {
-    templates: BTreeMap<TemplateName, TemplateBundle>,
+    templates: BTreeMap<TemplateId, TemplateBundle>,
 }
 
 impl MemoryLoader {
-    pub fn new(templates: BTreeMap<TemplateName, TemplateBundle>) -> Self {
+    pub fn new(templates: BTreeMap<TemplateId, TemplateBundle>) -> Self {
         Self { templates }
     }
 
-    pub fn insert(&mut self, name: TemplateName, template: TemplateBundle) {
-        self.templates.insert(name, template);
+    pub fn insert(&mut self, template_id: TemplateId, template: TemplateBundle) {
+        self.templates.insert(template_id, template);
     }
 }
 
 #[async_trait]
 impl TemplateLoader for MemoryLoader {
-    async fn load(&self, name: &TemplateName) -> Result<TemplateBundle, LoaderError> {
+    async fn load(&self, template_id: &TemplateId) -> Result<TemplateBundle, LoaderError> {
         self.templates
-            .get(name)
+            .get(template_id)
             .cloned()
-            .ok_or_else(|| LoaderError::TemplateNotFound(name.clone()))
+            .ok_or_else(|| LoaderError::TemplateNotFound(template_id.clone()))
     }
 
-    async fn list(&self) -> Result<Vec<TemplateName>, LoaderError> {
+    async fn list(&self) -> Result<Vec<TemplateId>, LoaderError> {
         Ok(self.templates.keys().cloned().collect())
     }
 }
@@ -44,7 +44,7 @@ mod tests {
 
     use crate::loader::{LoaderError, TemplateLoader};
     use crate::schema::Schema;
-    use crate::{TemplateBundle, TemplateName, TemplateSource};
+    use crate::{TemplateBundle, TemplateId, TemplateSource};
 
     use super::MemoryLoader;
 
@@ -71,7 +71,7 @@ mod tests {
 
     #[test]
     fn loads_templates_from_memory() {
-        let name = TemplateName::new("invoice").unwrap();
+        let name = TemplateId::new("invoice").unwrap();
         let loader = MemoryLoader::new(BTreeMap::from([(name.clone(), template())]));
 
         let bundle = futures_executor::block_on(loader.load(&name)).unwrap();
@@ -81,7 +81,7 @@ mod tests {
 
     #[test]
     fn returns_not_found_for_missing_template() {
-        let name = TemplateName::new("missing").unwrap();
+        let name = TemplateId::new("missing").unwrap();
         let loader = MemoryLoader::default();
 
         let error = futures_executor::block_on(loader.load(&name)).unwrap_err();
