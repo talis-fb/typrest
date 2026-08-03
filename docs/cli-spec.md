@@ -2,13 +2,13 @@
 
 ## Goal
 
-The Papelon CLI is the local entrypoint for creating and running a filesystem-mode project.
+The Typrest CLI is the local entrypoint for creating and running a filesystem-mode project.
 
 In the MVP, the CLI has two responsibilities:
 
-- bootstrap a project layout with `papelon init`
-- validate every template with `papelon check`
-- start the HTTP server with `papelon serve`
+- bootstrap a project layout with `typrest init`
+- validate every template with `typrest check`
+- start the HTTP server with `typrest serve`
 
 This document defines the intended CLI contract going forward. If the implementation differs, this file is the source of truth for the next change.
 
@@ -17,32 +17,32 @@ This document defines the intended CLI contract going forward. If the implementa
 ## Command Summary
 
 ```text
-papelon init [path]
-papelon check [--log-format <pretty|json>] [--color <auto|always|never>]
-papelon serve [--port <port>] [--watch]
+typrest init [path]
+typrest check [--log-format <pretty|json>] [--color <auto|always|never>]
+typrest serve [--port <port>] [--watch]
 ```
 
 Notes:
 
-- `papelon init` creates a starter hello-world template example.
-- `papelon init` operates on the current working directory when no path is provided.
-- `papelon init path` initializes the provided target directory, relative or absolute.
-- `papelon check` uses the same project discovery and warmup compilation as `papelon serve`.
-- `papelon serve` resolves the nearest ancestor `papelon.toml` from the current working directory.
+- `typrest init` creates a starter hello-world template example.
+- `typrest init` operates on the current working directory when no path is provided.
+- `typrest init path` initializes the provided target directory, relative or absolute.
+- `typrest check` uses the same project discovery and warmup compilation as `typrest serve`.
+- `typrest serve` resolves the nearest ancestor `typrest.toml` from the current working directory.
 
 ---
 
 ## Project Model
 
-A Papelon project is a directory that contains:
+A Typrest project is a directory that contains:
 
-- a `papelon.toml` file at the project root
-- a templates root directory configured in `papelon.toml`
+- a `typrest.toml` file at the project root
+- a templates root directory configured in `typrest.toml`
 
-Default layout produced by `papelon init`:
+Default layout produced by `typrest init`:
 
 ```text
-./papelon.toml
+./typrest.toml
 ./templates/
 ./templates/hello-world/
 ```
@@ -53,7 +53,7 @@ Example:
 
 ```text
 my-project/
-  papelon.toml
+  typrest.toml
   templates/
     invoice/
       main.typ
@@ -64,28 +64,28 @@ my-project/
 
 ---
 
-## `papelon init`
+## `typrest init`
 
 ### Purpose
 
-Initialize the current directory or a target directory as a Papelon project.
+Initialize the current directory or a target directory as a Typrest project.
 
 ### Syntax
 
 ```text
-papelon init [path]
+typrest init [path]
 ```
 
 ### Behavior
 
 When executed, the command creates:
 
-- `papelon.toml` in the chosen target root
+- `typrest.toml` in the chosen target root
 - `templates/` in the chosen target root
 - `templates/hello-world/main.typ`
 - `templates/hello-world/schema.json`
 
-Default `papelon.toml` content:
+Default `typrest.toml` content:
 
 ```toml
 schema_version = "v1"
@@ -124,17 +124,17 @@ Default `templates/hello-world/main.typ` content:
 - The command uses the current working directory as the target project root when no path is provided.
 - When a path is provided, the command uses that path as the target project root. Relative paths resolve from the current working directory, and absolute paths are used as-is.
 - The command must create a starter hello-world template by default.
-- The command must fail if `papelon.toml` already exists in the target root.
+- The command must fail if `typrest.toml` already exists in the target root.
 - The command must fail if `templates/` already exists in the target root.
 - The command must fail if the target root already exists as a non-directory path.
 
 ### Result
 
-After success, the chosen target root is a valid Papelon project root.
+After success, the chosen target root is a valid Typrest project root.
 
 ---
 
-## `papelon serve`
+## `typrest serve`
 
 ### Purpose
 
@@ -143,7 +143,7 @@ Start the HTTP server in filesystem mode.
 ### Syntax
 
 ```text
-papelon serve [--port <port>] [--hostname <ipv4>] [--watch]
+typrest serve [--port <port>] [--hostname <ipv4>] [--watch]
 ```
 
 ### Arguments
@@ -174,17 +174,17 @@ Optional flag that enables template reload on filesystem changes.
 
 ### Resolution Rules
 
-`papelon serve` must:
+`typrest serve` must:
 
 1. determine the nearest project root by walking upward from the current working directory
-2. read `papelon.toml`
+2. read `typrest.toml`
 3. resolve `templates_root` relative to the project root
 4. start the server using that resolved directory
 
 Example:
 
 ```text
-papelon serve
+typrest serve
 ```
 
 If run inside:
@@ -193,7 +193,7 @@ If run inside:
 /workspace/invoices
 ```
 
-and `/workspace/invoices/papelon.toml` contains:
+and `/workspace/invoices/typrest.toml` contains:
 
 ```toml
 schema_version = "v1"
@@ -208,16 +208,16 @@ then the server must read templates from:
 
 ### Failure Cases
 
-`papelon serve` must fail with a clear user-facing error when:
+`typrest serve` must fail with a clear user-facing error when:
 
-- the project root does not contain `papelon.toml`
-- `papelon.toml` is invalid
+- the project root does not contain `typrest.toml`
+- `typrest.toml` is invalid
 - `templates_root` does not exist
 - `templates_root` is not a directory
 
 ---
 
-## `papelon check`
+## `typrest check`
 
 ### Purpose
 
@@ -225,7 +225,7 @@ Validate all templates without starting the HTTP server.
 
 ### Behavior
 
-`papelon check` resolves the nearest project exactly like `papelon serve`, then loads, prepares,
+`typrest check` resolves the nearest project exactly like `typrest serve`, then loads, prepares,
 warm-compiles, and PDF-exports every template. It reports all template failures in deterministic
 name order rather than stopping at the first failure.
 

@@ -2,11 +2,11 @@
 
 ## Status
 
-This document defines the current contract for Papelon's development Web UI. If the implementation
+This document defines the current contract for Typrest's development Web UI. If the implementation
 and this specification differ, this document is the source of truth for the next corrective change.
 
 The Web UI is a developer convenience for filesystem mode. It is not a production administration
-surface or a replacement for Papelon's HTTP rendering API.
+surface or a replacement for Typrest's HTTP rendering API.
 
 ## Goals
 
@@ -22,7 +22,7 @@ The Web UI must remain optional, lightweight, client-rendered, and isolated unde
 
 ## Configuration and Security
 
-The Web UI is controlled by the optional `web_ui` field in `papelon.toml`:
+The Web UI is controlled by the optional `web_ui` field in `typrest.toml`:
 
 ```toml
 schema_version = "v1"
@@ -37,13 +37,13 @@ Rules:
 - When false, `/webui`, `/webui/*`, and `/_api/*` must not be mounted and therefore return `404`.
 - The existing `/healthz`, `/templates`, and `/render/:template` routes are independent of this
   setting.
-- `papelon init` omits `web_ui`, leaving new projects disabled by default.
+- `typrest init` omits `web_ui`, leaving new projects disabled by default.
 
 The Web UI has no authentication or authorization. It is intended for local development only.
-Developers should bind Papelon to the loopback interface when enabling it:
+Developers should bind Typrest to the loopback interface when enabling it:
 
 ```bash
-papelon serve --hostname 127.0.0.1
+typrest serve --hostname 127.0.0.1
 ```
 
 A Web UI-enabled server must not be exposed directly to an untrusted network.

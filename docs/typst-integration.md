@@ -62,7 +62,7 @@ use typst::Library;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-pub struct PapelonWorld {
+pub struct TyprestWorld {
     /// Root document source (main.typ)
     main: Source,
     /// All template files: path -> bytes
@@ -75,7 +75,7 @@ pub struct PapelonWorld {
     fonts: Vec<Font>,
 }
 
-impl World for PapelonWorld {
+impl World for TyprestWorld {
     fn library(&self) -> &LazyHash<Library> {
         &self.library
     }
@@ -121,7 +121,7 @@ use typst::compile;
 use typst_pdf::{pdf, PdfOptions};
 
 // 1. Create the World with the template files
-let world = PapelonWorld::new(files, input_json);
+let world = TyprestWorld::new(files, input_json);
 
 // 2. Compile: returns Result with the document or errors
 let result = compile(&world);
@@ -228,7 +228,7 @@ with the imported file's `FileId`. We need to map that FileId to the correct con
 use typst::syntax::{FileId, VirtualPath, Source};
 use typst::diag::{FileError, FileResult};
 
-impl World for PapelonWorld {
+impl World for TyprestWorld {
     fn source(&self, id: FileId) -> FileResult<Source> {
         if id == self.main.id() {
             return Ok(self.main.clone());
@@ -287,7 +287,7 @@ All access to `SourceDiagnostic` belongs in `compiler/world.rs`. The adapter mus
 - call, import, include, and show trace frames;
 - a location-less fallback when Typst cannot resolve a span.
 
-Convert those values immediately into the Papelon-owned types documented in
+Convert those values immediately into the Typrest-owned types documented in
 `docs/diagnostics.md`. Never expose `SourceDiagnostic`, `DiagSpan`, or `Tracepoint` through a
 public signature.
 

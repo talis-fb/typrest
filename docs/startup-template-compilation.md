@@ -2,9 +2,9 @@
 
 ## Summary
 
-Papelon should load, validate, prepare, and warm-compile every template before the HTTP server starts listening.
+Typrest should load, validate, prepare, and warm-compile every template before the HTTP server starts listening.
 
-Startup compilation makes broken templates visible immediately on `papelon serve` startup instead of delaying template errors until the first matching render request. Requests still compile and export PDFs because each request has a different JSON payload, but they should reuse template-invariant Typst world state prepared at startup.
+Startup compilation makes broken templates visible immediately on `typrest serve` startup instead of delaying template errors until the first matching render request. Requests still compile and export PDFs because each request has a different JSON payload, but they should reuse template-invariant Typst world state prepared at startup.
 
 This behavior should stay policy-driven, not hardcoded. In the future we should be able to disable startup warmup for specific templates or globally, for example with a template config flag like `compile.lazy = true`. The startup and registry design should therefore treat warmup as a configurable step that can be skipped, not as an assumption baked into the type shape or control flow.
 
@@ -56,7 +56,7 @@ Request-time `CompilationError` can still happen for payload-dependent template 
 
 ## Compiler design
 
-The compiler module remains the anti-corruption layer around Typst. No file outside `crates/papelon-core/src/compiler/` may import `typst::*` or `typst_pdf::*`.
+The compiler module remains the anti-corruption layer around Typst. No file outside `crates/typrest-core/src/compiler/` may import `typst::*` or `typst_pdf::*`.
 
 Add an opaque public compiler type:
 

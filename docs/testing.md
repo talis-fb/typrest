@@ -15,9 +15,9 @@ cargo test --workspace
 Run targeted suites:
 
 ```bash
-cargo test -p papelon-core compiler
-cargo test -p papelon-server repository_examples_load_and_render_invoice_over_http
-cargo test -p papelon-cli
+cargo test -p typrest-core compiler
+cargo test -p typrest-server repository_examples_load_and_render_invoice_over_http
+cargo test -p typrest-cli
 ```
 
 Validate the Web UI:
@@ -36,7 +36,7 @@ Frontend changes are incomplete until the source and rebuilt output are both inc
 
 Core unit tests cover schema parsing, schema validation, template names, in-memory loading, and `RenderService` behavior. These tests should use direct assertions and avoid real Typst unless they are specifically testing compiler integration.
 
-Compiler tests live under `crates/papelon-core/src/compiler/`. They are allowed to use real Typst because the compiler module is the anti-corruption layer around Typst APIs. These tests validate PDF compilation, payload injection through `sys.inputs.data`, syntax error mapping, and default font loading.
+Compiler tests live under `crates/typrest-core/src/compiler/`. They are allowed to use real Typst because the compiler module is the anti-corruption layer around Typst APIs. These tests validate PDF compilation, payload injection through `sys.inputs.data`, syntax error mapping, and default font loading.
 
 Server tests cover HTTP handlers, error mapping, template listing, and render responses. Most server tests use `MemoryLoader` and mock compiler output. Tests that intentionally validate filesystem or real Typst integration can use `FilesystemLoader` and `TypstCompiler`.
 
@@ -45,7 +45,7 @@ field validation. `svelte-check` covers TypeScript and Svelte diagnostics, inclu
 warnings. Server tests cover the disabled-by-default configuration, conditional route mounting,
 embedded static assets, and registry-backed `/_api/*` responses.
 
-CLI tests cover command parsing and filesystem scaffolding for `papelon serve`, `--watch`, and `papelon init`. They should use temporary directories and must not rely on global local state.
+CLI tests cover command parsing and filesystem scaffolding for `typrest serve`, `--watch`, and `typrest init`. They should use temporary directories and must not rely on global local state.
 
 E2E-style tests may start the server on a random local port and issue an HTTP request. They should verify status code, `application/pdf`, and enough PDF content behavior to catch blank output regressions.
 

@@ -129,15 +129,15 @@
 </script>
 
 <svelte:head>
-  <title>{selected ? `${selected.name} · Papelon` : "Papelon Web UI"}</title>
+  <title>{selected ? `${selected.name} · Typrest` : "Typrest Web UI"}</title>
 </svelte:head>
 
 <header class="sticky top-0 z-30 border-b border-base-300/80 bg-base-100/90 backdrop-blur">
   <div class="mx-auto flex h-16 max-w-[1600px] items-center justify-between px-4 sm:px-6">
-    <button type="button" class="flex items-center gap-3" on:click={closeTemplate} aria-label="Papelon template list">
-      <span class="grid size-9 place-items-center rounded-xl bg-primary font-mono font-bold text-primary-content">P</span>
+    <button type="button" class="flex items-center gap-3" on:click={closeTemplate} aria-label="Typrest template list">
+      <span class="grid size-9 place-items-center rounded-xl bg-primary font-mono font-bold text-primary-content">T</span>
       <span>
-        <span class="block text-left font-semibold leading-tight">Papelon</span>
+        <span class="block text-left font-semibold leading-tight">Typrest</span>
         <span class="block text-left text-[0.65rem] uppercase tracking-[0.18em] text-base-content/45">Web UI</span>
       </span>
     </button>

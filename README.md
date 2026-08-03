@@ -1,8 +1,8 @@
-# Papelon
+# Typrest
 
-Papelon is an HTTP server for server-side PDF generation with Typst. It is built for applications that need reliable PDF output without embedding a PDF library or browser automation runtime into the application itself.
+Typrest is an HTTP server for server-side PDF generation with Typst. It is built for applications that need reliable PDF output without embedding a PDF library or browser automation runtime into the application itself.
 
-Applications integrate with Papelon through HTTP. A service in any language sends JSON to a template endpoint, and Papelon validates the payload, compiles the matching Typst template, and returns PDF bytes.
+Applications integrate with Typrest through HTTP. A service in any language sends JSON to a template endpoint, and Typrest validates the payload, compiles the matching Typst template, and returns PDF bytes.
 
 The current MVP runs in filesystem mode. Templates live in a directory mounted into the server, and each template contains a required `main.typ` file. An optional `schema.json` contract can validate request payloads.
 
@@ -57,7 +57,7 @@ templates/
     brand.typ
 ```
 
-Each template directory must contain `main.typ`; `schema.json` is optional. If it is absent, Papelon skips payload validation and injects the request JSON directly through `sys.inputs.data`. Files under `_shared/` are available to every template.
+Each template directory must contain `main.typ`; `schema.json` is optional. If it is absent, Typrest skips payload validation and injects the request JSON directly through `sys.inputs.data`. Files under `_shared/` are available to every template.
 
 ## Complete Typst Example
 
@@ -73,7 +73,7 @@ The JSON request body is injected into Typst through `sys.inputs.data`.
 
 ## schema.json Reference
 
-Papelon supports schema version `v1`. The root object must contain `schemaVersion` and `request.body`.
+Typrest supports schema version `v1`. The root object must contain `schemaVersion` and `request.body`.
 
 ```json
 {
@@ -158,7 +158,7 @@ Status codes:
 
 ## Compiler Diagnostics
 
-`papelon check`, server startup, watch reloads, and request-time compilation share the same
+`typrest check`, server startup, watch reloads, and request-time compilation share the same
 diagnostic pipeline. Terminal output includes annotated source ranges, all Typst errors and
 warnings, hints, and call/import traces.
 
@@ -170,10 +170,10 @@ See [docs/diagnostics.md](docs/diagnostics.md) for the output contract and Typst
 
 ## Development Web UI
 
-Papelon includes an optional browser interface for inspecting prepared templates, editing test
+Typrest includes an optional browser interface for inspecting prepared templates, editing test
 payloads, previewing PDFs, and downloading the latest render. It is disabled by default.
 
-Enable it in `papelon.toml`:
+Enable it in `typrest.toml`:
 
 ```toml
 schema_version = "v1"
@@ -181,7 +181,7 @@ templates_root = "templates"
 web_ui = true
 ```
 
-Then run Papelon on the loopback interface and open `http://127.0.0.1:8080/webui`:
+Then run Typrest on the loopback interface and open `http://127.0.0.1:8080/webui`:
 
 ```bash
 cargo run -- serve --hostname 127.0.0.1

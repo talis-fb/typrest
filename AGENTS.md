@@ -18,7 +18,7 @@ The central differentiator: any system in any language integrates through simple
 ### Mode 1 - Filesystem (current MVP)
 
 ```bash
-papelon serve --templates ./templates 8080
+typrest serve --templates ./templates 8080
 ```
 
 - Reads templates directly from the `./templates` directory
@@ -30,10 +30,10 @@ papelon serve --templates ./templates 8080
 ### Mode 2 - Store (future version, DO NOT implement now)
 
 ```bash
-papelon serve --store /path/to/store 8080
+typrest serve --store /path/to/store 8080
 ```
 
-- Templates published through `papelon push`
+- Templates published through `typrest push`
 - Versioning with tags (`invoice:latest`, `invoice:v2.1`)
 - Routes: `POST /render/:template/:tag`
 - Pluggable backends: filesystem, S3, GCS
@@ -97,7 +97,7 @@ Use **exactly** these names in code (structs, variables, functions, comments):
 | `SchemaVersionError` | Load error: missing or unsupported `schemaVersion`. |
 | `SchemaError` | Load error: structurally invalid schema (`properties` without object, enum with mixed types, etc.). |
 | `ValidationError` | Render error: payload does not satisfy the schema (missing required field, wrong type, invalid enum). |
-| `CompilationDiagnostic` | Papelon-owned compiler diagnostic: severity, message, optional virtual source range, hints, and trace frames. Contains no `typst::*` type. |
+| `CompilationDiagnostic` | Typrest-owned compiler diagnostic: severity, message, optional virtual source range, hints, and trace frames. Contains no `typst::*` type. |
 | `CompilationReport` | Ordered collection of every error and warning produced by one failed compilation/export. |
 | `CompilationError` | Typst compiler failed during startup warmup or request rendering. Contains a `CompilationReport`. |
 | `LoaderError` | Enum that unifies `TemplateLoader` errors: `TemplateNotFound`, `SchemaVersionError`, `SchemaError`, `IoError`. |
@@ -106,7 +106,7 @@ Use **exactly** these names in code (structs, variables, functions, comments):
 ### Critical Distinction: Load Error vs Render Error
 
 - **Load errors** (`SchemaVersionError`, `SchemaError`) are detected when the template is read from disk: at startup or under `--watch`. They never reach render.
-- **Startup compilation errors** are detected while building `TemplateRegistry`. They must be shown during `papelon serve` startup before the server listens.
+- **Startup compilation errors** are detected while building `TemplateRegistry`. They must be shown during `typrest serve` startup before the server listens.
 - **Render errors** (`ValidationError`, `CompilationError`) are detected at request time. Request-time `CompilationError` remains possible for payload-dependent template behavior.
 
 ---
@@ -143,7 +143,7 @@ The `typst` crate has an unstable API across minor versions. To protect the rest
 
 ### Absolute Rule
 
-> If any file outside `crates/papelon-core/src/compiler/` contains `use typst::` or `use typst_pdf::`, the architecture has been violated.
+> If any file outside `crates/typrest-core/src/compiler/` contains `use typst::` or `use typst_pdf::`, the architecture has been violated.
 
 The Rust compiler reinforces this: `world.rs` and `fonts.rs` are `pub(super)`, invisible outside the module.
 
@@ -152,7 +152,7 @@ The Rust compiler reinforces this: `world.rs` and `fonts.rs` are `pub(super)`, i
 Defined in the `compiler` module. This is everything `RenderService` and tests know:
 
 ```rust
-// Papelon-owned diagnostic types. None contains a typst::* type.
+// Typrest-owned diagnostic types. None contains a typst::* type.
 #[derive(Debug, thiserror::Error)]
 pub enum CompilationError {
     #[error("compilation failed: ...")]
@@ -260,7 +260,7 @@ Real Typst compilation tests live in `compiler/world.rs` as module tests (`#[cfg
 ## Cargo Workspace Structure
 
 ```
-papelon/
+typrest/
   Cargo.toml              ← workspace root
   CLAUDE.md               ← this file
   DECISIONS.md            ← architectural decision log
@@ -270,7 +270,7 @@ papelon/
     startup-template-compilation.md ← startup compilation + prepared runtime design
     typst-integration.md  ← typst crate API reference
   crates/
-    papelon-core/         ← domain + types + traits (no HTTP, no direct filesystem access)
+    typrest-core/         ← domain + types + traits (no HTTP, no direct filesystem access)
       src/
         lib.rs
         template_name.rs  ← TemplateName
@@ -283,19 +283,19 @@ papelon/
         compiler.rs       ← Typst ACL: public interface
         compiler/         ← private world.rs and fonts.rs
         render/           ← RenderService, RenderError
-    papelon-server/       ← HTTP server (axum)
+    typrest-server/       ← HTTP server (axum)
       src/
         main.rs
         routes/
         errors/
-    papelon-cli/          ← CLI (clap): only `papelon init` in the MVP
+    typrest-cli/          ← CLI (clap): only `typrest init` in the MVP
       src/
         main.rs
 ```
 
-**Rule:** `papelon-core` has no HTTP dependencies. It is testable in isolation with `MemoryLoader` in tests.
+**Rule:** `typrest-core` has no HTTP dependencies. It is testable in isolation with `MemoryLoader` in tests.
 
-**Note:** the module inside `papelon-core/src/` for the trait and implementations is `loader`, not `resolver`; this follows the trait rename.
+**Note:** the module inside `typrest-core/src/` for the trait and implementations is `loader`, not `resolver`; this follows the trait rename.
 
 ---
 
@@ -396,7 +396,7 @@ Response:
 - Do not implement authentication (token, OAuth)
 - Do not implement SDKs for other languages
 - Do not implement compilation cache
-- Do not implement `papelon gc`
+- Do not implement `typrest gc`
 - Do not implement S3 backend
 - Do not support Typst Universe packages (`@preview/...`): return a clear error
 

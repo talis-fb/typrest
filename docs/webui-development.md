@@ -1,11 +1,11 @@
 # Web UI Usage and Development Guide
 
-This guide covers using Papelon's development Web UI and maintaining its frontend. For the
+This guide covers using Typrest's development Web UI and maintaining its frontend. For the
 normative behavior and internal route contracts, see [Web UI Specification](webui-spec.md).
 
 ## Enable the Web UI
 
-The Web UI is disabled by default. Add `web_ui = true` to the project's `papelon.toml`:
+The Web UI is disabled by default. Add `web_ui = true` to the project's `typrest.toml`:
 
 ```toml
 schema_version = "v1"
@@ -13,7 +13,7 @@ templates_root = "templates"
 web_ui = true
 ```
 
-Start Papelon on the loopback interface:
+Start Typrest on the loopback interface:
 
 ```bash
 cargo run -- serve --hostname 127.0.0.1
@@ -148,7 +148,7 @@ npm ci
 
 ### Run the Vite Development Server
 
-Run Papelon with the Web UI enabled in one terminal:
+Run Typrest with the Web UI enabled in one terminal:
 
 ```bash
 cargo run -- serve --hostname 127.0.0.1
@@ -203,10 +203,10 @@ responses.
 
 ## Embedded Asset Workflow
 
-The server embeds `webui/dist` into the binary. This preserves Papelon's single-binary deployment
+The server embeds `webui/dist` into the binary. This preserves Typrest's single-binary deployment
 and keeps normal Cargo and Docker builds independent of Node.
 
-The consequence is that changing frontend source alone does not change an already-built Papelon
+The consequence is that changing frontend source alone does not change an already-built Typrest
 binary. Use this order:
 
 1. change files under `webui/src`;
@@ -241,7 +241,7 @@ See [Web UI Specification](webui-spec.md#internal-metadata-api) for the current 
 
 Confirm that:
 
-- `web_ui = true` is in the `papelon.toml` found by `papelon serve`;
+- `web_ui = true` is in the `typrest.toml` found by `typrest serve`;
 - the server was restarted after changing configuration;
 - the running binary contains the Web UI implementation.
 
@@ -254,7 +254,7 @@ For the Vite development server, refresh the browser.
 For the Rust-served UI:
 
 1. run `npm run build`;
-2. rebuild/restart Papelon;
+2. rebuild/restart Typrest;
 3. refresh `/webui/`.
 
 The Rust binary contains a snapshot of `webui/dist` from build time.
@@ -285,7 +285,7 @@ watch behavior where appropriate or restart the server, then refresh the browser
 
 - Fix client-side JSON errors before retrying.
 - For `422`, review the listed schema violations.
-- For `500`, review compiler diagnostics and run `papelon check` for annotated source output.
+- For `500`, review compiler diagnostics and run `typrest check` for annotated source output.
 - For network failures, confirm that the Rust server is running and that Vite is proxying to port
   `8080`.
 
@@ -295,7 +295,7 @@ the browser.
 ## Related Documentation
 
 - [Web UI Specification](webui-spec.md)
-- [`papelon.toml` Specification](papelon-toml-spec.md)
+- [`typrest.toml` Specification](typrest-toml-spec.md)
 - [Schema Specification](schema-v1.md)
 - [Compiler Diagnostics and Logging](diagnostics.md)
 - [Testing Guide](testing.md)

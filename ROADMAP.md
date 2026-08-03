@@ -16,8 +16,8 @@ Success criterion: `docker run` starts the server, `curl POST /render/invoice` w
 
 **Goal:** working workspace, domain types defined, filesystem template loading.
 
-- [x] Create a Cargo workspace with three crates: `papelon-core`, `papelon-server`, `papelon-cli`
-- [x] Define domain types in `papelon-core`:
+- [x] Create a Cargo workspace with three crates: `typrest-core`, `typrest-server`, `typrest-cli`
+- [x] Define domain types in `typrest-core`:
   - [x] `TemplateName` (newtype over String with validation)
   - [x] `Schema` and `SchemaField` (parsed from schema.json)
   - [x] `TemplateSource` (path -> bytes map)
@@ -25,7 +25,7 @@ Success criterion: `docker run` starts the server, `curl POST /render/invoice` w
   - [x] `RenderRequest` (TemplateName + serde_json::Value)
   - [x] `Document` (PDF bytes)
   - [x] `ValidationError` and `CompilationError` (with thiserror)
-- [x] Define the `TemplateLoader` trait in `papelon-core`
+- [x] Define the `TemplateLoader` trait in `typrest-core`
 - [x] Implement `FilesystemLoader`:
   - [x] Recursively scan the templates directory
   - [x] Parse each template's `schema.json`
@@ -48,7 +48,7 @@ Success criterion: `docker run` starts the server, `curl POST /render/invoice` w
 
 **Goal:** given a template and a payload, compile and obtain PDF bytes.
 
-- [x] Add `typst` and `typst-pdf` dependencies to `papelon-core`
+- [x] Add `typst` and `typst-pdf` dependencies to `typrest-core`
 - [x] Implement `TypstCompiler`:
   - [x] Receives `TemplateSource` (path -> bytes map) + JSON payload
   - [x] Injects payload through `sys.inputs.data`
@@ -73,7 +73,7 @@ Success criterion: `docker run` starts the server, `curl POST /render/invoice` w
 
 **Goal:** expose RenderService over HTTP with correct error handling.
 
-- [x] Create `papelon-server` with `axum` and `tokio`
+- [x] Create `typrest-server` with `axum` and `tokio`
 - [x] Implement routes:
   - [x] `POST /render/:template` -> calls RenderService, returns PDF or JSON error
   - [x] `GET /templates` -> lists available templates
@@ -83,7 +83,7 @@ Success criterion: `docker run` starts the server, `curl POST /render/invoice` w
   - [x] `ValidationError` -> 422 with a violations list
   - [x] `CompilationError` -> 500 with the Typst message
 - [x] Structured logs with `tracing`: each render logs template, latency, PDF size
-- [x] Create `papelon-cli` with `main.rs` with argument parsing through `clap`:
+- [x] Create `typrest-cli` with `main.rs` with argument parsing through `clap`:
   - [x] `serve <templates>` (required in Mode 1)
   - [x] `<port>` (default 8080)
 
@@ -104,8 +104,8 @@ Success criterion: `docker run` starts the server, `curl POST /render/invoice` w
   - [x] Use the `notify` crate to detect changes in the templates directory
   - [x] On change: rescan the changed template, update `FilesystemLoader`
   - [x] Log which template was reloaded
-- [x] Minimal CLI in `papelon-cli`:
-  - [x] `papelon init <name>`: creates `name/main.typ` and `name/schema.json` with boilerplate
+- [x] Minimal CLI in `typrest-cli`:
+  - [x] `typrest init <name>`: creates `name/main.typ` and `name/schema.json` with boilerplate
   - [x] `main.typ` boilerplate already includes `#let data = json(bytes(sys.inputs.data))`
 - [x] README with:
   - [x] What the project is (3 paragraphs)
@@ -146,7 +146,7 @@ Success criterion: `docker run` starts the server, `curl POST /render/invoice` w
 - [x] Add compiler tests for prepare, warmup compilation, and dynamic `sys.inputs.data`
 - [x] Add server tests for startup failure, successful prepared rendering, `/templates`, and watch reload behavior
 
-**Exit criterion:** `papelon serve ./examples/templates 8080` compiles all templates before listening, reports broken templates during startup, and render requests reuse prepared template state while still producing payload-specific PDFs.
+**Exit criterion:** `typrest serve ./examples/templates 8080` compiles all templates before listening, reports broken templates during startup, and render requests reuse prepared template state while still producing payload-specific PDFs.
 
 ---
 
@@ -158,13 +158,13 @@ structured production output.
 - [x] Preserve all Typst errors, warnings, locations, hints, and trace frames behind the compiler ACL
 - [x] Add annotated, color-aware human diagnostics
 - [x] Add JSON Lines diagnostic and lifecycle logging
-- [x] Add `papelon check` using the startup warmup/export pipeline
+- [x] Add `typrest check` using the startup warmup/export pipeline
 - [x] Aggregate startup/check failures across every template
 - [x] Report watch and payload-dependent compilation diagnostics
 - [x] Return safe structured diagnostics over HTTP without source excerpts or physical paths
 - [x] Document and test the exact-version Typst upgrade boundary
 
-**Exit criterion:** a broken template is fully explained by `papelon check`, the same information is
+**Exit criterion:** a broken template is fully explained by `typrest check`, the same information is
 available during startup/watch/render, and future Typst upgrades remain isolated to `compiler/`.
 
 ---
@@ -178,5 +178,5 @@ Do not implement until Mode 1 is in production and has feedback from real users.
 - [ ] Implement push protocol (blobs, manifests, refs)
 - [ ] Implement `StoreLoader`
 - [ ] Implement `S3Store`
-- [ ] CLI: `papelon push`, `papelon tag`, `papelon ls`
+- [ ] CLI: `typrest push`, `typrest tag`, `typrest ls`
 - [ ] Tagged routes: `POST /render/:template/:tag`

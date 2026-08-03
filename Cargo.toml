@@ -1,10 +1,10 @@
 [workspace]
 members = [
-    "crates/papelon-core",
-    "crates/papelon-server",
-    "crates/papelon-cli",
+    "crates/typrest-core",
+    "crates/typrest-server",
+    "crates/typrest-cli",
 ]
-default-members = ["crates/papelon-cli"]
+default-members = ["crates/typrest-cli"]
 resolver = "2"
 
 [workspace.package]

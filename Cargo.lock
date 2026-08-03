@@ -2019,60 +2019,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "papelon-cli"
-version = "0.1.0"
-dependencies = [
- "clap",
- "papelon-core",
- "papelon-server",
- "serde",
- "serde_json",
- "tempfile",
- "tokio",
- "toml",
-]
-
-[[package]]
-name = "papelon-core"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "bytes",
- "futures-executor",
- "insta",
- "pdf-extract",
- "serde",
- "serde_json",
- "thiserror",
- "typst",
- "typst-assets",
- "typst-pdf",
-]
-
-[[package]]
-name = "papelon-server"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "axum",
- "bytes",
- "codespan-reporting",
- "futures-executor",
- "mime_guess",
- "notify",
- "papelon-core",
- "rust-embed",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
- "tokio",
- "tower",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "parking_lot"
 version = "0.12.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3370,6 +3316,60 @@ name = "typenum"
 version = "1.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20"
+
+[[package]]
+name = "typrest-cli"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "toml",
+ "typrest-core",
+ "typrest-server",
+]
+
+[[package]]
+name = "typrest-core"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "futures-executor",
+ "insta",
+ "pdf-extract",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "typst",
+ "typst-assets",
+ "typst-pdf",
+]
+
+[[package]]
+name = "typrest-server"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "axum",
+ "bytes",
+ "codespan-reporting",
+ "futures-executor",
+ "mime_guess",
+ "notify",
+ "rust-embed",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tower",
+ "tracing",
+ "tracing-subscriber",
+ "typrest-core",
+]
 
 [[package]]
 name = "typst"

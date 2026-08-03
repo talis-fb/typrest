@@ -22,7 +22,7 @@
       <div class="card-body items-center py-16 text-center">
         <h2 class="card-title">No templates are prepared</h2>
         <p class="text-base-content/60">
-          Add a template and refresh this page after Papelon has loaded it.
+          Add a template and refresh this page after Typrest has loaded it.
         </p>
       </div>
     </div>

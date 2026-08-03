@@ -1,8 +1,8 @@
 services:
-  papelon:
+  typrest:
     build: .
     ports:
       - "8080:8080"
     volumes:
       - ./examples/templates:/app/templates:ro
-    command: ["papelon", "serve", "/app/templates", "8080", "--watch"]
+    command: ["typrest", "serve", "/app/templates", "8080", "--watch"]

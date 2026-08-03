@@ -2,14 +2,14 @@
 
 ## Goals
 
-Papelon exposes one compiler diagnostic model across:
+Typrest exposes one compiler diagnostic model across:
 
-- `papelon check`;
-- `papelon serve` startup warmup;
+- `typrest check`;
+- `typrest serve` startup warmup;
 - `--watch` reloads;
 - payload-dependent render failures.
 
-Typst diagnostics are converted immediately into Papelon-owned values. No public diagnostic,
+Typst diagnostics are converted immediately into Typrest-owned values. No public diagnostic,
 HTTP response, or log record contains a `typst::*` type.
 
 ## Human output
@@ -25,8 +25,8 @@ Pretty output is the default. Errors and warnings are written to stderr with:
 Color defaults to `auto` and can be changed globally:
 
 ```text
-papelon --color always check
-papelon serve --color never
+typrest --color always check
+typrest serve --color never
 ```
 
 Warnings are always shown but never make compilation fail.
@@ -36,8 +36,8 @@ Warnings are always shown but never make compilation fail.
 Use `--log-format json` for JSON Lines output:
 
 ```text
-papelon check --log-format json
-papelon serve --log-format json
+typrest check --log-format json
+typrest serve --log-format json
 ```
 
 Compiler diagnostics use `compiler.diagnostic` events. Hints and traces use
