@@ -1,403 +1,118 @@
-# Project Context
+# Typrest Agent Guide
 
-This file is loaded automatically by Claude Code before each session.
-It contains the project design context, architectural decisions, and rules.
+This file is the repository-wide entry point for AI coding agents. Keep it concise and route
+detailed knowledge to the canonical documents under [`docs/`](docs/README.md).
 
----
+## Project at a Glance
 
-## What This Project Is
+Typrest is a Rust HTTP service that validates JSON payloads, renders Typst templates, and returns
+PDF bytes. The current product supports filesystem-backed templates only. Templates are loaded,
+prepared, and warm-compiled into an in-memory registry before the server listens.
 
-An HTTP server in Rust for server-side PDF generation using **Typst** as the compilation engine. It is designed as a lightweight, performant, language-agnostic alternative to current solutions (Puppeteer, pdfmake, ReportLab, etc.).
+The repository contains:
 
-The central differentiator: any system in any language integrates through simple HTTP. This is not a library; it is a service.
+- `crates/typrest-core`: domain types, schema validation, prepared registry, render service, and
+  the Typst anti-corruption layer;
+- `crates/typrest-server`: filesystem loading, watch mode, Axum routes, diagnostics, and server
+  startup;
+- `crates/typrest-cli`: `init`, `check`, and `serve`, including project configuration discovery;
+- `webui`: optional Svelte development UI and committed production assets;
+- `examples/templates`: example Typst templates and payloads.
 
----
+## Read Before Changing
 
-## Two Operation Modes
+| Task | Read first |
+|---|---|
+| Architecture or domain changes | [`docs/architecture.md`](docs/architecture.md), [`docs/adr/`](docs/adr/README.md) |
+| Schema parsing or validation | [`docs/schema-v1.md`](docs/schema-v1.md) |
+| CLI or project discovery | [`docs/cli-spec.md`](docs/cli-spec.md), [`docs/typrest-toml-spec.md`](docs/typrest-toml-spec.md) |
+| Registry, startup, or watch mode | [`docs/startup-template-compilation.md`](docs/startup-template-compilation.md) |
+| Typst compiler or fonts | [`docs/typst-integration.md`](docs/typst-integration.md), [`docs/diagnostics.md`](docs/diagnostics.md) |
+| HTTP handlers or errors | [`docs/architecture.md`](docs/architecture.md#http-surface), [`docs/diagnostics.md`](docs/diagnostics.md) |
+| Web UI | [`docs/webui-spec.md`](docs/webui-spec.md), [`docs/webui-development.md`](docs/webui-development.md) |
+| Tests | [`docs/testing.md`](docs/testing.md) |
 
-### Mode 1 - Filesystem (current MVP)
+When code, tests, and prose disagree, treat the current code and tests as executable truth, then
+update the affected documentation in the same change. Do not silently choose between conflicting
+accepted decisions; record a superseding ADR under `docs/adr/`.
+
+## Critical Architecture Rules
+
+- Filesystem mode is the only implemented mode. Do not implement Store mode, tags, publishing,
+  authentication, SDKs, S3, a compilation cache, or Typst Universe packages without an explicit
+  decision and scope change.
+- HTTP handlers never read template files. Startup and watch mode use `TemplateLoader`; requests
+  use `TemplateRegistry` through `RenderService`.
+- A template requires `main.typ`. `schema.yml` is optional; legacy `schema.json` is accepted, but a
+  template cannot contain both.
+- Load-time schema errors do not become render errors. Startup compilation failures occur before
+  socket binding. Request-time validation and payload-dependent compilation failures are render
+  errors.
+- Only files under `crates/typrest-core/src/compiler/` may import `typst::*` or `typst_pdf::*`.
+  Public compiler types must not expose Typst types.
+- `typst`, `typst-pdf`, and `typst-assets` stay exactly pinned to the same version and are upgraded
+  together.
+- `_shared/` files are assembled into each `TemplateSource` by the filesystem loader. Relative
+  paths and template subdirectories must be preserved.
+- Use typed `thiserror` errors in production code. Do not add `unwrap()` or `expect()` outside tests
+  unless an invariant is locally proven and the existing compiler boundary already permits it.
+- Keep `typrest-core` free of HTTP dependencies and direct filesystem access.
+
+## Current HTTP Surface
+
+The implemented routes are:
+
+- `GET /_healthz`;
+- `GET /_api/templates`;
+- `GET /_api/templates/:template`;
+- `POST /render/:template`;
+- `/webui`, `/webui/`, and `/webui/*` only when `web_ui = true`.
+
+The `/_api/*` metadata routes are currently mounted even when the Web UI is disabled. There are no
+implemented `/healthz` or `/templates` aliases.
+
+## Code Conventions
+
+- Use canonical domain terms from [`docs/architecture.md`](docs/architecture.md#canonical-domain-terms).
+- Prefer edition-2018-style modules: `foo.rs` plus `foo/`; do not add new `mod.rs` files.
+- Do not add `pub use` solely as an internal import shortcut. Public API re-exports must be
+  intentional.
+- HTTP errors use the structured JSON envelope defined by handlers and diagnostics; never return a
+  generic string error from a handler.
+- Tests for core behavior should use `MemoryLoader` and mock compilers. Keep real Typst integration
+  tests inside the compiler ACL or explicit end-to-end coverage.
+- Preserve unrelated user changes in a dirty worktree and keep changes scoped to the task.
+
+## Validation Commands
+
+Run the smallest relevant checks while iterating, then the complete affected suite.
 
 ```bash
-typrest serve --templates ./templates 8080
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
 ```
 
-- Reads templates directly from the `./templates` directory
-- Templates live inside the container: updating a template means rebuild + redeploy
-- **No store, no tags, no versioning**
-- Routes: `POST /render/:template` (no tag)
-- **This is the only mode being developed now**
-
-### Mode 2 - Store (future version, DO NOT implement now)
+For Web UI changes:
 
 ```bash
-typrest serve --store /path/to/store 8080
+cd webui
+npm run check
+npm test
+npm run build
 ```
 
-- Templates published through `typrest push`
-- Versioning with tags (`invoice:latest`, `invoice:v2.1`)
-- Routes: `POST /render/:template/:tag`
-- Pluggable backends: filesystem, S3, GCS
+`webui/dist` is committed and embedded in the server. Any frontend source change is incomplete
+until the production build is regenerated and reviewed. Do not hand-edit generated files.
 
-**Do not implement Mode 2 yet. The code should be prepared for it through the trait, but without an implementation.**
+See [`docs/testing.md`](docs/testing.md) for targeted commands and test placement.
 
----
+## Change Completion
 
-## Template Structure (what users create)
+Before finishing:
 
-```
-templates/
-  invoice/
-    main.typ        ← Typst template (required)
-    schema.yml      ← data contract (required)
-    assets/         ← optional
-      logo.svg
-  welcome/
-    main.typ
-    schema.yml
-  _shared/          ← files available to all templates
-    brand.typ
-    logo.svg
-```
-
-### `schema.yml` Format
-
-The official schema specification is in:
-
-- docs/schema-v1.md
-
-Always consult this document before implementing any validation-related functionality.
-
-Implementations must strictly follow the specification.
-Do not introduce new fields or change DSL behavior without updating the specification first.
-
-### How Typst Receives Data
-
-```typst
-#let data = json(bytes(sys.inputs.data))
-```
-
-The server injects the JSON payload through `sys.inputs.data` during compilation.
-
----
-
-## Domain - Canonical Terms
-
-Use **exactly** these names in code (structs, variables, functions, comments):
-
-| Term | Meaning |
-|---|---|
-| `TemplateName` | newtype over String. Template identifier. Invariant: non-empty, ASCII alphanumeric only, hyphen (`-`), and underscore (`_`). |
-| `Schema` | Recursive structure parsed from `schema.yml` (or legacy `schema.json`). Contains payload validation rules. |
-| `TemplateSource` | Map of `relative path -> bytes`. Raw template files read by the loader. |
-| `TemplateBundle` | `TemplateSource` + `Schema`. Everything the compiler needs; self-contained. Return value of `TemplateLoader`. |
-| `PreparedTemplate` | Compiler ACL-owned prepared template state. Opaque outside `compiler/`; contains no public `typst::*` type. |
-| `TemplateRegistry` | In-memory map of `TemplateName` to prepared template state plus `Schema`. Built at startup from a `TemplateLoader`. |
-| `RenderRequest` | `TemplateName` + `serde_json::Value` (payload). Input of `RenderService`. |
-| `Document` | PDF bytes. Output of `RenderService`. |
-| `SchemaVersionError` | Load error: missing or unsupported `schemaVersion`. |
-| `SchemaError` | Load error: structurally invalid schema (`properties` without object, enum with mixed types, etc.). |
-| `ValidationError` | Render error: payload does not satisfy the schema (missing required field, wrong type, invalid enum). |
-| `CompilationDiagnostic` | Typrest-owned compiler diagnostic: severity, message, optional virtual source range, hints, and trace frames. Contains no `typst::*` type. |
-| `CompilationReport` | Ordered collection of every error and warning produced by one failed compilation/export. |
-| `CompilationError` | Typst compiler failed during startup warmup or request rendering. Contains a `CompilationReport`. |
-| `LoaderError` | Enum that unifies `TemplateLoader` errors: `TemplateNotFound`, `SchemaVersionError`, `SchemaError`, `IoError`. |
-| `RenderError` | Enum that unifies `RenderService` errors: `TemplateNotFound`, `ValidationError`, `CompilationError`. |
-
-### Critical Distinction: Load Error vs Render Error
-
-- **Load errors** (`SchemaVersionError`, `SchemaError`) are detected when the template is read from disk: at startup or under `--watch`. They never reach render.
-- **Startup compilation errors** are detected while building `TemplateRegistry`. They must be shown during `typrest serve` startup before the server listens.
-- **Render errors** (`ValidationError`, `CompilationError`) are detected at request time. Request-time `CompilationError` remains possible for payload-dependent template behavior.
-
----
-
-## Architecture - Central Trait
-
-The HTTP server never accesses the filesystem directly. All template reads go through the `TemplateLoader` trait:
-
-```rust
-#[async_trait]
-pub trait TemplateLoader: Send + Sync {
-    async fn load(&self, name: &TemplateName) -> Result<TemplateBundle, LoaderError>;
-    async fn list(&self) -> Result<Vec<TemplateName>, LoaderError>;
-}
-```
-
-Implementations:
-- `FilesystemLoader` reads from the filesystem (Mode 1, implement now)
-- `StoreLoader` reads from the Store (Mode 2, **DO NOT implement now**)
-
-At server startup, the selected `TemplateLoader` is used to build a `TemplateRegistry`. Startup must list templates, load every `TemplateBundle`, prepare compiler state, run a real warmup compile/export for every template, and fail before listening if any template is broken.
-
-`RenderService` receives the prepared `TemplateRegistry`, not an `Arc<dyn TemplateLoader>`. HTTP handlers receive the `RenderService`. Normal render requests never read templates from disk and never call `TemplateLoader::load()`.
-
-`GET /templates` lists names from the prepared `TemplateRegistry`, not from a live filesystem scan.
-
-See `docs/startup-template-compilation.md` before implementing startup compilation, registry behavior, request lifecycle changes, or watch-mode reload behavior.
-
----
-
-## Typst Compiler Architecture - Anti-Corruption Layer
-
-The `typst` crate has an unstable API across minor versions. To protect the rest of the application from those changes, the `compiler/` module is an **Anti-Corruption Layer (ACL)**: no other module imports `typst::*` directly.
-
-### Absolute Rule
-
-> If any file outside `crates/typrest-core/src/compiler/` contains `use typst::` or `use typst_pdf::`, the architecture has been violated.
-
-The Rust compiler reinforces this: `world.rs` and `fonts.rs` are `pub(super)`, invisible outside the module.
-
-### Public Interface - Stable Across Typst Upgrades
-
-Defined in the `compiler` module. This is everything `RenderService` and tests know:
-
-```rust
-// Typrest-owned diagnostic types. None contains a typst::* type.
-#[derive(Debug, thiserror::Error)]
-pub enum CompilationError {
-    #[error("compilation failed: ...")]
-    Failed(CompilationReport),
-
-    #[error("pdf export failed: ...")]
-    ExportFailed(CompilationReport),
-}
-
-// The only trait RenderService uses.
-// Never exposes typst::* in the signature.
-#[async_trait::async_trait]
-pub trait PdfCompiler: Send + Sync {
-    async fn prepare(
-        &self,
-        source: &TemplateSource,
-    ) -> Result<PreparedTemplate, CompilationError>;
-
-    async fn compile_prepared(
-        &self,
-        template: &PreparedTemplate,
-        payload: &serde_json::Value,
-    ) -> Result<Document, CompilationError>;
-}
-
-// Opaque prepared template state. Contains no public typst::* type.
-pub struct PreparedTemplate { /* private internals */ }
-
-// The only concrete exported struct.
-pub struct TypstCompiler { /* private internals */ }
-
-impl TypstCompiler {
-    pub fn new() -> Self { ... }
-}
-```
-
-### Internal Files - May Change With Typst
-
-All `pub(super)`, invisible outside `compiler/`:
-
-```
-compiler/
-  compiler.rs  ← public interface: PdfCompiler, CompilationError, TypstCompiler
-  world.rs     ← implements typst::World. ONLY file that imports typst::*
-  fonts.rs     ← FontRegistry: loads typst-assets + template fonts
-```
-
-**`world.rs`** contains:
-- `struct TemplateWorld` implementing `typst::World`
-- `fn prepare(source, fonts) -> Result<PreparedTemplate, CompilationError>`: private function that builds reusable template-invariant state
-- `fn compile_prepared(template, payload) -> Result<CompiledPdf, CompilationError>`: private function that builds request-specific inputs, orchestrates compilation, and converts Typst output
-- `fn map_diagnostic(SourceDiagnostic) -> CompilationDiagnostic`: the only place that knows `SourceDiagnostic`, its hints, traces, and spans
-- `fn build_inputs(payload: &serde_json::Value) -> typst::foundations::Dict`: converts the payload to Typst's format
-
-**`fonts.rs`** contains:
-- `struct FontRegistry`: loaded once at startup, shared between compilations through `Arc`
-- Loads default fonts from `typst-assets`
-- Loads custom template fonts (`.ttf`, `.otf` files under `assets/`)
-
-### When Typst Changes Its API
-
-The impact stays **100% inside `world.rs` and `fonts.rs`**. Examples of historical changes and where to absorb them:
-
-| Typst change | Where to absorb |
-|---|---|
-| `PdfOptions` gained new fields | `world.rs`: only PDF export inside `compile_prepared()` |
-| `compile()` changed return type | `world.rs`: only Typst orchestration inside `compile_prepared()` |
-| `SourceDiagnostic` gained/lost fields | `world.rs`: only `fn map_errors()` |
-| `FileId`/`VirtualPath` changed module | `world.rs`: imports at the top |
-| `FontBook` changed API | `fonts.rs`: only `FontRegistry` |
-
-`typst`, `typst-pdf`, and `typst-assets` must remain pinned to the same exact version and be
-upgraded together. Public diagnostics store owned strings and numeric locations rather than
-mirroring Typst enums. See `docs/diagnostics.md` for the upgrade checklist.
-
-### MockCompiler for Tests
-
-`RenderService` and HTTP handlers are tested with `MockCompiler` and prepared test entries: no Typst, no real compilation:
-
-```rust
-// In tests; never in production.
-struct MockCompiler;
-
-#[async_trait]
-impl PdfCompiler for MockCompiler {
-    async fn prepare(&self, _: &TemplateSource)
-        -> Result<PreparedTemplate, CompilationError>
-    {
-        Ok(PreparedTemplate::for_test())
-    }
-
-    async fn compile_prepared(&self, _: &PreparedTemplate, _: &serde_json::Value)
-        -> Result<Document, CompilationError>
-    {
-        // %PDF is the magic byte sequence: valid enough for HTTP integration tests.
-        Ok(Document::new(b"%PDF-1.4 mock".to_vec()))
-    }
-}
-```
-
-Real Typst compilation tests live in `compiler/world.rs` as module tests (`#[cfg(test)]`): isolated, slower, and not blocking domain tests.
-
----
-
-## Cargo Workspace Structure
-
-```
-typrest/
-  Cargo.toml              ← workspace root
-  CLAUDE.md               ← this file
-  DECISIONS.md            ← architectural decision log
-  ROADMAP.md              ← phase tasks with checkboxes
-  docs/
-    schema-v1.md          ← schema.yml reference
-    startup-template-compilation.md ← startup compilation + prepared runtime design
-    typst-integration.md  ← typst crate API reference
-  crates/
-    typrest-core/         ← domain + types + traits (no HTTP, no direct filesystem access)
-      src/
-        lib.rs
-        template_name.rs  ← TemplateName
-        template.rs       ← TemplateSource, TemplateBundle, Document
-        render_request.rs ← RenderRequest
-        errors.rs         ← ValidationError, CompilationError
-        loader.rs         ← TemplateLoader trait + LoaderError
-        loader/           ← MemoryLoader (tests)
-        schema.rs         ← parser, validator, Schema, SchemaField, schema errors
-        compiler.rs       ← Typst ACL: public interface
-        compiler/         ← private world.rs and fonts.rs
-        render/           ← RenderService, RenderError
-    typrest-server/       ← HTTP server (axum)
-      src/
-        main.rs
-        routes/
-        errors/
-    typrest-cli/          ← CLI (clap): only `typrest init` in the MVP
-      src/
-        main.rs
-```
-
-**Rule:** `typrest-core` has no HTTP dependencies. It is testable in isolation with `MemoryLoader` in tests.
-
-**Note:** the module inside `typrest-core/src/` for the trait and implementations is `loader`, not `resolver`; this follows the trait rename.
-
----
-
-## HTTP API - Mode 1
-
-### `POST /render/:template`
-
-Request:
-```
-Content-Type: application/json
-Body: { payload matching the template schema definition }
-```
-
-Successful response:
-```
-200 OK
-Content-Type: application/pdf
-Body: PDF bytes
-```
-
-Error responses:
-```
-404 - template not found
-422 - invalid payload (with violations list)
-500 - Typst compilation error
-```
-
-Error format:
-```json
-{
-  "error": "schema_validation_failed",
-  "message": "Payload validation failed",
-  "violations": [
-    { "field": "amount", "issue": "required field missing" },
-    { "field": "currency", "issue": "invalid enum value 'EUR'" }
-  ]
-}
-```
-
-### `GET /templates`
-
-Response:
-```json
-{
-  "templates": [
-    { "name": "invoice" },
-    { "name": "welcome" }
-  ]
-}
-```
-
-### `GET /healthz`
-
-```json
-{ "status": "ok" }
-```
-
----
-
-## Crates Used
-
-| Crate | Use |
-|---|---|
-| `axum` | HTTP server |
-| `tokio` | async runtime |
-| `serde` + `serde_json` | serialization |
-| `typst` + `typst-pdf` | template compiler |
-| `notify` | file watching (`--watch` mode) |
-| `tracing` + `tracing-subscriber` | structured logs |
-| `thiserror` | typed domain errors |
-| `anyhow` | CLI errors |
-| `clap` | CLI |
-| `bytes` | byte handling |
-| `async-trait` | async trait |
-
----
-
-## Code Rules
-
-- **No file outside `compiler/` imports `typst::*` or `typst_pdf::*`**: ACL violation
-- Domain errors are always typed with `thiserror`: no `unwrap()` outside tests
-- HTTP handlers never return generic errors: they always map to the JSON format above
-- Integration tests use `MemoryLoader`: no filesystem dependency in core tests
-- `_shared/` is included automatically in the compilation context of every template
-- Subdirectories inside a template are allowed: the relative path is preserved in `TemplateSource`
-- Schema errors are detected when loading the template, never during render
-- Unknown fields at the root of `schema.yml` are ignored with a warning, not rejected
-- Use modern Rust module organization (edition 2018+): prefer `foo.rs` + `foo/` for submodules and do not create new `mod.rs` files. When touching existing modules, migrate gradually to this pattern if it is within the scope of the change.
-- Do not create `pub use` only as an alias/import convenience between modules. Prefer exposing the real submodule (`pub mod memory;`, `pub mod filesystem;`) and importing through the explicit path.
-
----
-
-## What NOT To Do In This MVP
-
-- Do not implement Store (blobs, manifests, refs, tags)
-- Do not implement `StoreLoader`
-- Do not implement the CLI-to-server push protocol
-- Do not implement authentication (token, OAuth)
-- Do not implement SDKs for other languages
-- Do not implement compilation cache
-- Do not implement `typrest gc`
-- Do not implement S3 backend
-- Do not support Typst Universe packages (`@preview/...`): return a clear error
-
-If one of these becomes necessary during development, record it in `DECISIONS.md` and discuss it before implementing.
+1. Verify the behavior with focused tests and the relevant full suite.
+2. Update the canonical specification when a contract changes.
+3. Add or update an ADR for non-obvious architectural choices and `ROADMAP.md` for scope/status.
+4. Check local Markdown links and remove stale commands or duplicate sources of truth.
+5. Report checks that were run and any known limitation that remains.

@@ -1,20 +1,27 @@
-# Schema Specification (`schema.yml`) - Version 1
+# Schema Specification (`schema.yml`) Version 1
 
-## Goal
+> Status: Normative for the implemented v1 parser and validator in `typrest-core`.
 
-The optional `schema.yml` file defines the expected contract for a JSON value. A template without a schema file accepts any JSON payload and receives it directly through `sys.inputs.data`; no payload validation is performed.
+## Purpose and File Rules
 
-`schema.yml` is the canonical filename and uses YAML syntax. Legacy `schema.json` files remain supported with JSON syntax. A template must not contain both files. The unsupported `schema.yaml` spelling is rejected with an instruction to rename it to `schema.yml`, preventing accidental schema-less loading.
+A template may include a schema to validate and default its JSON request body. Without a schema,
+Typrest accepts any valid JSON value and injects it directly through `sys.inputs.data`.
 
-YAML schema files contain exactly one document. Duplicate mapping keys are invalid. Only `true` and `false` are interpreted as booleans; values such as `on` and `off` remain strings. YAML comments are allowed.
+File selection rules:
 
-In version `v1`, only request body validation (`request.body`) is supported.
+- `schema.yml` is canonical and uses YAML syntax;
+- legacy `schema.json` is accepted with JSON syntax;
+- a template containing both files fails to load;
+- the unsupported spelling `schema.yaml` fails with an instruction to rename it;
+- the schema file itself is optional.
 
-Every schema is composed of a root object containing a version and a schema for the body.
+YAML input must contain exactly one document and may contain comments. Duplicate mapping keys are
+invalid. Only `true` and `false` use YAML boolean semantics; values such as `on` and `off` remain
+strings.
 
-The `schemaVersion` field is required.
+## Document Shape
 
-Example:
+When a schema file is present, it must contain:
 
 ```yaml
 schemaVersion: v1
@@ -27,267 +34,179 @@ request:
         required: true
 ```
 
----
-
-# Structure
-
 ```text
 schema.yml
- ├── schemaVersion (string)
- └── request
-      └── body (Schema)
+  schemaVersion: string, required, exactly "v1"
+  request: object, required
+    body: SchemaField, required
 ```
 
-The `body` field is always a `Schema`.
+Version v1 defines request-body validation only. Missing `schemaVersion` is a
+`SchemaVersionError`; an unsupported version is also a `SchemaVersionError`. Other syntax, type,
+or structural failures are `SchemaError` values detected while loading the template.
 
-Any place in the language that expects a `Schema` uses exactly the same structure.
+Unknown keys are currently ignored without a warning at the root, under `request`, and inside
+fields.
 
----
+## `SchemaField`
 
-# Schema
+Every location that accepts a schema field uses the same recursive shape:
 
-A Schema is an object that describes how to validate a single JSON value.
+| Field | Type | Default | Constraint |
+|---|---|---|---|
+| `required` | boolean | `false` | Checks whether an object property exists |
+| `type` | string | absent | One of `string`, `number`, `boolean`, `object`, `array`, `null` |
+| `properties` | object of fields | absent | Allowed only with `type: object` |
+| `items` | field | absent | Allowed only with `type: array` |
+| `enum` | array of JSON values | absent | Values must have one JSON type |
+| `default` | any JSON value | absent | Must match `type` when `type` is present |
 
-All schema fields are optional.
-
-An empty schema:
+All fields are optional. An empty field accepts any existing value:
 
 ```yaml
 {}
 ```
 
-is valid and accepts any value.
+## Required and Missing Values
 
----
+`required` checks existence, not truthiness or nullability.
 
-# `required` Field
+- A missing property with `required: true` produces `required field missing`.
+- A missing optional property is omitted unless it has a default.
+- An explicit `null` exists and continues through type and enum validation.
+- Required checking happens before default application, so a required property is still required
+  even if a default is also declared.
 
-Type:
+`required` is meaningful for properties nested under an object schema. The request body itself is
+always present once the HTTP handler has parsed it.
 
-```text
-boolean
-```
+## Types
 
-Default:
+Supported values are:
 
-```text
-false
-```
+| Schema type | Accepted JSON value |
+|---|---|
+| `string` | string |
+| `number` | integer or non-integer JSON number |
+| `boolean` | `true` or `false` |
+| `object` | object |
+| `array` | array |
+| `null` | `null` |
 
-Responsibility:
+Only one type may be declared. Type arrays or union types are unsupported. Without `type`, no type
+check occurs, although `enum` and `default` rules still apply.
 
-Determines whether the value must exist.
+## Objects and Properties
 
-Rules:
-
-- `required` checks existence only.
-- If the value does not exist (`undefined`) and `required` is `false`, the schema is considered valid.
-- If the value does not exist and `required` is `true`, validation fails.
-- If the value exists (including `null`), validation continues normally.
-
----
-
-# `type` Field
-
-Type:
-
-```text
-string
-```
-
-Required:
-
-No.
-
-Supported values:
-
-- string
-- number
-- boolean
-- object
-- array
-- null
-
-Responsibility:
-
-Checks the value type.
-
-Rules:
-
-- A schema may have only one type.
-- Type lists are not allowed.
-- If the value exists, its type must exactly match the type defined in `type`.
-- If `type` is not provided, no type validation is performed.
-
----
-
-# `properties` Field
-
-Available only when:
-
-```text
-type == object
-```
-
-Type:
-
-```text
-object<string, Schema>
-```
-
-Each property represents the schema of an object field.
-
-Example:
+`properties` recursively validates declared members and is valid only with `type: object`:
 
 ```yaml
 type: object
 properties:
   name:
     type: string
-  age:
-    type: number
+  address:
+    type: object
+    properties:
+      city:
+        type: string
+        required: true
 ```
 
-Using `properties` when `type` is not `object` is a schema error.
+Undeclared payload properties are retained and do not cause validation failures. Declared
+properties are processed in name order because schemas use an ordered map.
 
----
+Using `properties` with any other type, or without `type`, is a load-time schema error.
 
-# `items` Field
+## Arrays and Items
 
-Available only when:
-
-```text
-type == array
-```
-
-Type:
-
-```text
-Schema
-```
-
-Defines the schema of each array element.
-
-Example:
+`items` applies one recursive field definition to every array element and is valid only with
+`type: array`:
 
 ```yaml
 type: array
 items:
-  type: string
+  type: object
+  properties:
+    amount:
+      type: number
+      required: true
 ```
 
-Using `items` when `type` is not `array` is a schema error.
+An empty array is valid. Using `items` with any other type, or without `type`, is a load-time schema
+error.
 
----
+## Enums
 
-# `enum` Field
-
-Type:
-
-```text
-array
-```
-
-Responsibility:
-
-Restricts the value to a fixed set of possibilities.
-
-Rules:
-
-- All enum values must have exactly the same type.
-- If `type` is defined, all enum values must have exactly that type.
-- If any type mismatch exists, the schema is invalid.
-- Comparison is done by exact equality.
-
-Example:
+`enum` restricts an existing value by exact JSON equality:
 
 ```yaml
 type: string
 enum: [BRL, USD]
 ```
 
-Invalid example:
-
-```yaml
-type: string
-enum: [BRL, 10]
-```
-
----
-
-# `default` Field
-
-Responsibility:
-
-Defines a default value for the field.
-
 Rules:
 
-- The value defined in `default` must have exactly the same type defined in `type`.
-- Otherwise, the schema is invalid.
-- The default value is applied only when the field does not exist (`undefined`).
-- The default value never replaces `null`.
-- After applying the default value, validation continues normally.
+- all enum members must have the same JSON type;
+- when `type` is present, every member must match it;
+- an empty enum is structurally valid but no existing value can satisfy it;
+- mixed types or a member incompatible with `type` are load-time schema errors.
 
-Example:
+## Defaults
 
-Input:
-
-```json
-{}
-```
-
-Schema:
+A default supplies an optional property that is missing:
 
 ```yaml
-type: string
-default: anonymous
+type: object
+properties:
+  displayName:
+    type: string
+    default: anonymous
 ```
 
-Result:
+Input `{}` becomes `{"displayName":"anonymous"}` before compilation. Defaults never replace an
+explicit `null`. When `type` is present, the default must match it; otherwise the schema fails to
+load. A default may be any JSON value when `type` is absent.
 
-```json
-"anonymous"
-```
+After insertion, normal type, enum, object, and array validation continues.
 
-Input:
+## Validation Order
 
-```json
-null
-```
+Every field is processed in this order:
 
-Result:
+1. check existence and `required`;
+2. apply `default` to a missing optional value;
+3. validate `type`;
+4. validate `enum`;
+5. validate object `properties`;
+6. validate array `items`.
 
-```json
-null
-```
+If type or enum validation fails for a value, nested validation for that value stops. Independent
+properties and array items continue so a response can contain multiple violations. Paths use JSON
+root notation such as `$.customer.name` and `$.items[0].amount`.
 
----
+## Startup Sample Payload
 
-# Validation Order
+Startup warmup derives a deterministic value from each field:
 
-Every schema must be processed in exactly this order:
+1. explicit default;
+2. first enum member;
+3. type seed: `""`, `0`, `false`, recursively generated object, `[]`, or `null`;
+4. `null` for an untyped field.
 
-1. Check existence (`required`).
-2. Apply `default` if the value is `undefined`.
-3. Validate type (`type`).
-4. Validate `enum`.
-5. If `type == object`, validate `properties`.
-6. If `type == array`, validate `items`.
+This generated value is validated before warmup compilation. A schema-less template warms with
+`{}`. See [Startup Template Compilation](startup-template-compilation.md).
 
-No implementation may change this order.
+## Load-time Consistency Errors
 
----
+The following are rejected while loading, never during request validation:
 
-# Consistency Rules
-
-The following cases make the schema invalid before execution:
-
-- `properties` used without `type: "object"`.
-- `items` used without `type: "array"`.
-- `default` incompatible with `type`.
-- Any `enum` value incompatible with `type`.
-- Values of different types inside `enum`.
-- Invalid value for `type`.
-
-These errors must be detected while loading the schema, never during payload validation.
+- invalid YAML or JSON syntax;
+- missing or unsupported `schemaVersion`;
+- missing or incorrectly shaped `request.body`;
+- an invalid `type` value;
+- `properties` without `type: object`;
+- `items` without `type: array`;
+- a typed default with the wrong type;
+- mixed enum member types;
+- an enum member incompatible with the declared type.

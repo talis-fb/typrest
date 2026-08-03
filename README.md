@@ -1,138 +1,142 @@
 # Typrest
 
-Typrest is an HTTP server for server-side PDF generation with Typst. It is built for applications that need reliable PDF output without embedding a PDF library or browser automation runtime into the application itself.
+Typrest is an HTTP service for server-side PDF generation with [Typst](https://typst.app/).
+Applications in any language send JSON over HTTP; Typrest validates the payload when a schema is
+present, compiles the selected template, and returns PDF bytes.
 
-Applications integrate with Typrest through HTTP. A service in any language sends JSON to a template endpoint, and Typrest validates the payload, compiles the matching Typst template, and returns PDF bytes.
+The current release supports filesystem mode. Templates are loaded from a project directory,
+prepared and warm-compiled before startup completes, and retained in memory for rendering. Store
+backends, template publishing, tags, and authentication are not implemented.
 
-The current MVP runs in filesystem mode. Templates live in a directory mounted into the server, and each template contains a required `main.typ` file. An optional `schema.yml` contract can validate request payloads.
+## Quickstart from Source
 
-## Quickstart
+Prerequisites: a Rust toolchain compatible with edition 2024 and `curl`.
 
-Start the server with Docker Compose:
+Build Typrest and create a temporary project:
 
 ```bash
-docker compose up --build
+cargo build
+TYPREST_BIN="$PWD/target/debug/typrest"
+"$TYPREST_BIN" init /tmp/typrest-demo
+cd /tmp/typrest-demo
+"$TYPREST_BIN" check
 ```
 
-Render the invoice example:
+Start the server on the loopback interface:
+
+```bash
+"$TYPREST_BIN" serve --hostname 127.0.0.1
+```
+
+In another terminal, render the generated template:
 
 ```bash
 curl -X POST \
-  http://localhost:8080/render/invoice \
+  http://127.0.0.1:8080/render/hello-world \
   -H 'Content-Type: application/json' \
-  --data-binary @examples/templates/invoice/payload.json \
-  --output invoice.pdf
+  --data '{"name":"Ada"}' \
+  --output hello-world.pdf
 ```
 
-List available templates:
+Check the server and inspect prepared templates:
 
 ```bash
-curl http://localhost:8080/templates
+curl http://127.0.0.1:8080/_healthz
+curl http://127.0.0.1:8080/_api/templates
 ```
 
-Run without Docker:
+The repository's `Dockerfile` and `docker-compose.yml` still use an obsolete positional `serve`
+syntax and do not provide the required `typrest.toml`. Docker quickstart support is tracked as open
+work in [`ROADMAP.md`](ROADMAP.md).
 
-```bash
-cargo run -- serve --port 8080 --watch
-```
+## Project and Template Layout
 
-Validate every template without starting the server:
-
-```bash
-cargo run -- check
-```
-
-## Template Structure
+`typrest init` creates a project containing `typrest.toml` and a templates root:
 
 ```text
-templates/
-  invoice/
-    main.typ
-    schema.yml
-    assets/
-  welcome/
-    main.typ
-    schema.yml
-  _shared/
-    brand.typ
+my-project/
+  typrest.toml
+  templates/
+    invoice/
+      main.typ
+      schema.yml
+      assets/
+        logo.svg
+    welcome/
+      main.typ
+    _shared/
+      brand.typ
 ```
 
-Each template directory must contain `main.typ`; `schema.yml` is optional. Legacy `schema.json` files are also accepted, but a template cannot contain both. If no schema is present, Typrest skips payload validation and injects the request JSON directly through `sys.inputs.data`. Files under `_shared/` are available to every template.
+Every template requires `main.typ`. A `schema.yml` file is optional. Legacy `schema.json` remains
+accepted, but a template cannot contain both formats. Without a schema, any valid JSON value is
+passed directly to Typst without payload validation. Files under `_shared/` are available to every
+template.
 
-## Complete Typst Example
+Templates read the request payload from `sys.inputs.data`:
 
 ```typst
 #let data = json(bytes(sys.inputs.data))
 
 = Welcome, #data.name
-
-#data.message
 ```
 
-The JSON request body is injected into Typst through `sys.inputs.data`.
+See the complete [`schema.yml` v1 specification](docs/schema-v1.md) and the
+[`typrest.toml` specification](docs/typrest-toml-spec.md).
 
-## schema.yml Reference
+## CLI
 
-Typrest supports schema version `v1`. The root object must contain `schemaVersion` and `request.body`.
-
-```yaml
-schemaVersion: v1
-request:
-  body:
-    type: object
-    properties:
-      name:
-        type: string
-        required: true
+```text
+typrest init [path]
+typrest check
+typrest serve [--hostname <ipv4>] [--port <port>] [--watch]
 ```
 
-Supported field types are `string`, `number`, `boolean`, `object`, `array`, and `null`. Object schemas use `properties`, array schemas use `items`, fields are optional by default, and optional fields can define `default`.
+`check` and `serve` search the current directory and its ancestors for the nearest
+`typrest.toml`. Both load, prepare, compile, and PDF-export every template; `serve` binds its socket
+only after this startup validation succeeds.
 
-See `docs/schema-v1.md` for the full schema specification.
+Global diagnostic options are available before or after a subcommand:
+
+```text
+--log-format <pretty|json>
+--color <auto|always|never>
+```
+
+See the [CLI specification](docs/cli-spec.md) for exact behavior.
 
 ## HTTP API
 
-### `GET /healthz`
-
-Returns:
+### `GET /_healthz`
 
 ```json
 { "status": "ok" }
 ```
 
-### `GET /templates`
+### `GET /_api/templates`
 
-Returns:
+Returns prepared templates in name order:
 
 ```json
 {
   "templates": [
-    { "name": "invoice" },
-    { "name": "welcome" }
+    { "name": "invoice", "hasSchema": true },
+    { "name": "welcome", "hasSchema": false }
   ]
 }
 ```
 
+### `GET /_api/templates/:template`
+
+Returns the prepared template name and its parsed schema, or `"schema": null` when no schema is
+present. These metadata endpoints currently remain mounted when the Web UI is disabled.
+
 ### `POST /render/:template`
 
-Request:
+Send a JSON request body with `Content-Type: application/json`. A successful response is
+`application/pdf` with status `200`.
 
-```bash
-curl -X POST \
-  http://localhost:8080/render/welcome \
-  -H 'Content-Type: application/json' \
-  --data-binary @examples/templates/welcome/payload.json \
-  --output welcome.pdf
-```
-
-Success response:
-
-```text
-200 OK
-Content-Type: application/pdf
-```
-
-Error responses use JSON:
+Errors use a structured JSON envelope:
 
 ```json
 {
@@ -144,30 +148,13 @@ Error responses use JSON:
 }
 ```
 
-Status codes:
-
-- `404`: template not found
-- `422`: payload does not match the template schema (when present)
-- `500`: Typst compilation or PDF export failed
-
-## Compiler Diagnostics
-
-`typrest check`, server startup, watch reloads, and request-time compilation share the same
-diagnostic pipeline. Terminal output includes annotated source ranges, all Typst errors and
-warnings, hints, and call/import traces.
-
-Use `--log-format json` for JSON Lines logs and `--color auto|always|never` to control terminal
-color. Compilation failures returned over HTTP contain structured paths, ranges, hints, and traces,
-but never template source excerpts or absolute filesystem paths.
-
-See [docs/diagnostics.md](docs/diagnostics.md) for the output contract and Typst upgrade procedure.
+Common statuses are `400` for an invalid template name or JSON request, `404` for a missing
+template, `422` for schema validation failures, and `500` for compilation or PDF export failures.
 
 ## Development Web UI
 
-Typrest includes an optional browser interface for inspecting prepared templates, editing test
-payloads, previewing PDFs, and downloading the latest render. It is disabled by default.
-
-Enable it in `typrest.toml`:
+The optional Web UI can inspect prepared templates, edit test payloads, preview PDFs, and download
+the latest render. Enable its static routes in `typrest.toml`:
 
 ```toml
 schema_version = "v1"
@@ -175,26 +162,21 @@ templates_root = "templates"
 web_ui = true
 ```
 
-Then run Typrest on the loopback interface and open `http://127.0.0.1:8080/webui`:
+Run on loopback and open `http://127.0.0.1:8080/webui`. The UI has no authentication and must not
+be exposed directly to an untrusted network. See the [Web UI guide](docs/webui-development.md) and
+[Web UI specification](docs/webui-spec.md).
+
+## Development
+
+The standard Rust validation pass is:
 
 ```bash
-cargo run -- serve --hostname 127.0.0.1
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
 ```
 
-The Web UI is a development tool and has no authentication. Do not expose it to an untrusted
-network. Its metadata API reads only from the prepared in-memory template registry, and all PDF
-generation still uses `POST /render/:template`.
+Start with the [documentation index](docs/README.md), [architecture guide](docs/architecture.md),
+and [testing guide](docs/testing.md). AI coding agents should also read [`AGENTS.md`](AGENTS.md).
 
-See the [Web UI guide](docs/webui-development.md) for usage and contributor workflows and the
-[Web UI specification](docs/webui-spec.md) for the complete behavior and internal route contracts.
-
-Frontend sources and the committed production build live under `webui/`. After changing frontend
-source, rebuild and verify it before committing:
-
-```bash
-cd webui
-npm ci
-npm run check
-npm test
-npm run build
-```
+See the repository [`LICENSE`](LICENSE) file for licensing terms.

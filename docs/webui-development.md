@@ -1,11 +1,11 @@
 # Web UI Usage and Development Guide
 
-This guide covers using Typrest's development Web UI and maintaining its frontend. For the
-normative behavior and internal route contracts, see [Web UI Specification](webui-spec.md).
+> Status: Current contributor guide. Normative behavior lives in the
+> [Web UI Specification](webui-spec.md).
 
 ## Enable the Web UI
 
-The Web UI is disabled by default. Add `web_ui = true` to the project's `typrest.toml`:
+Add `web_ui = true` to a Typrest project's configuration:
 
 ```toml
 schema_version = "v1"
@@ -13,108 +13,60 @@ templates_root = "templates"
 web_ui = true
 ```
 
-Start Typrest on the loopback interface:
+Start on loopback:
 
 ```bash
-cargo run -- serve --hostname 127.0.0.1
+typrest serve --hostname 127.0.0.1
 ```
 
-Open:
-
-```text
-http://127.0.0.1:8080/webui
-```
-
-The Web UI has no authentication. Do not bind a Web UI-enabled server to a public or untrusted
-network.
+Open `http://127.0.0.1:8080/webui`. The UI has no authentication. The metadata endpoints are
+currently mounted even when the static UI is disabled, so protect the server itself from untrusted
+networks.
 
 ## Use the Workspace
 
-### Choose a Template
-
-The first screen lists every template prepared during server startup. A Schema badge means the
-template has a parsed schema definition; Raw JSON means it does not.
-
-Selecting a template opens its workspace and updates the URL:
+The initial screen lists prepared templates. A Schema badge identifies a parsed schema; Raw JSON
+identifies a schema-less template. Selection is stored in the URL:
 
 ```text
 http://127.0.0.1:8080/webui/?template=invoice
 ```
 
-This URL can be bookmarked or refreshed. The Web UI does not poll for template changes; refresh the
-browser after the registry has been updated.
+The UI does not poll for registry changes. Refresh after a template or schema reload.
 
-### Edit With Form Mode
+### Form Mode
 
-Form mode is available for schemas with an object request body. It:
+Form mode is available for object-root schemas. It creates recursive controls, initializes defaults
+and enum values, seeds required fields, and lets optional fields be included or omitted. Arrays and
+untyped values use JSON editors.
 
-- creates controls for schema properties;
-- nests object properties recursively;
-- initializes defaults, enum selections, and required values;
-- lets optional fields be included or omitted;
-- uses JSON editors for arrays and untyped values.
+Top-level custom fields accept JSON values. Strings require quotes; objects, arrays, numbers,
+booleans, and null use normal JSON syntax. Empty keys, duplicates, schema collisions, and invalid
+values are rejected before rendering.
 
-Use **Add custom field** to include a top-level test value that is not declared by the schema.
-Custom values are JSON, so strings require quotes:
+### Raw JSON Mode
 
-```json
-"debug"
-```
+Raw JSON edits the entire request value and is the only mode for schema-less or non-object schemas.
+Invalid JSON is blocked locally. Switching from Form produces a formatted object; switching back
+maps declared properties to controls and unknown top-level properties to custom fields.
 
-Objects, arrays, booleans, numbers, and null can be entered directly:
+Server-side `RenderService` still performs schema validation and applies defaults before invoking
+the compiler.
 
-```json
-{"trace": true}
-```
+### Preview and Download
 
-The UI rejects empty keys, duplicate custom keys, schema-field collisions, and invalid JSON before
-rendering.
+Use **Render PDF** or `Ctrl+Enter`/`Cmd+Enter`. The UI calls `POST /render/:template`. A successful
+PDF appears in the preview panel, and **Download PDF** saves the same Blob as `<template>.pdf`
+without another compilation.
 
-### Edit With Raw JSON Mode
+Validation errors show affected fields. Compilation failures show safe locations, hints, and
+traces. Network and non-JSON failures are presented separately.
 
-Raw JSON mode edits the complete request value submitted to the render endpoint. It is always
-available and is the only mode for:
-
-- templates without a schema definition;
-- schemas whose request root is not an object.
-
-The editor reports invalid JSON before making a request. Switching from Form mode produces a
-formatted object. Switching back maps declared properties to form controls and unknown top-level
-properties to custom fields.
-
-For a schema-backed template, `RenderService` still performs normal validation and applies schema
-defaults before the compiler receives the value through `sys.inputs.data`.
-
-### Render, Preview, and Download
-
-Click **Render PDF** or press:
-
-```text
-Ctrl+Enter
-Cmd+Enter
-```
-
-The Web UI sends the payload to the existing endpoint:
-
-```text
-POST /render/:template
-```
-
-A successful PDF appears in the preview panel. **Download PDF** saves that same rendered result as
-`<template>.pdf`; it does not compile the template again.
-
-Validation errors list the affected payload fields. Compilation errors show safe messages,
-locations, and hints returned by the server. Network and non-JSON response failures are shown
-separately.
-
-## Frontend Development
-
-The frontend lives under:
+## Frontend Layout
 
 ```text
 webui/
   src/
-    main.ts
     App.svelte
     api.ts
     payload.ts
@@ -124,34 +76,29 @@ webui/
   vite.config.ts
 ```
 
-Responsibilities are intentionally narrow:
+Responsibilities:
 
-- `App.svelte`: template navigation, metadata loading, rendering, and Blob lifecycle;
-- `api.ts`: internal metadata and render HTTP calls;
+- `App.svelte`: navigation, metadata loading, rendering, request cancellation, and Blob lifecycle;
+- `api.ts`: metadata and render HTTP calls;
 - `payload.ts`: schema-derived values, form/raw conversion, and custom-field validation;
-- focused components: template list, recursive payload fields, editor, and PDF preview.
+- components: template list, recursive fields, editor, and PDF preview.
 
-Use ordinary semantic HTML, Tailwind utilities, and DaisyUI classes. Do not add Svelte-specific UI
-component libraries. Add another component only when it isolates a meaningful state or rendering
-responsibility.
+Use semantic HTML, Tailwind utilities, and DaisyUI classes. Do not add server-side rendering, a
+frontend router, or a Svelte-specific component library.
 
-### Install Dependencies
+## Local Development
 
-From the repository root:
+Install the locked dependencies once:
 
 ```bash
 cd webui
 npm ci
 ```
 
-`package-lock.json` is committed. `node_modules/` is local and ignored.
-
-### Run the Vite Development Server
-
-Run Typrest with the Web UI enabled in one terminal:
+Run Typrest with a Web UI-enabled project in one terminal:
 
 ```bash
-cargo run -- serve --hostname 127.0.0.1
+typrest serve --hostname 127.0.0.1
 ```
 
 Run Vite in another:
@@ -161,18 +108,11 @@ cd webui
 npm run dev
 ```
 
-Open the `/webui/` path on the address printed by Vite, normally:
+Open the `/webui/` path printed by Vite, normally
+`http://localhost:5173/webui/`. Vite proxies `/_api` and `/render` to
+`http://127.0.0.1:8080`; the Rust server remains responsible for metadata and PDF rendering.
 
-```text
-http://localhost:5173/webui/
-```
-
-The Vite configuration proxies `/_api` and `/render` to `http://127.0.0.1:8080`. The Vite server is
-for frontend development only; the Rust server remains responsible for metadata and PDF rendering.
-
-## Validate Frontend Changes
-
-Run:
+## Validate Changes
 
 ```bash
 cd webui
@@ -181,16 +121,7 @@ npm test
 npm run build
 ```
 
-These commands:
-
-- type-check Svelte and TypeScript and report accessibility diagnostics;
-- run payload composition and validation tests;
-- write the production build to `webui/dist`.
-
-The build output is intentionally committed. After running the build, review and include changed
-files under `webui/dist`.
-
-Then validate the Rust workspace from the repository root:
+Then run the Rust checks from the repository root:
 
 ```bash
 cargo fmt --all -- --check
@@ -198,27 +129,21 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
 
-Server tests verify configuration defaults, route gating, embedded assets, and internal metadata
-responses.
+`npm run build` writes fingerprinted files under `webui/dist`. Review and commit source and output
+together. Never hand-edit `dist`.
 
 ## Embedded Asset Workflow
 
-The server embeds `webui/dist` into the binary. This preserves Typrest's single-binary deployment
-and keeps normal Cargo and Docker builds independent of Node.
-
-The consequence is that changing frontend source alone does not change an already-built Typrest
-binary. Use this order:
+The Rust server embeds `webui/dist` at compile time, preserving single-binary deployment without a
+Node dependency in normal Cargo builds. Use this order:
 
 1. change files under `webui/src`;
-2. run `npm run check` and `npm test`;
-3. run `npm run build`;
-4. commit both source and `webui/dist`;
-5. rebuild the Rust binary.
+2. run checks and frontend tests;
+3. run the production build;
+4. review source and `dist` changes;
+5. rebuild and test the Rust server.
 
-Vite uses `/webui/` as its base path and emits fingerprinted asset names. Do not hand-edit files in
-`webui/dist`.
-
-## Internal Metadata API
+## Metadata Endpoints
 
 The frontend reads:
 
@@ -227,70 +152,38 @@ GET /_api/templates
 GET /_api/templates/:template
 ```
 
-These routes expose only names and parsed schemas from the prepared registry. They never read live
-template files.
-
-The `/_api/` routes are internal to the bundled Web UI and may change with it. Do not build external
-integrations against them; use `/templates` and `/render/:template` for supported integrations.
-
-See [Web UI Specification](webui-spec.md#internal-metadata-api) for the current response shapes.
+Both routes read prepared registry state and are currently mounted independently of `web_ui`.
+They are an internal, unversioned interface for the bundled frontend, not a stable integration API.
 
 ## Troubleshooting
 
 ### `/webui` Returns 404
 
-Confirm that:
-
-- `web_ui = true` is in the `typrest.toml` found by `typrest serve`;
-- the server was restarted after changing configuration;
-- the running binary contains the Web UI implementation.
-
-When disabled, all `/webui*` and `/_api/*` routes intentionally return `404`.
+Confirm that `web_ui = true` is in the discovered `typrest.toml` and restart the server after a
+configuration change. Static UI routes intentionally return `404` while disabled.
 
 ### The UI Looks Stale
 
-For the Vite development server, refresh the browser.
+Refresh Vite during development. For Rust-served assets, run `npm run build`, rebuild/restart the
+Rust binary, and refresh. Template metadata reflects the registry; refresh after watch mode updates
+it.
 
-For the Rust-served UI:
+### Form Mode Is Unavailable
 
-1. run `npm run build`;
-2. rebuild/restart Typrest;
-3. refresh `/webui/`.
-
-The Rust binary contains a snapshot of `webui/dist` from build time.
-
-### Form Mode Is Disabled
-
-Form mode requires:
-
-```json
-{
-  "request": {
-    "body": {
-      "type": "object"
-    }
-  }
-}
-```
-
-A missing schema or any other root type uses Raw JSON mode by design.
+Form mode requires `request.body.type: object`. Missing schemas and every other root type use Raw
+JSON by design.
 
 ### No Templates Are Listed
 
-The list reflects the prepared registry, not a live directory scan. Check server startup output and
-confirm the templates loaded successfully. If templates changed after startup, use the existing
-watch behavior where appropriate or restart the server, then refresh the browser.
+Run `typrest check` and inspect startup diagnostics. The endpoint reads the prepared registry, not a
+live directory scan.
 
-### A Render Fails
+### Rendering Fails
 
-- Fix client-side JSON errors before retrying.
-- For `422`, review the listed schema violations.
-- For `500`, review compiler diagnostics and run `typrest check` for annotated source output.
-- For network failures, confirm that the Rust server is running and that Vite is proxying to port
-  `8080`.
-
-The Web UI never bypasses `RenderService`; a payload that fails through the HTTP API also fails from
-the browser.
+- Fix client-side JSON errors first.
+- For `422`, inspect schema violations.
+- For `500`, inspect compiler diagnostics and run `typrest check` for annotated output.
+- For network failures, confirm the Rust server and Vite proxy target are running.
 
 ## Related Documentation
 

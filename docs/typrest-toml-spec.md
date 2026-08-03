@@ -1,27 +1,11 @@
 # `typrest.toml` Specification
 
-## Goal
+> Status: Current. The parser lives in `crates/typrest-cli/src/config.rs`.
 
-`typrest.toml` defines the root configuration for a Typrest project in filesystem mode.
+## Purpose and Location
 
-In the MVP, it defines:
-
-- which directory contains the project templates
-- whether the unauthenticated development Web UI is enabled
-
----
-
-## File Location
-
-The file name is always:
-
-```text
-typrest.toml
-```
-
-It lives at the project root.
-
-Example:
+`typrest.toml` configures a filesystem-mode Typrest project. It must be named exactly
+`typrest.toml` and live at the project root discovered by `typrest check` and `typrest serve`.
 
 ```text
 project/
@@ -29,13 +13,7 @@ project/
   templates/
 ```
 
----
-
 ## Format
-
-The file format is TOML.
-
-Example:
 
 ```toml
 schema_version = "v1"
@@ -43,197 +21,89 @@ templates_root = "templates"
 web_ui = false
 ```
 
----
+| Field | Type | Required | Default |
+|---|---|---|---|
+| `schema_version` | string | yes | none |
+| `templates_root` | string | yes | none |
+| `web_ui` | boolean | no | `false` |
 
-## Top-Level Fields
-
-```text
-typrest.toml
- ├── schema_version (string, required)
- ├── templates_root (string, required)
- └── web_ui (boolean, optional; default false)
-```
-
-Unknown top-level fields should be ignored in the MVP so the format can evolve without breaking older binaries.
-
----
+Unknown top-level fields are ignored. Invalid TOML or a field with the wrong type is a configuration
+load error.
 
 ## `schema_version`
 
-Type:
+The only supported value is `v1`:
 
-```text
-string
+```toml
+schema_version = "v1"
 ```
 
-Required:
-
-```text
-yes
-```
-
-Supported values:
-
-- `v1`
-
-Responsibility:
-
-Declares which `typrest.toml` format version is being used.
-
-Rules:
-
-- The field must exist.
-- The value must be a string.
-- The only supported value in the MVP is `v1`.
-- Missing or unsupported values must produce a configuration load error.
-
----
+A missing, non-string, or unsupported value fails project loading.
 
 ## `templates_root`
 
-Type:
-
-```text
-string
-```
-
-Required:
-
-```text
-yes
-```
-
-Responsibility:
-
-Defines the directory that contains template folders.
-
-Example:
-
-```toml
-schema_version = "v1"
-templates_root = "templates"
-```
-
-### Resolution Rules
-
-- The path is resolved relative to the directory containing `typrest.toml`.
-- Absolute paths are not allowed in the MVP.
-- The normalized resolved path must stay inside the project root.
-
-Valid example:
+`templates_root` identifies the directory containing template folders:
 
 ```toml
 templates_root = "templates"
 ```
 
-Valid example:
+Resolution rules:
+
+- resolve the value relative to the directory containing `typrest.toml`;
+- reject absolute paths;
+- normalize `.` and internal `..` components;
+- reject paths whose normalization would leave the project root;
+- require the resolved path to exist and be a directory.
+
+Examples:
 
 ```toml
+# Valid
 templates_root = "./templates"
 ```
 
-Invalid example:
-
 ```toml
+# Invalid: absolute
 templates_root = "/srv/templates"
 ```
 
-Invalid example:
-
 ```toml
+# Invalid: escapes the project
 templates_root = "../shared-templates"
 ```
 
-### Runtime Rules
-
-After resolution:
-
-- the path must exist
-- the path must be a directory
-
-Otherwise the CLI must fail before starting the server.
-
----
-
 ## `web_ui`
 
-Type:
-
-```text
-boolean
-```
-
-Required:
-
-```text
-no
-```
-
-Default:
-
-```text
-false
-```
-
-Responsibility:
-
-Enables the development-only template inspection and PDF preview interface.
+`web_ui` controls the embedded development UI and defaults to false:
 
 ```toml
-schema_version = "v1"
-templates_root = "templates"
 web_ui = true
 ```
 
-When enabled, Typrest additionally mounts:
+When true, the server additionally mounts `/webui`, `/webui/`, and `/webui/*`. The current
+`/_api/templates` and `/_api/templates/:template` metadata routes remain mounted whether this flag
+is true or false. `POST /render/:template` and `GET /_healthz` are also independent of the flag.
 
-- `/webui` and its embedded static assets
-- `/_api/templates`
-- `/_api/templates/:template`
-
-The existing `/render/:template` route remains available whether or not the Web UI is enabled.
-
-### Security
-
-The Web UI has no authentication or authorization and is intended only for local development.
-When enabling it, bind Typrest to the loopback interface:
+The Web UI has no authentication. Bind to loopback when enabling it:
 
 ```bash
 typrest serve --hostname 127.0.0.1
 ```
 
-Do not expose a Web UI-enabled instance directly to an untrusted network.
+See the [Web UI Specification](webui-spec.md) for its complete route and security contract.
 
-See the [Web UI Specification](webui-spec.md) for route and behavior contracts and the
-[Web UI Usage and Development Guide](webui-development.md) for setup and contributor workflows.
+## Generated Default
 
----
-
-## Default File Generated By `typrest init`
-
-`typrest init` must generate:
+`typrest init` omits `web_ui`, so generated projects contain:
 
 ```toml
 schema_version = "v1"
 templates_root = "templates"
 ```
 
-This creates the standard convention:
+## Non-goals
 
-- config at the project root
-- templates under `./templates`
-
----
-
-## Non-Goals For This Spec
-
-This file does not currently define:
-
-- server port
-- watch settings
-- store backends
-- authentication
-- per-template overrides
-- environment-specific configuration
-
-If those are added later, this specification must be updated first.
+This format does not define ports, hostnames, watch settings, store backends, authentication,
+per-template overrides, or environment-specific configuration. Update this specification before
+adding any of those fields.

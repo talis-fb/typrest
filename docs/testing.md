@@ -1,26 +1,27 @@
 # Testing Guide
 
-This project uses a small set of focused test styles. Most tests should be direct assertions over domain behavior. Snapshot tests are allowed, but they must stay minimal and remain a minority of the suite.
+> Status: Current development workflow. CI configuration remains authoritative for required jobs.
 
-## Standard Commands
+## Standard Validation
 
-Run the full local validation pass:
+Run the same Rust checks as CI:
 
 ```bash
-cargo fmt --check
-cargo check --workspace
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
 
-Run targeted suites:
+Run focused suites while iterating:
 
 ```bash
 cargo test -p typrest-core compiler
-cargo test -p typrest-server repository_examples_load_and_render_invoice_over_http
+cargo test -p typrest-core schema
+cargo test -p typrest-server
 cargo test -p typrest-cli
 ```
 
-Validate the Web UI:
+For Web UI changes:
 
 ```bash
 cd webui
@@ -29,71 +30,77 @@ npm test
 npm run build
 ```
 
-The Vite production output under `webui/dist` is committed and embedded in the Rust binary.
-Frontend changes are incomplete until the source and rebuilt output are both included.
+The production output under `webui/dist` is committed and embedded in the Rust binary. Frontend
+source changes must include the rebuilt output; never edit it by hand.
 
-## Test Categories
+## Test Placement
 
-Core unit tests cover schema parsing, schema validation, template names, in-memory loading, and `RenderService` behavior. These tests should use direct assertions and avoid real Typst unless they are specifically testing compiler integration.
+| Area | Preferred coverage |
+|---|---|
+| Core domain | Direct unit assertions using `MemoryLoader` and mock compilers |
+| Schema | Parsing, structural consistency, validation order, defaults, and paths |
+| Compiler ACL | Real Typst compilation, fonts, imports, payload injection, diagnostics, export |
+| Registry | Startup aggregation, warmup samples, prepared reuse, replacement behavior |
+| Server | Router, status/error mapping, metadata, render responses, startup, watch mode |
+| CLI | Clap parsing, project discovery, configuration, scaffolding, check behavior |
+| Web UI | Payload composition, mode conversion, custom fields, TypeScript/Svelte checks |
+| End to end | Random local port, HTTP status/content type, and meaningful PDF content |
 
-Compiler tests live under `crates/typrest-core/src/compiler/`. They are allowed to use real Typst because the compiler module is the anti-corruption layer around Typst APIs. These tests validate PDF compilation, payload injection through `sys.inputs.data`, syntax error mapping, and default font loading.
-
-Server tests cover HTTP handlers, error mapping, template listing, and render responses. Most server tests use `MemoryLoader` and mock compiler output. Tests that intentionally validate filesystem or real Typst integration can use `FilesystemLoader` and `TypstCompiler`.
-
-Web UI frontend tests cover schema-derived payload initialization, Form/Raw conversion, and custom
-field validation. `svelte-check` covers TypeScript and Svelte diagnostics, including accessibility
-warnings. Server tests cover the disabled-by-default configuration, conditional route mounting,
-embedded static assets, and registry-backed `/_api/*` responses.
-
-CLI tests cover command parsing and filesystem scaffolding for `typrest serve`, `--watch`, and `typrest init`. They should use temporary directories and must not rely on global local state.
-
-E2E-style tests may start the server on a random local port and issue an HTTP request. They should verify status code, `application/pdf`, and enough PDF content behavior to catch blank output regressions.
+Normal core and handler tests should not invoke real Typst unless integration is the behavior under
+test. Filesystem tests use temporary directories and must not depend on global machine state.
 
 ## Snapshot Policy
 
-Snapshot tests are reserved for user-visible rendered output where normal assertions are too weak. They should be minimal and rare.
+Use snapshots only for stable user-visible output that is awkward to assert directly. Compiler
+diagnostic snapshots are appropriate when they verify formatted ranges, hints, and traces.
 
-Use text snapshots extracted from rendered PDFs when validating rendered content. This catches blank PDFs and missing text without committing unstable binary PDFs.
-
-Do not snapshot raw PDF bytes. PDF binaries include object ordering, compression streams, document identifiers, metadata, and font subset names that can change without a meaningful behavior change.
-
-Avoid broad visual snapshots for now. They can catch layout regressions, but they add heavier tooling and more maintenance. Consider them only after the rendering surface is stable and the value outweighs the cost.
+For rendered documents, prefer text extracted from PDFs. Do not snapshot raw PDF bytes: object
+ordering, compression, identifiers, metadata, and font subsets may change without a behavior
+regression. Broad visual snapshots remain out of scope until their value exceeds their maintenance
+cost.
 
 ## Manual Validation
 
-Run the server without containers:
+The repository root is not itself a Typrest project because it has no `typrest.toml`. Build a binary
+and create a disposable project before exercising the CLI manually:
 
 ```bash
-cargo run -- serve ./examples/templates 8080 --watch
+cargo build
+TYPREST_BIN="$PWD/target/debug/typrest"
+"$TYPREST_BIN" init /tmp/typrest-manual
+cd /tmp/typrest-manual
+"$TYPREST_BIN" check
+"$TYPREST_BIN" serve --hostname 127.0.0.1
 ```
 
-Render a sample PDF:
+Then render the generated template:
 
 ```bash
 curl -X POST \
-  http://localhost:8080/render/invoice \
+  http://127.0.0.1:8080/render/hello-world \
   -H 'Content-Type: application/json' \
-  --data-binary @examples/templates/invoice/payload.json \
-  --output invoice.pdf
+  --data '{"name":"Ada"}' \
+  --output hello-world.pdf
 ```
 
-Inspect the PDF when debugging rendering issues:
+When investigating PDF content:
 
 ```bash
-pdffonts invoice.pdf
-pdftotext invoice.pdf -
+pdffonts hello-world.pdf
+pdftotext hello-world.pdf -
 ```
 
-Container validation is manual or CI-specific. With Podman:
+The current Docker files use removed CLI syntax and are not a valid manual test path. Their
+migration is tracked in [`ROADMAP.md`](../ROADMAP.md).
 
-```bash
-podman compose config
-podman compose build
-podman compose up
-podman compose down
-```
+## Documentation Validation
 
-Tests should not require Docker, Podman, or generated local artifacts such as `invoice.pdf`.
+For documentation-only changes:
 
-See the [Web UI Usage and Development Guide](webui-development.md) for the complete frontend and
-embedded-asset workflow.
+- verify commands against CLI `--help` and `webui/package.json`;
+- verify routes and response shapes against router tests;
+- check relative links and heading anchors;
+- run `git diff --check`;
+- ensure no stale contract appears elsewhere with `rg`.
+
+Tests must not require Docker, Podman, or persistent generated artifacts.
