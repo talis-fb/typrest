@@ -27,18 +27,18 @@ filesystem loader belongs to `typrest-server` and implements the core `TemplateL
 
 | Term | Meaning |
 |---|---|
-| `TemplateName` | Validated non-empty ASCII identifier containing alphanumerics, `-`, or `_` |
+| `TemplateId` | Validated slash-separated route ID whose safe-ASCII segments do not begin with `_` |
 | `Schema` | Parsed optional `schema.yml` or legacy `schema.json` payload contract |
 | `TemplateSource` | Ordered map of relative virtual path to bytes |
 | `TemplateBundle` | Raw `TemplateSource` plus `Option<Schema>` returned by a loader |
 | `PreparedTemplate` | Opaque compiler-owned, template-invariant Typst state |
 | `PreparedTemplateBundle` | A prepared template plus its optional schema |
-| `TemplateRegistry` | In-memory name-to-prepared-bundle map built at startup and updated by watch mode |
-| `RenderRequest` | `TemplateName` plus JSON payload |
+| `TemplateRegistry` | In-memory ID-to-prepared-bundle map built at startup and updated by watch mode |
+| `RenderRequest` | `TemplateId` plus JSON payload |
 | `Document` | PDF bytes plus non-fatal compiler warnings |
 | `CompilationDiagnostic` | Typrest-owned severity, message, virtual location, hints, and trace |
 | `CompilationReport` | Ordered diagnostics for one failed compilation or export |
-| `LoaderError` | Template name, lookup, schema, or filesystem loading failure |
+| `LoaderError` | Template ID, lookup, schema, or filesystem loading failure |
 | `RenderError` | Missing template, invalid payload, or request-time compilation failure |
 
 ## Template Lifecycle
@@ -54,6 +54,12 @@ FilesystemLoader
   -> Document
 ```
 
+Filesystem discovery walks route folders recursively. A non-root directory containing `main.typ`
+defines its relative path as a template ID and stops route discovery beneath it. Directories whose
+names begin with `_` are skipped during discovery. Once a template is selected, all descendant
+files—including underscore directories and nested `main.typ` files—remain part of its source.
+`templates/main.typ` is invalid.
+
 At startup, the server lists and loads every template, prepares compiler state, performs a real
 compile and PDF export, and collects all failures before deciding whether to bind the socket. A
 schema supplies its deterministic sample payload; a schema-less template warms with `{}`.
@@ -62,9 +68,9 @@ At request time, `RenderService` looks up the prepared bundle, validates and app
 when a schema exists, and compiles with request-specific `sys.inputs.data`. Normal requests never
 call the loader or read files.
 
-Watch mode builds a candidate entry without holding the registry write lock. A successful candidate
-replaces the old entry atomically; a failed reload leaves the last known good entry active. Changes
-under `_shared/` rebuild every template.
+Watch mode builds candidates without holding the registry write lock. Ordinary source changes
+replace one entry atomically. Route-topology and `_shared/` changes build a complete candidate and
+swap the registry atomically; failures leave the last known good registry active.
 
 See [Startup Template Compilation](startup-template-compilation.md) for the detailed lifecycle.
 
@@ -110,19 +116,23 @@ pinned in the workspace manifest.
 |---|---|---|
 | `GET` | `/_healthz` | Always |
 | `GET` | `/_api/templates` | Always |
-| `GET` | `/_api/templates/:template` | Always |
-| `POST` | `/render/:template` | Always |
-| `GET` | `/webui`, `/webui/`, `/webui/*` | Only with `web_ui = true` |
+| `GET` | `/_api/templates/{*template_id}` | Always |
+| `POST` | `/{*template_id}` | Always |
+| `GET` | `/` | Redirects to `/_webui/` only with `web_ui = true` |
+| `GET` | `/_webui`, `/_webui/`, `/_webui/*` | Only with `web_ui = true` |
 
 The metadata handlers read exclusively from `TemplateRegistry`. The current server does not expose
 `/healthz` or `/templates` aliases.
 
 ## Architectural Invariants
 
-- `main.typ` is required; a schema is optional.
+- A named non-root template directory requires `main.typ`; a schema is optional.
+- The selected template directory is the virtual source root and exposes entrypoint `main.typ`.
+- Template ID segments beginning with `_` are reserved for Typrest routes.
 - `_shared/` is resolved by the loader, not by the compiler.
+- Global `_shared/` files are inserted after local source and win same-path virtual collisions.
 - Template paths remain virtual and relative throughout the compiler boundary.
-- Startup validates all discovered templates in deterministic name order.
+- Startup validates all discovered templates in deterministic ID order.
 - Compiler warnings are retained and reported but do not fail otherwise successful compilation.
 - Unsupported Typst packages resolve as missing virtual files; no network package fetch occurs.
 

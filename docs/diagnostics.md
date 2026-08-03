@@ -9,7 +9,7 @@ payload-dependent render failures. A `CompilationReport` preserves all errors an
 order. Each `CompilationDiagnostic` may contain:
 
 - severity and message;
-- template name;
+- template ID;
 - virtual source path and one-based line/column range;
 - hints;
 - call, import, include, or show trace frames.

@@ -54,8 +54,9 @@ already exist in `TemplateSource`.
 
 ## Virtual Files and Imports
 
-The loader preserves relative paths. The compiler maps `main.typ` and imported files to rooted
-virtual project paths, so an import such as:
+The filesystem loader treats the selected template directory—not the global templates root—as the
+source root. It preserves paths relative to that directory. The compiler maps `main.typ` and
+imported files to rooted virtual project paths, so an import such as:
 
 ```typst
 #import "partials/header.typ"

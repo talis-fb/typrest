@@ -31,9 +31,10 @@ A Typrest project contains a `typrest.toml` at its root and a templates director
 project/
   typrest.toml
   templates/
-    invoice/
-      main.typ
-      schema.yml
+    financial/
+      invoice/
+        main.typ
+        schema.yml
     _shared/
       brand.typ
 ```
@@ -41,6 +42,11 @@ project/
 `check` and `serve` walk upward from the current working directory and use the nearest ancestor
 containing `typrest.toml`. They resolve `templates_root` relative to that project root. See the
 [`typrest.toml` specification](typrest-toml-spec.md) for path and validation rules.
+
+Template discovery walks directories recursively. A non-root directory containing `main.typ`
+defines the slash-separated template ID and stops discovery beneath it. Directories beginning with
+`_` are skipped during discovery; invalid visible route segments and `templates/main.typ` fail the
+project check. Descendant files remain part of a selected template bundle.
 
 ## `typrest init`
 
@@ -105,7 +111,7 @@ typrest check
 
 After project discovery, `check` lists, loads, prepares, warm-compiles, and PDF-exports every
 template using the same registry build as server startup. Failures are collected and reported in
-deterministic template-name order.
+deterministic template-ID order.
 
 Warnings are displayed and return exit status `0`. Configuration, load, schema, compilation, or
 export failure returns exit status `1`.

@@ -77,7 +77,7 @@ Then render the generated template:
 
 ```bash
 curl -X POST \
-  http://127.0.0.1:8080/render/hello-world \
+  http://127.0.0.1:8080/hello-world \
   -H 'Content-Type: application/json' \
   --data '{"name":"Ada"}' \
   --output hello-world.pdf

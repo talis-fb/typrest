@@ -1,7 +1,7 @@
 # ADR-0006: Restrict Template Names to Safe ASCII Identifiers
 
 - **Date:** 2026-06
-- **Status:** Accepted
+- **Status:** Superseded by [ADR-0010](0010-derive-template-ids-from-folder-routes.md)
 
 ## Context
 

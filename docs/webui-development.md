@@ -19,7 +19,7 @@ Start on loopback:
 typrest serve --hostname 127.0.0.1
 ```
 
-Open `http://127.0.0.1:8080/webui`. The UI has no authentication. The metadata endpoints are
+Open `http://127.0.0.1:8080/_webui`. The UI has no authentication. The metadata endpoints are
 currently mounted even when the static UI is disabled, so protect the server itself from untrusted
 networks.
 
@@ -29,7 +29,7 @@ The initial screen lists prepared templates. A Schema badge identifies a parsed 
 identifies a schema-less template. Selection is stored in the URL:
 
 ```text
-http://127.0.0.1:8080/webui/?template=invoice
+http://127.0.0.1:8080/_webui/?template=financial%2Finvoice
 ```
 
 The UI does not poll for registry changes. Refresh after a template or schema reload.
@@ -55,9 +55,9 @@ the compiler.
 
 ### Preview and Download
 
-Use **Render PDF** or `Ctrl+Enter`/`Cmd+Enter`. The UI calls `POST /render/:template`. A successful
-PDF appears in the preview panel, and **Download PDF** saves the same Blob as `<template>.pdf`
-without another compilation.
+Use **Render PDF** or `Ctrl+Enter`/`Cmd+Enter`. The UI calls `POST /{*template_id}`. A successful
+PDF appears in the preview panel, and **Download PDF** saves the same Blob with `/` replaced by
+`--` in the filename, without another compilation.
 
 Validation errors show affected fields. Compilation failures show safe locations, hints, and
 traces. Network and non-JSON failures are presented separately.
@@ -108,8 +108,8 @@ cd webui
 npm run dev
 ```
 
-Open the `/webui/` path printed by Vite, normally
-`http://localhost:5173/webui/`. Vite proxies `/_api` and `/render` to
+Open the `/_webui/` path printed by Vite, normally
+`http://localhost:5173/_webui/`. Vite proxies `/_api` and the non-underscore template namespace to
 `http://127.0.0.1:8080`; the Rust server remains responsible for metadata and PDF rendering.
 
 ## Validate Changes
@@ -149,7 +149,7 @@ The frontend reads:
 
 ```text
 GET /_api/templates
-GET /_api/templates/:template
+GET /_api/templates/{*template_id}
 ```
 
 Both routes read prepared registry state and are currently mounted independently of `web_ui`.
@@ -157,7 +157,7 @@ They are an internal, unversioned interface for the bundled frontend, not a stab
 
 ## Troubleshooting
 
-### `/webui` Returns 404
+### `/_webui` Returns 404
 
 Confirm that `web_ui = true` is in the discovered `typrest.toml` and restart the server after a
 configuration change. Static UI routes intentionally return `404` while disabled.

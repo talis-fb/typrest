@@ -1,7 +1,7 @@
 # ADR-0009: Gate Static Web UI Routes, Not Metadata Routes
 
 - **Date:** 2026-08
-- **Status:** Accepted
+- **Status:** Superseded in part by [ADR-0010](0010-derive-template-ids-from-folder-routes.md)
 - **Supersedes in part:** [ADR-0008](0008-embed-tracked-development-web-ui.md)
 
 ## Context

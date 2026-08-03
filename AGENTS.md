@@ -52,6 +52,8 @@ accepted decisions; record a superseding ADR under `docs/adr/`.
   Public compiler types must not expose Typst types.
 - `typst`, `typst-pdf`, and `typst-assets` stay exactly pinned to the same version and are upgraded
   together.
+- Filesystem template IDs are derived recursively from the first non-root folder containing
+  `main.typ`. Route discovery skips folders beginning with `_`; selected template bundles do not.
 - `_shared/` files are assembled into each `TemplateSource` by the filesystem loader. Relative
   paths and template subdirectories must be preserved.
 - Use typed `thiserror` errors in production code. Do not add `unwrap()` or `expect()` outside tests
@@ -64,9 +66,9 @@ The implemented routes are:
 
 - `GET /_healthz`;
 - `GET /_api/templates`;
-- `GET /_api/templates/:template`;
-- `POST /render/:template`;
-- `/webui`, `/webui/`, and `/webui/*` only when `web_ui = true`.
+- `GET /_api/templates/{*template_id}`;
+- `POST /{*template_id}`;
+- `/`, `/_webui`, `/_webui/`, and `/_webui/*` only when `web_ui = true`.
 
 The `/_api/*` metadata routes are currently mounted even when the Web UI is disabled. There are no
 implemented `/healthz` or `/templates` aliases.

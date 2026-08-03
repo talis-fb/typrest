@@ -23,9 +23,10 @@ web_ui = true
 
 `web_ui` defaults to false. Current route behavior is:
 
-- `/webui`, `/webui/`, and `/webui/*` exist only when `web_ui = true`;
-- `/_api/templates` and `/_api/templates/:template` are mounted regardless of `web_ui`;
-- `/_healthz` and `/render/:template` are also independent of `web_ui`.
+- `/_webui`, `/_webui/`, and `/_webui/*` exist only when `web_ui = true`;
+- `/` redirects permanently to `/_webui/` only when `web_ui = true`;
+- `/_api/templates` and `/_api/templates/{*template_id}` are mounted regardless of `web_ui`;
+- `/_healthz` and `/{*template_id}` are also independent of `web_ui`.
 
 The UI and metadata routes have no authentication or authorization. A server exposing project
 metadata or the Web UI must be bound to loopback or protected by a trusted external boundary:
@@ -40,9 +41,10 @@ typrest serve --hostname 127.0.0.1
 
 | Method | Route | Behavior |
 |---|---|---|
-| `GET` | `/webui` | Permanent redirect to `/webui/` |
-| `GET` | `/webui/` | Embedded `index.html` |
-| `GET` | `/webui/*` | Exact embedded asset or `404` |
+| `GET` | `/` | Permanent redirect to `/_webui/` |
+| `GET` | `/_webui` | Permanent redirect to `/_webui/` |
+| `GET` | `/_webui/` | Embedded `index.html` |
+| `GET` | `/_webui/*` | Exact embedded asset or `404` |
 
 The index uses `Cache-Control: no-cache`. Fingerprinted assets use
 `Cache-Control: public, max-age=31536000, immutable`. Text assets include UTF-8 content types.
@@ -50,13 +52,13 @@ Unknown paths return `404`; there is no single-page-application fallback.
 
 ### `GET /_api/templates`
 
-Returns prepared registry entries in name order:
+Returns prepared registry entries in template-ID order:
 
 ```json
 {
   "templates": [
-    { "name": "invoice", "hasSchema": true },
-    { "name": "welcome", "hasSchema": false }
+    { "id": "financial/invoice", "hasSchema": true },
+    { "id": "welcome", "hasSchema": false }
   ]
 }
 ```
@@ -64,13 +66,13 @@ Returns prepared registry entries in name order:
 An empty registry returns `{"templates":[]}`. The handler reads only `TemplateRegistry`; it does
 not scan the filesystem or call `TemplateLoader`.
 
-### `GET /_api/templates/:template`
+### `GET /_api/templates/{*template_id}`
 
 Returns the canonical parsed schema:
 
 ```json
 {
-  "name": "invoice",
+  "id": "financial/invoice",
   "schema": {
     "schemaVersion": "v1",
     "request": {
@@ -86,19 +88,19 @@ Returns the canonical parsed schema:
 }
 ```
 
-A schema-less template returns `{"name":"welcome","schema":null}`. An invalid name returns
-`400` with `invalid_template_name`; a valid missing name returns `404` with `template_not_found`.
+A schema-less template returns `{"id":"welcome","schema":null}`. An invalid ID returns `400`
+with `invalid_template_id`; a valid missing ID returns `404` with `template_not_found`.
 
 These routes are internal to the bundled UI and are not a versioned integration API, even though
 they are currently always mounted.
 
 ## Navigation and Workspace
 
-Opening `/webui/` represents loading, API failure with retry, an empty registry, or selectable
-template cards. Selecting a template stores its name in the query string:
+Opening `/_webui/` represents loading, API failure with retry, an empty registry, or selectable
+template cards. Selecting a template stores its ID in the query string:
 
 ```text
-/webui/?template=invoice
+/_webui/?template=financial%2Finvoice
 ```
 
 Direct navigation and browser history restore selection. Changing or leaving a template clears the
@@ -156,14 +158,14 @@ array—is sent unchanged to the render endpoint.
 The only PDF-producing request is:
 
 ```http
-POST /render/:template
+POST /financial/invoice
 Content-Type: application/json
 ```
 
 On success, the client reads a PDF Blob, creates a Blob URL, revokes the previous URL, displays the
-new URL in a titled iframe, and offers `<template>.pdf` for download. Download reuses the existing
-Blob and does not compile again. Blob URLs are also revoked when leaving a template or destroying
-the application.
+new URL in a titled iframe, and offers an ID-derived filename such as
+`financial--invoice.pdf` for download. Download reuses the existing Blob and does not compile
+again. Blob URLs are also revoked when leaving a template or destroying the application.
 
 Starting a render aborts the previous render request. Loading another template aborts the previous
 metadata request. A failed later render may leave the latest successful preview visible.
@@ -182,7 +184,7 @@ errors use alert/live semantics, focus remains visible, and the PDF iframe has a
 
 The client is Vite, Svelte, and TypeScript with Tailwind CSS and DaisyUI classes. It has no
 server-side rendering, frontend router, or Svelte-specific component library. Vite uses
-`/webui/` as its base path.
+`/_webui/` as its base path.
 
 Production output is committed under `webui/dist` and embedded in debug and release server builds.
 Rust and Docker builds do not invoke Node. Frontend source changes require `npm run check`,
@@ -196,11 +198,11 @@ server-side rendering, a frontend router, or an alternative rendering engine.
 
 ## Acceptance Criteria
 
-- Static UI routes are absent by default and mounted only with `web_ui = true`.
+- Static UI routes return `404` by default and are mounted only with `web_ui = true`.
 - Metadata routes remain available and read exclusively from the prepared registry.
 - Object schemas support Form and Raw JSON workflows; other roots remain renderable as raw JSON.
 - Invalid JSON and colliding custom keys are blocked before rendering.
-- Every preview and download originates from `POST /render/:template`.
+- Every preview and download originates from `POST /{*template_id}`.
 - Replaced and abandoned Blob URLs are revoked.
 - Embedded files use the specified content types and cache policy.
-- Existing render and error contracts remain unchanged.
+- Structured validation, compilation, warning, and PDF response contracts remain unchanged.

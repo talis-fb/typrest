@@ -12,7 +12,7 @@ request-specific.
 ## Startup Lifecycle
 
 1. Create the configured `TemplateLoader`; filesystem mode uses `FilesystemLoader`.
-2. Call `TemplateLoader::list()` to discover template names in deterministic order.
+2. Call `TemplateLoader::list()` to recursively discover template IDs in deterministic order.
 3. Load each `TemplateBundle`, including template-local and `_shared/` files.
 4. Parse an optional schema while preserving load errors as `LoaderError` variants.
 5. Call `PdfCompiler::prepare()` to build reusable compiler state.
@@ -43,10 +43,10 @@ work and has no configuration field.
 
 ## Registry Design
 
-`TemplateRegistry` stores prepared entries in a name-ordered map. Entries are immutable and shared
+`TemplateRegistry` stores prepared entries in an ID-ordered map. Entries are immutable and shared
 through `Arc`; a short-held `RwLock` protects only the map.
 
-Registry build errors retain the template name and distinguish:
+Registry build errors retain the template ID and distinguish:
 
 - listing failures;
 - load or schema failures;
@@ -54,12 +54,12 @@ Registry build errors retain the template name and distinguish:
 - invalid generated samples;
 - warmup compile or export failures.
 
-`GET /_api/templates` and `GET /_api/templates/:template` read this registry. They do not scan the
+`GET /_api/templates` and `GET /_api/templates/{*template_id}` read this registry. They do not scan the
 filesystem or reparse schemas.
 
 ## Request Lifecycle
 
-1. The handler parses the template name and JSON body.
+1. The handler parses the catch-all route as a validated template ID and parses the JSON body.
 2. `RenderService` looks up the prepared entry in `TemplateRegistry`.
 3. A missing entry becomes `RenderError::TemplateNotFound`.
 4. When a schema exists, validation applies defaults and may return `ValidationError` before
@@ -76,10 +76,10 @@ Filesystem notifications are processed by one asynchronous worker so older reloa
 after newer changes and overwrite them.
 
 - A template-local change reloads, prepares, validates, and warms that template.
-- A change under `_shared/` rebuilds all current templates once.
+- A route-topology or `_shared/` change builds a complete candidate registry after a short debounce.
 - The candidate is built without holding the registry write lock.
-- Success replaces the entry with one short write operation.
-- Failure is reported and the last known good entry remains active.
+- Success swaps the affected entry or complete registry with one short write operation.
+- Failure is reported and the last known good entry or registry remains active.
 
 Startup and watch mode intentionally differ: startup requires every template to be valid, while a
 watch failure preserves service availability.

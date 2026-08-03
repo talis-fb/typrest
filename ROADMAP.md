@@ -17,7 +17,7 @@ rendered over HTTP with payload validation and structured diagnostics.
 - [x] Cargo workspace with core, server, and CLI crates
 - [x] Canonical domain types and typed errors
 - [x] `TemplateLoader` abstraction with filesystem and in-memory implementations
-- [x] Recursive template sources, `_shared/`, nested assets, and safe template names
+- [x] Folder-derived template IDs, recursive sources, `_shared/`, nested assets, and direct routes
 - [x] Optional canonical `schema.yml` with legacy `schema.json` compatibility
 - [x] Recursive schema validation, defaults, enums, and deterministic paths
 

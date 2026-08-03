@@ -32,7 +32,7 @@ In another terminal, render the generated template:
 
 ```bash
 curl -X POST \
-  http://127.0.0.1:8080/render/hello-world \
+  http://127.0.0.1:8080/hello-world \
   -H 'Content-Type: application/json' \
   --data '{"name":"Ada"}' \
   --output hello-world.pdf
@@ -57,11 +57,12 @@ work in [`ROADMAP.md`](ROADMAP.md).
 my-project/
   typrest.toml
   templates/
-    invoice/
-      main.typ
-      schema.yml
-      assets/
-        logo.svg
+    financial/
+      invoice/
+        main.typ
+        schema.yml
+        assets/
+          logo.svg
     welcome/
       main.typ
     _shared/
@@ -71,7 +72,9 @@ my-project/
 Every template requires `main.typ`. A `schema.yml` file is optional. Legacy `schema.json` remains
 accepted, but a template cannot contain both formats. Without a schema, any valid JSON value is
 passed directly to Typst without payload validation. Files under `_shared/` are available to every
-template.
+template. Directories without `main.typ` group route segments; the first directory containing
+`main.typ` defines the template ID and stops route discovery below it. Directories beginning with
+`_` are skipped during discovery but remain ordinary source when they are below an active template.
 
 Templates read the request payload from `sys.inputs.data`:
 
@@ -115,23 +118,23 @@ See the [CLI specification](docs/cli-spec.md) for exact behavior.
 
 ### `GET /_api/templates`
 
-Returns prepared templates in name order:
+Returns prepared templates in template-ID order:
 
 ```json
 {
   "templates": [
-    { "name": "invoice", "hasSchema": true },
-    { "name": "welcome", "hasSchema": false }
+    { "id": "financial/invoice", "hasSchema": true },
+    { "id": "welcome", "hasSchema": false }
   ]
 }
 ```
 
-### `GET /_api/templates/:template`
+### `GET /_api/templates/{*template_id}`
 
-Returns the prepared template name and its parsed schema, or `"schema": null` when no schema is
+Returns the prepared template ID and its parsed schema, or `"schema": null` when no schema is
 present. These metadata endpoints currently remain mounted when the Web UI is disabled.
 
-### `POST /render/:template`
+### `POST /{*template_id}`
 
 Send a JSON request body with `Content-Type: application/json`. A successful response is
 `application/pdf` with status `200`.
@@ -148,7 +151,7 @@ Errors use a structured JSON envelope:
 }
 ```
 
-Common statuses are `400` for an invalid template name or JSON request, `404` for a missing
+Common statuses are `400` for an invalid template ID or JSON request, `404` for a missing
 template, `422` for schema validation failures, and `500` for compilation or PDF export failures.
 
 ## Development Web UI
@@ -162,7 +165,7 @@ templates_root = "templates"
 web_ui = true
 ```
 
-Run on loopback and open `http://127.0.0.1:8080/webui`. The UI has no authentication and must not
+Run on loopback and open `http://127.0.0.1:8080/_webui`. The UI has no authentication and must not
 be exposed directly to an untrusted network. See the [Web UI guide](docs/webui-development.md) and
 [Web UI specification](docs/webui-spec.md).
 
