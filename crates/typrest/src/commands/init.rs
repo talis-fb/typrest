@@ -1,10 +1,10 @@
 use crate::config::CONFIG_FILE;
-use std::fs;
-use std::path::{Path, PathBuf};
-use typrest_server::output::{
+use crate::output::{
     ColorChoice as ServerColorChoice, DiagnosticContext, DiagnosticReporter, DiagnosticStage,
     OutputFormat,
 };
+use std::fs;
+use std::path::{Path, PathBuf};
 
 pub(crate) async fn run_init(
     path: Option<PathBuf>,

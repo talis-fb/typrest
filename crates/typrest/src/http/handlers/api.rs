@@ -3,8 +3,8 @@ use axum::http::StatusCode;
 use serde::Serialize;
 use typrest_core::{Schema, TemplateId};
 
-use crate::errors::ApiError;
-use crate::server::AppState;
+use crate::http::errors::ApiError;
+use crate::http::state::AppState;
 
 pub async fn list_templates(
     State(state): State<AppState>,

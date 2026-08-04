@@ -1,63 +1,21 @@
-pub mod config;
-pub mod errors;
-pub mod handlers;
-pub mod loader;
-pub mod output;
-pub mod package;
-pub mod router;
-pub mod server;
+pub(crate) mod config;
+pub(crate) mod errors;
+pub(crate) mod handlers;
+pub(crate) mod router;
+pub(crate) mod state;
 
 use std::net::SocketAddr;
-use std::sync::Arc;
 
 use tracing::info;
-use typrest_core::{PdfCompiler, RenderService, TemplateRegistry, TypstCompiler};
 
-use crate::config::ServerConfig;
-use crate::errors::ServeError;
-use crate::loader::filesystem::FilesystemLoader;
-use crate::loader::watch::start_template_watcher;
-use crate::output::{DiagnosticContext, DiagnosticReporter};
-use crate::package::UniversePackageRepository;
-use crate::router::router;
-use crate::server::AppState;
+use crate::http::config::ServerConfig;
+use crate::http::errors::ServeError;
 
-pub async fn serve(config: ServerConfig, reporter: DiagnosticReporter) -> Result<(), ServeError> {
-    let loader = Arc::new(FilesystemLoader::new(config.templates_dir.clone()));
+use self::router::router;
+use self::state::AppState;
 
-    let packages = Arc::new(UniversePackageRepository::new(&config.package_cache_dir));
-    let compiler: Arc<dyn PdfCompiler> =
-        Arc::new(TypstCompiler::new().with_package_repository(packages));
-
-    let registry_with_warnings =
-        TemplateRegistry::build(loader.as_ref(), compiler.as_ref()).await?;
-
-    reporter.report_build(DiagnosticContext::Startup, &registry_with_warnings);
-
-    let (registry, warnings) = registry_with_warnings.into_parts();
-
-    info!(
-        event = "templates.startup.completed",
-        template_count = registry.ids().len(),
-        warning_count = warnings.len(),
-        status = "ok",
-        "templates compiled successfully"
-    );
-
-    let _watcher = if config.watch {
-        Some(start_template_watcher(
-            loader,
-            registry.clone(),
-            compiler.clone(),
-            reporter.clone(),
-        )?)
-    } else {
-        None
-    };
-
-    let render_service = RenderService::new(registry.clone(), compiler);
-    let app = AppState::new(registry, render_service, reporter);
-    let app_router = router(app, &config);
+pub(crate) async fn serve(config: ServerConfig, state: AppState) -> Result<(), ServeError> {
+    let app_router = router(state, &config);
 
     let address = SocketAddr::from((config.host, config.port));
     let listener = tokio::net::TcpListener::bind(address).await?;
@@ -89,11 +47,12 @@ mod tests {
         TemplateId, TemplateLoader, TemplateRegistry, TemplateRegistryError, TemplateSource,
     };
 
-    use crate::config::ServerConfig;
+    use crate::http::config::ServerConfig;
+    use crate::http::router::router;
+    use crate::http::state::AppState;
     use crate::loader::filesystem::FilesystemLoader;
     use crate::output::{ColorChoice, DiagnosticReporter, OutputFormat};
-    use crate::router::router;
-    use crate::server::AppState;
+    use crate::package::universal_package::UniversePackageRepository;
 
     #[derive(Clone)]
     struct MockCompiler {
@@ -121,7 +80,7 @@ mod tests {
         let render_service = RenderService::new(registry.clone(), compiler);
         router(
             AppState::new(registry, render_service, test_reporter(".")),
-            &ServerConfig::new(".", ".typrest/packages", 0),
+            &ServerConfig::new(0),
         )
     }
 
@@ -134,7 +93,7 @@ mod tests {
         let render_service = RenderService::new(registry.clone(), compiler);
         router(
             AppState::new(registry, render_service, test_reporter(".")),
-            &ServerConfig::new(".", ".typrest/packages", 0).with_web_ui(true),
+            &ServerConfig::new(0).with_web_ui(true),
         )
     }
 
@@ -984,7 +943,7 @@ Hello #data.name
         let render_service = RenderService::new(registry.clone(), compiler);
         let app = router(
             AppState::new(registry, render_service, test_reporter(root.path())),
-            &ServerConfig::new(root.path(), root.path().join(".typrest/packages"), 0),
+            &ServerConfig::new(0),
         );
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
@@ -1035,7 +994,7 @@ Hello #data.name
         );
 
         let loader = FilesystemLoader::new(&templates);
-        let packages = Arc::new(crate::package::UniversePackageRepository::new(&cache));
+        let packages = Arc::new(UniversePackageRepository::new(&cache));
         let compiler =
             Arc::new(typrest_core::TypstCompiler::new().with_package_repository(packages));
         let registry = TemplateRegistry::build(&loader, compiler.as_ref())
@@ -1077,7 +1036,7 @@ Hello #data.name
         let render_service = RenderService::new(registry.clone(), compiler);
         let app = router(
             AppState::new(registry, render_service, test_reporter(&examples_dir)),
-            &ServerConfig::new(&examples_dir, examples_dir.join(".typrest/packages"), 0),
+            &ServerConfig::new(0),
         );
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();

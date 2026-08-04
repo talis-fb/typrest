@@ -4,10 +4,12 @@
 
 ## Boundary
 
-The Typst Rust API can change between releases. All imports of `typst::*` and `typst_pdf::*` are
-therefore confined to `crates/typrest-core/src/compiler/`. Outside that directory, code uses only
-Typrest-owned types such as `PdfCompiler`, `PreparedTemplate`, `Document`, and
-`CompilationDiagnostic`.
+The Typst compiler API can change between releases. Imports of `typst`, `typst-pdf`, and
+`typst-assets` are therefore confined to `crates/typrest-core/src/compiler/`. Outside that
+directory, compiler-facing code uses only Typrest-owned types such as `PdfCompiler`,
+`PreparedTemplate`, `Document`, `CompilationDiagnostic`, `PackageCoordinate`, and
+`PackageSource`. The application package resolver uses `typst-kit` and `typst-syntax` for the
+official Universe package implementation.
 
 The workspace `Cargo.toml` is the canonical dependency source. `typst`, `typst-pdf`,
 `typst-assets`, `typst-kit`, and `typst-syntax` are pinned exactly to one matching version and
@@ -68,9 +70,11 @@ imported files to rooted virtual project paths, so an import such as:
 resolves only against the prepared in-memory map. `_shared/` content is already included by the
 filesystem loader before the compiler receives the source.
 
-Literal imports such as `#import "@preview/cetz:0.5.2"` are discovered during preparation. Missing
-packages are downloaded through `PackageRepository` into `<project>/.typrest/packages`; direct and
-transitive package files are then retained in memory. Package-rooted diagnostics use paths such as
+Literal imports such as `#import "@preview/cetz:0.5.2"` are discovered during preparation. The
+compiler passes Typrest-owned coordinates to `PackageRepository`. The application delegates cache
+lookup and missing-package downloads to `typst-kit`'s official Universe implementation, then reads
+the resolved package into a Typrest-owned source map. Direct and transitive package files are
+retained in memory. Package-rooted diagnostics use paths such as
 `@preview/cetz:0.5.2/src/lib.typ` and never expose the physical cache.
 
 Only the `preview` namespace and fully versioned literal imports are supported. Request compilation
@@ -95,7 +99,7 @@ When upgrading Typst:
 3. keep public signatures free of Typst types;
 4. run compiler, diagnostics, font, import, payload, and PDF export tests;
 5. review diagnostic snapshots rather than accepting them blindly;
-6. verify the architecture test still rejects imports outside `compiler/`;
+6. verify the architecture test still rejects compiler imports outside `compiler/`;
 7. update this reference only when the implemented boundary changes.
 
 Do not copy “latest version” snippets from external examples into project documentation. Inspect the

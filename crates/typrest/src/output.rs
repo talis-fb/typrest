@@ -9,13 +9,15 @@ use codespan_reporting::files::SimpleFiles;
 use codespan_reporting::term;
 use codespan_reporting::term::termcolor::{ColorChoice as TermColorChoice, StandardStream};
 use codespan_reporting::term::{Styles, StylesWriter};
-use tracing::{Level, error, event, info};
+use tracing::{Level, error, event, info, warn};
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::util::SubscriberInitExt;
 use typrest_core::{
     CompilationDiagnostic, CompilationError, DiagnosticSeverity, TemplateId, TemplateRegistry,
     TemplateRegistryBuildFailure, TemplateRegistryError, WithWarnings,
 };
+
+use crate::loader::watch::WatchEvent;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum OutputFormat {
@@ -110,6 +112,79 @@ impl DiagnosticReporter {
             warning_count = error.warnings().len(),
             "template compilation failed"
         );
+    }
+
+    pub(crate) fn report_watch_event(&self, event: WatchEvent) {
+        match event {
+            WatchEvent::BackendFailed(source) => {
+                error!(error = %source, "template watch event failed");
+            }
+            WatchEvent::RegistryRebuilt {
+                template_count,
+                warnings,
+            } => {
+                self.report_diagnostics(
+                    DiagnosticContext::Watch,
+                    DiagnosticStage::Compile,
+                    &warnings,
+                );
+                info!(
+                    event = "template.registry.rebuilt",
+                    template_count,
+                    warning_count = warnings.len(),
+                    "template registry rebuilt"
+                );
+            }
+            WatchEvent::RegistryRebuildFailed(source) => {
+                self.report_build_error(DiagnosticContext::Watch, &source);
+                warn!(
+                    event = "template.registry.rebuild.failed",
+                    last_known_good = true,
+                    "template registry rebuild failed; keeping last known good version"
+                );
+            }
+            WatchEvent::TemplateReloaded { template, warnings } => {
+                self.report_diagnostics(
+                    DiagnosticContext::Watch,
+                    DiagnosticStage::Compile,
+                    &warnings,
+                );
+                info!(
+                    event = "template.reload.completed",
+                    template = %template,
+                    warning_count = warnings.len(),
+                    "template reloaded"
+                );
+            }
+            WatchEvent::TemplateReloadFailed(source) => {
+                match &source {
+                    TemplateRegistryError::Prepare { template, source } => self.report_compilation(
+                        DiagnosticContext::Watch,
+                        DiagnosticStage::Prepare,
+                        template,
+                        source,
+                    ),
+                    TemplateRegistryError::Warmup { template, source } => self.report_compilation(
+                        DiagnosticContext::Watch,
+                        DiagnosticStage::Compile,
+                        template,
+                        source,
+                    ),
+                    _ => self.report_simple_error(
+                        DiagnosticContext::Watch,
+                        DiagnosticStage::Load,
+                        watch_error_template(&source),
+                        &source.to_string(),
+                    ),
+                }
+                warn!(
+                    event = "template.reload.failed",
+                    template = watch_error_template(&source).map(ToString::to_string),
+                    last_known_good = true,
+                    "template reload failed; keeping last known good version"
+                );
+            }
+        }
     }
 
     pub fn report_compilation(
@@ -331,6 +406,16 @@ impl DiagnosticReporter {
     }
 }
 
+fn watch_error_template(error: &TemplateRegistryError) -> Option<&TemplateId> {
+    match error {
+        TemplateRegistryError::List { .. } => None,
+        TemplateRegistryError::Load { template, .. }
+        | TemplateRegistryError::Prepare { template, .. }
+        | TemplateRegistryError::SamplePayload { template, .. }
+        | TemplateRegistryError::Warmup { template, .. } => Some(template),
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub enum DiagnosticContext {
     Check,
@@ -371,7 +456,7 @@ impl DiagnosticStage {
 
 pub fn init_tracing(format: OutputFormat, color: ColorChoice) {
     let filter =
-        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("typrest_server=info"));
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("typrest=info"));
     let ansi = match color {
         ColorChoice::Always => true,
         ColorChoice::Never => false,
@@ -407,7 +492,7 @@ pub fn log_check_success(format: OutputFormat, build: &WithWarnings<TemplateRegi
         OutputFormat::Pretty => eprintln!("templates compiled successfully"),
         OutputFormat::Json => {
             info!(
-                target: "typrest_server",
+                target: "typrest",
                 event = "templates.check.completed",
                 template_count = build.value().ids().len(),
                 warning_count = build.warnings().len(),

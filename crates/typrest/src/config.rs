@@ -3,7 +3,7 @@ use std::path::{Component, Path, PathBuf};
 
 use serde::Deserialize;
 
-use typrest_server::output::{
+use crate::output::{
     ColorChoice as ServerColorChoice, DiagnosticContext, DiagnosticReporter, DiagnosticStage,
     OutputFormat,
 };

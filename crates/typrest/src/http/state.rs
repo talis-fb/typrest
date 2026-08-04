@@ -25,17 +25,11 @@ impl AppState {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
-
-    use crate::config::ServerConfig;
+    use crate::http::config::ServerConfig;
 
     #[test]
     fn web_ui_is_disabled_by_default_and_can_be_enabled() {
-        let disabled = ServerConfig::new(
-            PathBuf::from("templates"),
-            PathBuf::from(".typrest/packages"),
-            8080,
-        );
+        let disabled = ServerConfig::new(8080);
         assert!(!disabled.web_ui);
 
         let enabled = disabled.with_web_ui(true);

@@ -1,14 +1,12 @@
 use std::sync::Arc;
 
-use typrest_core::{TemplateRegistry, TypstCompiler};
-use typrest_server::{
-    loader::filesystem::FilesystemLoader,
-    output::{
-        ColorChoice as ServerColorChoice, DiagnosticContext, DiagnosticReporter, OutputFormat,
-        log_check_success,
-    },
-    package::UniversePackageRepository,
+use crate::loader::filesystem::FilesystemLoader;
+use crate::output::{
+    ColorChoice as ServerColorChoice, DiagnosticContext, DiagnosticReporter, OutputFormat,
+    log_check_success,
 };
+use crate::package::universal_package::UniversePackageRepository;
+use typrest_core::{TemplateRegistry, TypstCompiler};
 
 use crate::config::load_config;
 

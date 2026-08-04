@@ -1,7 +1,7 @@
 # ADR-0002: Abstract Template Loading Behind a Trait
 
 - **Date:** 2025-11
-- **Status:** Accepted
+- **Status:** Superseded in part by [ADR-0012](0012-consolidate-application-packages.md)
 
 ## Context
 

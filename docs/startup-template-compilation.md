@@ -11,7 +11,8 @@ request-specific.
 
 ## Startup Lifecycle
 
-1. Create the configured `TemplateLoader`; filesystem mode uses `FilesystemLoader`.
+1. The application command layer creates the configured `TemplateLoader`; filesystem mode uses
+   `loader::FilesystemLoader`.
 2. Call `TemplateLoader::list()` to recursively discover template IDs in deterministic order.
 3. Load each `TemplateBundle`, including template-local and `_shared/` files.
 4. Parse an optional schema while preserving load errors as `LoaderError` variants.
@@ -21,7 +22,8 @@ request-specific.
 7. Validate the generated payload when a schema exists.
 8. Run a real `compile_prepared()` and PDF export.
 9. Store successful `PreparedTemplateBundle` entries in `TemplateRegistry`.
-10. Report every collected failure and bind the socket only when all templates succeed.
+10. Report every collected failure and pass prepared registry/render state to HTTP only when all
+    templates succeed.
 
 An empty templates directory produces an empty registry and may start successfully. Compiler
 warnings are reported with their full diagnostic context but do not fail startup.
@@ -82,6 +84,9 @@ after newer changes and overwrite them.
 - The candidate is built without holding the registry write lock.
 - Success swaps the affected entry or complete registry with one short write operation.
 - Failure is reported and the last known good entry or registry remains active.
+
+The loader module emits typed watch outcomes. The application output module formats diagnostics
+and operational logs, so watch management has no dependency on HTTP or presentation code.
 
 Startup and watch mode intentionally differ: startup requires every template to be valid, while a
 watch failure preserves service availability.

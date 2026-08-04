@@ -1,6 +1,6 @@
 # `typrest.toml` Specification
 
-> Status: Current. The parser lives in `crates/typrest-cli/src/config.rs`.
+> Status: Current. The parser lives in `crates/typrest/src/config.rs`.
 
 ## Purpose and Location
 

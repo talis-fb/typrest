@@ -16,7 +16,7 @@ accepted decision.
 | ID | Decision | Date | Status |
 |---|---|---|---|
 | [ADR-0001](0001-integrate-typst-as-rust-library.md) | Integrate Typst as a Rust library | 2025-11 | Accepted |
-| [ADR-0002](0002-abstract-template-loading.md) | Abstract template loading behind a trait | 2025-11 | Accepted |
+| [ADR-0002](0002-abstract-template-loading.md) | Abstract template loading behind a trait | 2025-11 | Superseded in part |
 | [ADR-0003](0003-package-filesystem-templates-with-deployment.md) | Package filesystem templates with the deployment | 2025-11 | Accepted |
 | [ADR-0004](0004-resolve-shared-during-loading.md) | Resolve `_shared/` during loading | 2025-11 | Accepted |
 | [ADR-0005](0005-inject-request-data-through-sys-inputs.md) | Inject request data through `sys.inputs` | 2025-11 | Accepted |
@@ -26,6 +26,7 @@ accepted decision.
 | [ADR-0009](0009-gate-static-web-ui-routes.md) | Gate static Web UI routes, not metadata routes | 2026-08 | Superseded in part by ADR-0010 |
 | [ADR-0010](0010-derive-template-ids-from-folder-routes.md) | Derive template IDs and direct routes from folders | 2026-08 | Accepted |
 | [ADR-0011](0011-resolve-preview-packages-during-preparation.md) | Resolve preview packages during preparation | 2026-08 | Accepted |
+| [ADR-0012](0012-consolidate-application-packages.md) | Consolidate application packages around the core boundary | 2026-08 | Accepted |
 
 ## Adding a Decision
 

@@ -14,7 +14,7 @@ rendered over HTTP with payload validation and structured diagnostics.
 
 ### Foundation and Filesystem Loading
 
-- [x] Cargo workspace with core, server, and CLI crates
+- [x] Cargo workspace with one non-I/O core package and one modular application package
 - [x] Canonical domain types and typed errors
 - [x] `TemplateLoader` abstraction with filesystem and in-memory implementations
 - [x] Folder-derived template IDs, recursive sources, `_shared/`, nested assets, and direct routes

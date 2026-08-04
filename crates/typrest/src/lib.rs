@@ -1,19 +1,22 @@
 mod args;
 mod commands;
 mod config;
+mod http;
+mod loader;
+mod output;
+mod package;
 
 use std::process::ExitCode;
 
 use clap::Parser;
-use typrest_server::output::{ColorChoice as ServerColorChoice, OutputFormat, init_tracing};
 
 use crate::args::{Args, ColorChoice, Command, LogFormat};
 use crate::commands::check::run_check;
 use crate::commands::init::run_init;
 use crate::commands::serve::run_serve;
+use crate::output::{ColorChoice as OutputColorChoice, OutputFormat, init_tracing};
 
-#[tokio::main]
-async fn main() -> ExitCode {
+pub async fn run() -> ExitCode {
     let args = Args::parse();
     let output_format = output_format(args.log_format);
     let color = color_choice(args.color);
@@ -43,10 +46,10 @@ fn output_format(format: LogFormat) -> OutputFormat {
     }
 }
 
-fn color_choice(color: ColorChoice) -> ServerColorChoice {
+fn color_choice(color: ColorChoice) -> OutputColorChoice {
     match color {
-        ColorChoice::Auto => ServerColorChoice::Auto,
-        ColorChoice::Always => ServerColorChoice::Always,
-        ColorChoice::Never => ServerColorChoice::Never,
+        ColorChoice::Auto => OutputColorChoice::Auto,
+        ColorChoice::Always => OutputColorChoice::Always,
+        ColorChoice::Never => OutputColorChoice::Never,
     }
 }

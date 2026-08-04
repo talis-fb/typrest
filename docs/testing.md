@@ -17,8 +17,9 @@ Run focused suites while iterating:
 ```bash
 cargo test -p typrest-core compiler
 cargo test -p typrest-core schema
-cargo test -p typrest-server
-cargo test -p typrest-cli
+cargo test -p typrest project
+cargo test -p typrest http
+cargo test -p typrest --test check
 ```
 
 For Web UI changes:
@@ -42,14 +43,17 @@ source changes must include the rebuilt output; never edit it by hand.
 | Compiler ACL | Real Typst compilation, fonts, imports, payload injection, diagnostics, export |
 | Packages | In-memory fixtures, transitive imports, cache loading, and no request-time I/O |
 | Registry | Startup aggregation, warmup samples, prepared reuse, replacement behavior |
-| Server | Router, status/error mapping, metadata, render responses, startup, watch mode |
+| Application loading and packages | Filesystem loading, package cache/download, startup, and watch mode |
+| HTTP | Router, status/error mapping, metadata, and render responses |
 | CLI | Clap parsing, project discovery, configuration, scaffolding, check behavior |
 | Web UI | Payload composition, mode conversion, custom fields, TypeScript/Svelte checks |
 | End to end | Random local port, HTTP status/content type, and meaningful PDF content |
 
 Normal core and handler tests should not invoke real Typst unless integration is the behavior under
 test. Filesystem tests use temporary directories and must not depend on global machine state.
-Package tests use in-memory or temporary cached fixtures and must not require live Universe access.
+Package tests use mocked downloads or temporary cached fixtures and must not require live Universe
+access. Architecture tests reject `typst`, `typst-pdf`, and `typst-assets` imports outside the
+compiler ACL. `typst-kit` and `typst-syntax` are used by the application package resolver.
 
 ## Snapshot Policy
 

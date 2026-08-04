@@ -3,18 +3,12 @@ use axum::response::{IntoResponse, Json, Response};
 use serde::Serialize;
 use thiserror::Error;
 use typrest_core::{
-    CompilationDiagnostic, CompilationError, DiagnosticLocation, DiagnosticSeverity, LoaderError,
-    RelatedDiagnostic, RenderError, TemplateRegistryBuildFailure, ValidationError, WithWarnings,
+    CompilationDiagnostic, CompilationError, DiagnosticLocation, DiagnosticSeverity,
+    RelatedDiagnostic, RenderError, ValidationError,
 };
 
 #[derive(Debug, Error)]
 pub enum ServeError {
-    #[error("{0}")]
-    Registry(#[from] WithWarnings<TemplateRegistryBuildFailure>),
-
-    #[error("template watcher failed: {0}")]
-    Watch(#[from] notify::Error),
-
     #[error("server I/O failed: {0}")]
     Io(#[from] std::io::Error),
 }
@@ -36,21 +30,6 @@ impl ApiError {
                 line: None,
                 diagnostics: Vec::new(),
             },
-        }
-    }
-
-    pub fn from_loader_error(error: LoaderError) -> Self {
-        match error {
-            LoaderError::TemplateNotFound(name) => Self::new(
-                StatusCode::NOT_FOUND,
-                "template_not_found",
-                format!("Template '{name}' was not found"),
-            ),
-            error => Self::new(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "template_loader_failed",
-                error.to_string(),
-            ),
         }
     }
 

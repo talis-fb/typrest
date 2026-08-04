@@ -4,11 +4,29 @@ use std::sync::Arc;
 use notify::event::ModifyKind;
 use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use tokio::sync::mpsc;
-use tracing::{error, info, warn};
-use typrest_core::{PdfCompiler, TemplateId, TemplateRegistry};
+use typrest_core::{
+    CompilationDiagnostic, PdfCompiler, TemplateId, TemplateRegistry, TemplateRegistryBuildFailure,
+    TemplateRegistryError, WithWarnings,
+};
 
 use crate::loader::filesystem::FilesystemLoader;
-use crate::output::{DiagnosticContext, DiagnosticReporter, DiagnosticStage};
+
+pub(crate) type WatchEventHandler = Arc<dyn Fn(WatchEvent) + Send + Sync>;
+
+#[derive(Debug)]
+pub(crate) enum WatchEvent {
+    BackendFailed(notify::Error),
+    RegistryRebuilt {
+        template_count: usize,
+        warnings: Vec<CompilationDiagnostic>,
+    },
+    RegistryRebuildFailed(WithWarnings<TemplateRegistryBuildFailure>),
+    TemplateReloaded {
+        template: TemplateId,
+        warnings: Vec<CompilationDiagnostic>,
+    },
+    TemplateReloadFailed(TemplateRegistryError),
+}
 
 pub struct TemplateWatcher {
     _watcher: RecommendedWatcher,
@@ -21,20 +39,18 @@ impl Drop for TemplateWatcher {
     }
 }
 
-pub fn start_template_watcher(
+pub(crate) fn start_template_watcher(
     loader: Arc<FilesystemLoader>,
     registry: TemplateRegistry,
     compiler: Arc<dyn PdfCompiler>,
-    reporter: DiagnosticReporter,
+    on_event: WatchEventHandler,
 ) -> notify::Result<TemplateWatcher> {
     let root = loader.root().to_owned();
     let watch_root = root.clone();
     let (sender, mut receiver) = mpsc::unbounded_channel();
     let mut watcher = RecommendedWatcher::new(
         move |result| {
-            if sender.send(result).is_err() {
-                warn!("template watch worker stopped");
-            }
+            let _ = sender.send(result);
         },
         Config::default(),
     )?;
@@ -53,12 +69,11 @@ pub fn start_template_watcher(
                 loader.as_ref(),
                 &registry,
                 compiler.as_ref(),
-                &reporter,
+                &on_event,
             )
             .await;
         }
     });
-    info!(templates_dir = %watch_root.display(), "template watch mode enabled");
 
     Ok(TemplateWatcher {
         _watcher: watcher,
@@ -72,7 +87,7 @@ async fn handle_events(
     loader: &FilesystemLoader,
     registry: &TemplateRegistry,
     compiler: &dyn PdfCompiler,
-    reporter: &DiagnosticReporter,
+    on_event: &WatchEventHandler,
 ) {
     let mut rebuild_all = false;
     let mut templates = Vec::new();
@@ -82,7 +97,7 @@ async fn handle_events(
             Ok(event) if is_relevant_event(&event) => event,
             Ok(_) => continue,
             Err(error) => {
-                error!(error = %error, "template watch event failed");
+                on_event(WatchEvent::BackendFailed(error));
                 continue;
             }
         };
@@ -110,12 +125,12 @@ async fn handle_events(
     }
 
     if rebuild_all {
-        reload_all(loader, registry, compiler, reporter).await;
+        reload_all(loader, registry, compiler, on_event).await;
         return;
     }
 
     for template in templates {
-        reload_template(loader, registry, compiler, &template, reporter).await;
+        reload_template(loader, registry, compiler, &template, on_event).await;
     }
 }
 
@@ -141,27 +156,20 @@ async fn reload_all(
     loader: &FilesystemLoader,
     registry: &TemplateRegistry,
     compiler: &dyn PdfCompiler,
-    reporter: &DiagnosticReporter,
+    on_event: &WatchEventHandler,
 ) {
     match TemplateRegistry::build(loader, compiler).await {
         Ok(build) => {
-            reporter.report_build(DiagnosticContext::Watch, &build);
             let template_count = build.value().ids().len();
+            let warnings = build.warnings().to_vec();
             registry.replace_all(build.value());
-            info!(
-                event = "template.registry.rebuilt",
+            on_event(WatchEvent::RegistryRebuilt {
                 template_count,
-                warning_count = build.warnings().len(),
-                "template registry rebuilt"
-            );
+                warnings,
+            });
         }
         Err(build_error) => {
-            reporter.report_build_error(DiagnosticContext::Watch, &build_error);
-            warn!(
-                event = "template.registry.rebuild.failed",
-                last_known_good = true,
-                "template registry rebuild failed; keeping last known good version"
-            );
+            on_event(WatchEvent::RegistryRebuildFailed(build_error));
         }
     }
 }
@@ -171,53 +179,17 @@ async fn reload_template(
     registry: &TemplateRegistry,
     compiler: &dyn PdfCompiler,
     template: &TemplateId,
-    reporter: &DiagnosticReporter,
+    on_event: &WatchEventHandler,
 ) {
     match registry.reload(loader, compiler, template).await {
         Ok(reload) => {
-            reporter.report_diagnostics(
-                DiagnosticContext::Watch,
-                DiagnosticStage::Compile,
-                reload.warnings(),
-            );
-            info!(
-                event = "template.reload.completed",
-                template = %template,
-                warning_count = reload.warnings().len(),
-                "template reloaded"
-            );
+            on_event(WatchEvent::TemplateReloaded {
+                template: template.clone(),
+                warnings: reload.warnings().to_vec(),
+            });
         }
         Err(error) => {
-            match &error {
-                typrest_core::TemplateRegistryError::Prepare { source, .. } => {
-                    reporter.report_compilation(
-                        DiagnosticContext::Watch,
-                        DiagnosticStage::Prepare,
-                        template,
-                        source,
-                    );
-                }
-                typrest_core::TemplateRegistryError::Warmup { source, .. } => {
-                    reporter.report_compilation(
-                        DiagnosticContext::Watch,
-                        DiagnosticStage::Compile,
-                        template,
-                        source,
-                    );
-                }
-                _ => reporter.report_simple_error(
-                    DiagnosticContext::Watch,
-                    DiagnosticStage::Load,
-                    Some(template),
-                    &error.to_string(),
-                ),
-            }
-            warn!(
-                event = "template.reload.failed",
-                template = %template,
-                last_known_good = true,
-                "template reload failed; keeping last known good version"
-            );
+            on_event(WatchEvent::TemplateReloadFailed(error));
         }
     }
 }
@@ -269,6 +241,7 @@ fn is_private_discovery_path(root: &Path, path: &Path) -> bool {
 mod tests {
     use std::fs;
     use std::path::Path;
+    use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
     use async_trait::async_trait;
@@ -280,9 +253,10 @@ mod tests {
     };
 
     use crate::loader::filesystem::FilesystemLoader;
-    use crate::output::{ColorChoice, DiagnosticReporter, OutputFormat};
 
-    use super::{ChangedTemplate, changed_template, reload_all, reload_template};
+    use super::{
+        ChangedTemplate, WatchEventHandler, changed_template, reload_all, reload_template,
+    };
 
     struct MockCompiler {
         fail: AtomicBool,
@@ -318,6 +292,10 @@ mod tests {
             "schemaVersion: v1\nrequest:\n  body:\n    type: object\n",
         )
         .unwrap();
+    }
+
+    fn ignore_events() -> WatchEventHandler {
+        Arc::new(|_| {})
     }
 
     #[test]
@@ -386,14 +364,13 @@ mod tests {
             prepares: AtomicUsize::new(0),
         };
         let name = TemplateId::new("invoice").unwrap();
-        let reporter =
-            DiagnosticReporter::new(OutputFormat::Pretty, ColorChoice::Never, root.path());
+        let on_event = ignore_events();
 
-        reload_template(&loader, &registry, &compiler, &name, &reporter).await;
+        reload_template(&loader, &registry, &compiler, &name, &on_event).await;
         let first = registry.get(&name).unwrap();
 
         fs::write(root.path().join("invoice/main.typ"), "second").unwrap();
-        reload_template(&loader, &registry, &compiler, &name, &reporter).await;
+        reload_template(&loader, &registry, &compiler, &name, &on_event).await;
         let second = registry.get(&name).unwrap();
         assert!(!std::sync::Arc::ptr_eq(&first, &second));
 
@@ -402,13 +379,13 @@ mod tests {
             r#"{"schemaVersion":"v1","request":{"body":{}}}"#,
         )
         .unwrap();
-        reload_template(&loader, &registry, &compiler, &name, &reporter).await;
+        reload_template(&loader, &registry, &compiler, &name, &on_event).await;
         let after_conflict = registry.get(&name).unwrap();
         assert!(std::sync::Arc::ptr_eq(&second, &after_conflict));
         fs::remove_file(root.path().join("invoice/schema.json")).unwrap();
 
         fs::write(root.path().join("invoice/schema.yml"), "schemaVersion: [").unwrap();
-        reload_template(&loader, &registry, &compiler, &name, &reporter).await;
+        reload_template(&loader, &registry, &compiler, &name, &on_event).await;
         let after_schema_error = registry.get(&name).unwrap();
         assert!(std::sync::Arc::ptr_eq(&second, &after_schema_error));
         fs::write(
@@ -419,7 +396,7 @@ mod tests {
 
         compiler.fail.store(true, Ordering::SeqCst);
         fs::write(root.path().join("invoice/main.typ"), "#let broken =").unwrap();
-        reload_template(&loader, &registry, &compiler, &name, &reporter).await;
+        reload_template(&loader, &registry, &compiler, &name, &on_event).await;
         let after_failure = registry.get(&name).unwrap();
 
         assert!(std::sync::Arc::ptr_eq(&second, &after_failure));
@@ -436,12 +413,11 @@ mod tests {
             fail: AtomicBool::new(false),
             prepares: AtomicUsize::new(0),
         };
-        let reporter =
-            DiagnosticReporter::new(OutputFormat::Pretty, ColorChoice::Never, root.path());
+        let on_event = ignore_events();
 
-        reload_all(&loader, &registry, &compiler, &reporter).await;
+        reload_all(&loader, &registry, &compiler, &on_event).await;
         let first_count = compiler.prepares.load(Ordering::SeqCst);
-        reload_all(&loader, &registry, &compiler, &reporter).await;
+        reload_all(&loader, &registry, &compiler, &on_event).await;
 
         assert_eq!(first_count, 2);
         assert_eq!(compiler.prepares.load(Ordering::SeqCst), 4);
@@ -459,14 +435,13 @@ mod tests {
             fail: AtomicBool::new(false),
             prepares: AtomicUsize::new(0),
         };
-        let reporter =
-            DiagnosticReporter::new(OutputFormat::Pretty, ColorChoice::Never, root.path());
-        reload_all(&loader, &registry, &compiler, &reporter).await;
+        let on_event = ignore_events();
+        reload_all(&loader, &registry, &compiler, &on_event).await;
         let previous_names = registry.ids();
 
         fs::write(root.path().join("financial/main.typ"), "financial").unwrap();
         compiler.fail.store(true, Ordering::SeqCst);
-        reload_all(&loader, &registry, &compiler, &reporter).await;
+        reload_all(&loader, &registry, &compiler, &on_event).await;
 
         assert_eq!(registry.ids(), previous_names);
     }
@@ -482,10 +457,9 @@ mod tests {
             fail: AtomicBool::new(false),
             prepares: AtomicUsize::new(0),
         };
-        let reporter =
-            DiagnosticReporter::new(OutputFormat::Pretty, ColorChoice::Never, root.path());
+        let on_event = ignore_events();
 
-        reload_all(&loader, &registry, &compiler, &reporter).await;
+        reload_all(&loader, &registry, &compiler, &on_event).await;
         assert_eq!(
             registry
                 .ids()
@@ -496,7 +470,7 @@ mod tests {
         );
 
         fs::write(root.path().join("financial/main.typ"), "financial").unwrap();
-        reload_all(&loader, &registry, &compiler, &reporter).await;
+        reload_all(&loader, &registry, &compiler, &on_event).await;
         assert_eq!(
             registry
                 .ids()
@@ -507,7 +481,7 @@ mod tests {
         );
 
         fs::remove_file(root.path().join("financial/main.typ")).unwrap();
-        reload_all(&loader, &registry, &compiler, &reporter).await;
+        reload_all(&loader, &registry, &compiler, &on_event).await;
         assert_eq!(
             registry
                 .ids()

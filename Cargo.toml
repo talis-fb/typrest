@@ -1,10 +1,9 @@
 [workspace]
 members = [
+    "crates/typrest",
     "crates/typrest-core",
-    "crates/typrest-server",
-    "crates/typrest-cli",
 ]
-default-members = ["crates/typrest-cli"]
+default-members = ["crates/typrest"]
 resolver = "2"
 
 [workspace.package]

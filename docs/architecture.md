@@ -17,12 +17,16 @@ Typst Universe `preview` namespace.
 | Area | Responsibility |
 |---|---|
 | `typrest-core` | Domain types, schemas, validation, compiler ACL, prepared registry, rendering |
-| `typrest-server` | Filesystem and package loading, watch mode, Axum routes, startup, diagnostics |
-| `typrest-cli` | Project discovery/configuration and the `init`, `check`, and `serve` commands |
+| `typrest::loader` and `typrest::package` | Filesystem loading, Universe package cache/transport, and watch mode |
+| `typrest::http` | Axum listener, routes, handlers, HTTP state, and response mapping |
+| `typrest` application | CLI/configuration composition, diagnostics, and process lifecycle |
 | `webui` | Optional Svelte development UI and committed embedded production assets |
 
 `typrest-core` has no HTTP dependencies and does not access the physical filesystem. The
-filesystem loader belongs to `typrest-server` and implements the core `TemplateLoader` trait.
+application's loader and package modules implement core-owned loading and package repository
+ports. The CLI command layer prepares the registry and optional watcher before passing ready state to HTTP.
+Application responsibilities use private Rust modules; a Cargo package is reserved for the
+enforced core dependency boundary.
 
 ## Canonical Domain Terms
 
@@ -64,9 +68,10 @@ names begin with `_` are skipped during discovery. Once a template is selected, 
 files—including underscore directories and nested `main.typ` files—remain part of its source.
 `templates/main.typ` is invalid.
 
-At startup, the server lists and loads every template, prepares compiler state, performs a real
-compile and PDF export, and collects all failures before deciding whether to bind the socket. A
-schema supplies its deterministic sample payload; a schema-less template warms with `{}`.
+At startup, the application lists and loads every template, prepares compiler state, performs a
+real compile and PDF export, and collects all failures before passing ready state to HTTP and
+binding the socket. A schema supplies its deterministic sample payload; a schema-less template
+warms with `{}`.
 
 At request time, `RenderService` looks up the prepared bundle, validates and applies schema defaults
 when a schema exists, and compiles with request-specific `sys.inputs.data`. Normal requests never
@@ -80,8 +85,9 @@ See [Startup Template Compilation](startup-template-compilation.md) for the deta
 
 ## Compiler Anti-Corruption Layer
 
-Only `crates/typrest-core/src/compiler/` may import `typst::*` or `typst_pdf::*`. The public compiler
-surface is Typrest-owned:
+Only `crates/typrest-core/src/compiler/` may import `typst`, `typst-pdf`, and `typst-assets`. The
+application's `package::universal_package` module uses `typst-kit` and `typst-syntax` to access the
+official package cache and Universe downloader. The public compiler surface is Typrest-owned:
 
 ```rust
 #[async_trait::async_trait]
@@ -100,8 +106,10 @@ pub trait PdfCompiler: Send + Sync {
 ```
 
 The private compiler files own Typst worlds, sources, fonts, package import discovery, PDF export,
-and diagnostic mapping. All public diagnostics contain owned Typrest values. Typst integration
-crates are exactly pinned to the same version in the workspace manifest.
+and diagnostic mapping. All public diagnostics contain owned Typrest values. `typst`, `typst-pdf`,
+`typst-assets`, `typst-kit`, and `typst-syntax` are exactly pinned to the same version in the
+workspace manifest. The package repository exchanges only `PackageCoordinate` and `PackageSource`
+with the compiler.
 
 ## Error Boundaries
 

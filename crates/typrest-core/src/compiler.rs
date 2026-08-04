@@ -148,7 +148,7 @@ mod tests {
     }
 
     #[test]
-    fn typst_imports_are_confined_to_private_compiler_files() {
+    fn typst_owned_imports_are_confined_to_private_compiler_files() {
         let workspace = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .and_then(Path::parent)
@@ -161,6 +161,37 @@ mod tests {
         assert!(
             violations.is_empty(),
             "Typst ACL violations: {}",
+            violations
+                .iter()
+                .map(|path| path.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+    }
+
+    #[test]
+    fn application_crates_do_not_depend_directly_on_typst_owned_crates() {
+        let crates_dir = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let core_manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
+        let mut violations = Vec::new();
+
+        for entry in fs::read_dir(crates_dir).unwrap() {
+            let manifest = entry.unwrap().path().join("Cargo.toml");
+            if !manifest.is_file() || manifest == core_manifest {
+                continue;
+            }
+            let contents = fs::read_to_string(&manifest).unwrap();
+            if contents.lines().any(|line| {
+                let line = line.trim_start();
+                line.starts_with("typst ") || line.starts_with("typst-")
+            }) {
+                violations.push(manifest);
+            }
+        }
+
+        assert!(
+            violations.is_empty(),
+            "Typst dependency ACL violations: {}",
             violations
                 .iter()
                 .map(|path| path.display().to_string())
@@ -265,9 +296,17 @@ mod tests {
                 && !path.starts_with(allowed)
             {
                 let source = fs::read_to_string(&path).unwrap();
-                let typst_import = ["use typst", "::"].concat();
-                let typst_pdf_import = ["use typst_pdf", "::"].concat();
-                if source.contains(&typst_import) || source.contains(&typst_pdf_import) {
+                let typst_owned_prefixes = [
+                    ["typst", "::"].concat(),
+                    ["typst_assets", "::"].concat(),
+                    ["typst_kit", "::"].concat(),
+                    ["typst_pdf", "::"].concat(),
+                    ["typst_syntax", "::"].concat(),
+                ];
+                if typst_owned_prefixes
+                    .iter()
+                    .any(|prefix| source.contains(prefix))
+                {
                     violations.push(path);
                 }
             }

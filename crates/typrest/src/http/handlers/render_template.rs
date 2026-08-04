@@ -9,9 +9,9 @@ use serde_json::Value;
 use tracing::{info, warn};
 use typrest_core::{CompilationError, Document, RenderError, RenderRequest, TemplateId};
 
-use crate::errors::ApiError;
+use crate::http::errors::ApiError;
+use crate::http::state::AppState;
 use crate::output::{DiagnosticContext, DiagnosticStage};
-use crate::server::AppState;
 
 pub async fn render_template(
     State(state): State<AppState>,

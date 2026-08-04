@@ -13,9 +13,8 @@ The repository contains:
 
 - `crates/typrest-core`: domain types, schema validation, prepared registry, render service, and
   the Typst anti-corruption layer;
-- `crates/typrest-server`: filesystem loading, watch mode, Axum routes, diagnostics, and server
-  startup;
-- `crates/typrest-cli`: `init`, `check`, and `serve`, including project configuration discovery;
+- `crates/typrest`: the application package, with private modules for CLI commands, project
+  loading, package resolution, watch mode, HTTP, and diagnostics;
 - `webui`: optional Svelte development UI and committed production assets;
 - `examples/templates`: example Typst templates and payloads.
 
@@ -49,8 +48,9 @@ accepted decisions; record a superseding ADR under `docs/adr/`.
 - Load-time schema errors do not become render errors. Startup compilation failures occur before
   socket binding. Request-time validation and payload-dependent compilation failures are render
   errors.
-- Only files under `crates/typrest-core/src/compiler/` may import `typst::*` or `typst_pdf::*`.
-  Public compiler types must not expose Typst types.
+- Only files under `crates/typrest-core/src/compiler/` may import `typst`, `typst-pdf`, or
+  `typst-assets`. Public compiler types must not expose Typst types. The application package uses
+  `typst-kit` and `typst-syntax` only for Universe package resolution.
 - `typst`, `typst-pdf`, `typst-assets`, `typst-kit`, and `typst-syntax` stay exactly pinned to the
   same version and are upgraded together.
 - Filesystem template IDs are derived recursively from the first non-root folder containing
@@ -106,7 +106,7 @@ npm test
 npm run build
 ```
 
-`webui/dist` is committed and embedded in the server. Any frontend source change is incomplete
+`webui/dist` is committed and embedded in the application. Any frontend source change is incomplete
 until the production build is regenerated and reviewed. Do not hand-edit generated files.
 
 See [`docs/testing.md`](docs/testing.md) for targeted commands and test placement.

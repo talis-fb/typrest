@@ -1,9 +1,9 @@
 use axum::Router;
 use axum::routing::get;
 
-use crate::config::ServerConfig;
-use crate::handlers::{api, healthz, render_template, webui};
-use crate::server::AppState;
+use crate::http::config::ServerConfig;
+use crate::http::handlers::{api, healthz, render_template, webui};
+use crate::http::state::AppState;
 
 pub fn router(state: AppState, config: &ServerConfig) -> Router {
     let router = Router::new()

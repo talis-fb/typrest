@@ -73,9 +73,9 @@ Validation and missing-template errors use their separate error contracts.
 
 ## Typst Compatibility Boundary
 
-`typst`, `typst-pdf`, and `typst-assets` are exactly pinned to the same version in the workspace
-manifest and must be upgraded together. Version-sensitive code stays under
-`crates/typrest-core/src/compiler/`:
+`typst`, `typst-pdf`, `typst-assets`, `typst-kit`, and `typst-syntax` are exactly pinned to the
+same version in the workspace manifest and must be upgraded together. Compiler API-sensitive code
+stays under `crates/typrest-core/src/compiler/`:
 
 - `world.rs`: world implementation, compilation, export, spans, diagnostics, and inputs;
 - `fonts.rs`: font book and decoding APIs;
@@ -87,7 +87,7 @@ For every Typst upgrade:
 2. adapt only the private compiler ACL;
 3. run compiler and diagnostic fixtures and review snapshots;
 4. test syntax, import, warning, font, payload-dependent, and export behavior;
-5. run the test that rejects Typst imports outside `compiler/`;
+5. run the architecture test that rejects compiler imports outside `compiler/`;
 6. update [Typst Integration](typst-integration.md) if the boundary or upstream API changed.
 
 Diagnostic location mapping must degrade to a location-less diagnostic when a span cannot be

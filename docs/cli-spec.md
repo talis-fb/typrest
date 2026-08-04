@@ -1,6 +1,6 @@
 # CLI Specification
 
-> Status: Current. The implementation lives in `crates/typrest-cli`.
+> Status: Current. The implementation lives in `crates/typrest/src/commands/`.
 
 ## Purpose
 
