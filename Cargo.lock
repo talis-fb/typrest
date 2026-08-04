@@ -3668,6 +3668,7 @@ dependencies = [
  "serde-saphyr",
  "serde_json",
  "thiserror",
+ "time",
  "typst",
  "typst-assets",
  "typst-pdf",

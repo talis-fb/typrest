@@ -52,7 +52,8 @@ The private `TemplateWorld` implements Typst's `World` interface:
 - project and package virtual roots use separate prepared source maps;
 - `book()` and `font()` expose the prepared font registry;
 - `library()` exposes the request-specific standard library and inputs;
-- `today()` currently returns no date.
+- `today()` returns the current UTC date by default and applies an explicit Typst offset to the
+  current UTC instant before deriving the date.
 
 Typst performs no automatic filesystem access during compilation. Every project and package source,
 image, font, and imported file is already present in prepared state.

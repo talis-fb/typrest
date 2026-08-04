@@ -138,9 +138,20 @@ impl World for TemplateWorld<'_> {
         self.template.fonts.fonts.get(index).cloned()
     }
 
-    fn today(&self, _offset: Option<Duration>) -> Option<Datetime> {
-        None
+    fn today(&self, offset: Option<Duration>) -> Option<Datetime> {
+        today_at(time::OffsetDateTime::now_utc(), offset)
     }
+}
+
+fn today_at(now: time::OffsetDateTime, offset: Option<Duration>) -> Option<Datetime> {
+    let now = match offset {
+        Some(offset) => {
+            now.checked_add(time::SignedDuration::checked_seconds_f64(offset.seconds())?)?
+        }
+        None => now,
+    };
+    let date = now.date();
+    Datetime::from_ymd(date.year(), date.month() as u8, date.day())
 }
 
 impl TemplateWorld<'_> {
@@ -251,11 +262,13 @@ mod tests {
     use serde_json::json;
 
     use typst::diag::{SourceDiagnostic, Tracepoint};
+    use typst::foundations::{Datetime, Duration};
 
     use crate::{CompilationError, DiagnosticSeverity, TemplateSource};
 
     use super::{
         FontRegistry, TemplateWorld, compile_prepared, map_diagnostic, map_diagnostics, prepare,
+        today_at,
     };
 
     fn source(main: &str) -> TemplateSource {
@@ -263,6 +276,45 @@ mod tests {
             "main.typ".to_owned(),
             CoreBytes::from(main.to_owned()),
         )]))
+    }
+
+    #[test]
+    fn today_uses_the_utc_date_without_an_offset() {
+        let now = time::OffsetDateTime::from_unix_timestamp(1_735_691_400).unwrap();
+
+        assert_eq!(today_at(now, None), Datetime::from_ymd(2025, 1, 1),);
+    }
+
+    #[test]
+    fn today_applies_explicit_offsets_to_the_utc_instant() {
+        let late_utc = time::OffsetDateTime::from_unix_timestamp(1_735_774_200).unwrap();
+        let early_utc = time::OffsetDateTime::from_unix_timestamp(1_735_691_400).unwrap();
+        let positive_offset = Duration::from(time::Duration::hours(2));
+        let negative_offset = Duration::from(time::Duration::hours(-1));
+
+        assert_eq!(
+            today_at(late_utc, Some(positive_offset)),
+            Datetime::from_ymd(2025, 1, 2),
+        );
+        assert_eq!(
+            today_at(early_utc, Some(negative_offset)),
+            Datetime::from_ymd(2024, 12, 31),
+        );
+    }
+
+    #[test]
+    fn compiles_templates_that_use_today() {
+        let fonts = FontRegistry::new();
+        let template = prepare(
+            &source("#datetime.today().display()"),
+            BTreeMap::new(),
+            &fonts,
+        )
+        .unwrap();
+
+        let compiled = compile_prepared(&template, &json!({})).unwrap();
+
+        assert!(compiled.bytes.starts_with(b"%PDF"));
     }
 
     #[test]
