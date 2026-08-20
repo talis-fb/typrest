@@ -34,13 +34,17 @@ are request-specific.
 - `main.typ` as a Typst `Source`;
 - all virtual files as Typst bytes;
 - default fonts from `typst-assets`;
-- custom `.ttf` and `.otf` fonts found under template `assets/`;
+- custom lowercase `.ttf` and `.otf` fonts found anywhere in the selected template source;
 - stable virtual paths required for imports and diagnostics.
 - the complete direct and transitive `@preview` package source closure.
 
 `PdfCompiler::compile_prepared()` borrows that state, builds request inputs, calls
 `typst::compile`, maps warnings and errors, and exports with `typst-pdf`. It returns `Document` with
 PDF bytes and non-fatal warnings.
+
+Each template has its own prepared font book. Template-local fonts are available only to that
+template, while fonts under the project-level `_shared/` directory are included in every template
+source and therefore every template font book. Typrest does not discover operating-system fonts.
 
 ## World Responsibilities
 
