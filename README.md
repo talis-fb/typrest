@@ -195,4 +195,6 @@ cargo test --workspace
 Start with the [documentation index](docs/README.md), [architecture guide](docs/architecture.md),
 and [testing guide](docs/testing.md). AI coding agents should also read [`AGENTS.md`](AGENTS.md).
 
-See the repository [`LICENSE`](LICENSE) file for licensing terms.
+Copyright 2026 Talison Fabio.
+
+Licensed under the [Apache License, Version 2.0](LICENSE).
