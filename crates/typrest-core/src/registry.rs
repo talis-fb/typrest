@@ -4,8 +4,8 @@ use std::sync::{Arc, RwLock};
 use thiserror::Error;
 
 use crate::{
-    CompilationError, LoaderError, PdfCompiler, TemplateId, TemplateLoader, ValidationError,
-    WithWarnings, validate_with_defaults,
+    CompilationDiagnostic, CompilationError, LoaderError, PdfCompiler, TemplateId, TemplateLoader,
+    ValidationError, WithWarnings, validate_with_defaults,
 };
 
 use crate::compiler::PreparedTemplateBundle;
@@ -218,7 +218,7 @@ async fn prepare_template_bundle(
             source,
         })?;
 
-    let warnings = document
+    let warnings: Vec<CompilationDiagnostic> = document
         .warnings()
         .iter()
         .cloned()

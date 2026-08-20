@@ -1,4 +1,6 @@
-use std::io::IsTerminal;
+use std::cell::Cell;
+use std::fmt;
+use std::io::{IsTerminal, Write};
 use std::ops::Range;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -9,8 +11,12 @@ use codespan_reporting::files::SimpleFiles;
 use codespan_reporting::term;
 use codespan_reporting::term::termcolor::{ColorChoice as TermColorChoice, StandardStream};
 use codespan_reporting::term::{Styles, StylesWriter};
+use tracing::field::{Field, Visit};
 use tracing::{Level, error, event, info, warn};
 use tracing_subscriber::EnvFilter;
+use tracing_subscriber::field::{RecordFields, VisitOutput};
+use tracing_subscriber::fmt::MakeWriter;
+use tracing_subscriber::fmt::format::{FormatFields, Writer};
 use tracing_subscriber::util::SubscriberInitExt;
 use typrest_core::{
     CompilationDiagnostic, CompilationError, DiagnosticSeverity, TemplateId, TemplateRegistry,
@@ -68,25 +74,53 @@ impl LifecycleReporter {
         let context = self.context();
         match (self.format, event) {
             (OutputFormat::Pretty, TemplateRegistryEvent::CompilationStarted { template }) => {
-                eprintln!("Compiling template `{template}`...");
+                if context.is_prebuild() {
+                    eprintln!("Compiling template `{template}`");
+                } else {
+                    info!(
+                        event = "template.compilation.started",
+                        context = context.as_str(),
+                        template = %template,
+                        status = "started",
+                        "compiling template `{template}`"
+                    );
+                }
             }
             (
                 OutputFormat::Pretty,
                 TemplateRegistryEvent::CompilationCompleted { template, .. },
             ) => {
-                eprintln!("Compiled template `{template}`.");
+                if context.is_prebuild() {
+                    eprintln!(" Compiled template `{template}`");
+                } else {
+                    info!(
+                        event = "template.compilation.completed",
+                        context = context.as_str(),
+                        template = %template,
+                        status = "ok",
+                        "compiled template `{template}`"
+                    );
+                }
             }
             (OutputFormat::Pretty, TemplateRegistryEvent::CompilationFailed { template }) => {
-                eprintln!("Failed to compile template `{template}`.");
-            }
-            (OutputFormat::Json, TemplateRegistryEvent::CompilationStarted { template }) => {
-                info!(
-                    event = "template.compilation.started",
+                error!(
+                    event = "template.compilation.failed",
                     context = context.as_str(),
                     template = %template,
-                    status = "started",
-                    "template compilation started"
+                    status = "error",
+                    "failed to compile template `{template}`"
                 );
+            }
+            (OutputFormat::Json, TemplateRegistryEvent::CompilationStarted { template }) => {
+                with_feedback_destination(context, || {
+                    info!(
+                        event = "template.compilation.started",
+                        context = context.as_str(),
+                        template = %template,
+                        status = "started",
+                        "template compilation started"
+                    );
+                });
             }
             (
                 OutputFormat::Json,
@@ -95,14 +129,16 @@ impl LifecycleReporter {
                     warning_count,
                 },
             ) => {
-                info!(
-                    event = "template.compilation.completed",
-                    context = context.as_str(),
-                    template = %template,
-                    warning_count,
-                    status = "ok",
-                    "template compilation completed"
-                );
+                with_feedback_destination(context, || {
+                    info!(
+                        event = "template.compilation.completed",
+                        context = context.as_str(),
+                        template = %template,
+                        warning_count,
+                        status = "ok",
+                        "template compilation completed"
+                    );
+                });
             }
             (OutputFormat::Json, TemplateRegistryEvent::CompilationFailed { template }) => {
                 error!(
@@ -120,30 +156,42 @@ impl LifecycleReporter {
         let ids = registry.ids();
         let context = self.context();
         match self.format {
-            OutputFormat::Pretty if ids.is_empty() => eprintln!("Templates ready (0)."),
             OutputFormat::Pretty => {
-                eprintln!("Templates ready ({}):", ids.len());
-                for template in ids {
-                    eprintln!("  - {template}");
+                if context.is_prebuild() {
+                    if !ids.is_empty() {
+                        eprintln!();
+                    }
+                    eprintln!("Templates ready: {}", ids.len());
+                } else {
+                    info!(
+                        event = "templates.ready",
+                        context = context.as_str(),
+                        template_count = ids.len(),
+                        status = "ok",
+                        "templates ready: {}",
+                        ids.len()
+                    );
                 }
             }
             OutputFormat::Json => {
-                info!(
-                    event = "templates.ready",
-                    context = context.as_str(),
-                    template_count = ids.len(),
-                    status = "ok",
-                    "templates ready"
-                );
-                for template in ids {
+                with_feedback_destination(context, || {
                     info!(
-                        event = "template.ready",
+                        event = "templates.ready",
                         context = context.as_str(),
-                        template = %template,
+                        template_count = ids.len(),
                         status = "ok",
-                        "template ready"
+                        "templates ready"
                     );
-                }
+                    for template in ids {
+                        info!(
+                            event = "template.ready",
+                            context = context.as_str(),
+                            template = %template,
+                            status = "ok",
+                            "template ready"
+                        );
+                    }
+                });
             }
         }
     }
@@ -160,43 +208,79 @@ impl LifecycleReporter {
         let context = self.context();
         match (self.format, event) {
             (OutputFormat::Pretty, PackageEvent::CacheHit { package }) => {
-                eprintln!("Using cached package `{package}`.");
+                if context.is_prebuild() {
+                    eprintln!("Using cached package `{package}");
+                } else {
+                    info!(package = %package, "using cached package `{package}`");
+                }
             }
             (OutputFormat::Pretty, PackageEvent::InstallationStarted { package }) => {
-                eprintln!("Installing package `{package}`...");
+                if context.is_prebuild() {
+                    eprintln!("Installing package `{package}`");
+                } else {
+                    info!(
+                        event = "package.install.started",
+                        context = context.as_str(),
+                        package = %package,
+                        status = "started",
+                        "installing package `{package}`"
+                    );
+                }
             }
             (OutputFormat::Pretty, PackageEvent::InstallationCompleted { package }) => {
-                eprintln!("Installed package `{package}`.");
+                if context.is_prebuild() {
+                    eprintln!(" Installed package `{package}`");
+                } else {
+                    info!(
+                        event = "package.install.completed",
+                        context = context.as_str(),
+                        package = %package,
+                        status = "ok",
+                        "installed package `{package}`"
+                    );
+                }
             }
             (OutputFormat::Pretty, PackageEvent::InstallationFailed { package }) => {
-                eprintln!("Failed to install package `{package}`.");
+                error!(
+                    event = "package.install.failed",
+                    context = context.as_str(),
+                    package = %package,
+                    status = "error",
+                    "failed to install package `{package}`"
+                );
             }
             (OutputFormat::Json, PackageEvent::CacheHit { package }) => {
-                info!(
-                    event = "package.cache.hit",
-                    context = context.as_str(),
-                    package = %package,
-                    status = "ok",
-                    "package found in cache"
-                );
+                with_feedback_destination(context, || {
+                    info!(
+                        event = "package.cache.hit",
+                        context = context.as_str(),
+                        package = %package,
+                        status = "ok",
+                        "package found in cache"
+                    );
+                });
             }
             (OutputFormat::Json, PackageEvent::InstallationStarted { package }) => {
-                info!(
-                    event = "package.install.started",
-                    context = context.as_str(),
-                    package = %package,
-                    status = "started",
-                    "package installation started"
-                );
+                with_feedback_destination(context, || {
+                    info!(
+                        event = "package.install.started",
+                        context = context.as_str(),
+                        package = %package,
+                        status = "started",
+                        "package installation started"
+                    );
+                });
             }
             (OutputFormat::Json, PackageEvent::InstallationCompleted { package }) => {
-                info!(
-                    event = "package.install.completed",
-                    context = context.as_str(),
-                    package = %package,
-                    status = "ok",
-                    "package installation completed"
-                );
+                with_feedback_destination(context, || {
+                    info!(
+                        event = "package.install.completed",
+                        context = context.as_str(),
+                        package = %package,
+                        status = "ok",
+                        "package installation completed"
+                    );
+                });
             }
             (OutputFormat::Json, PackageEvent::InstallationFailed { package }) => {
                 error!(
@@ -300,7 +384,11 @@ impl DiagnosticReporter {
     pub(crate) fn report_watch_event(&self, event: WatchEvent) {
         match event {
             WatchEvent::BackendFailed(source) => {
-                error!(error = %source, "template watch event failed");
+                error!(
+                    event = "template.watch.backend.failed",
+                    error = %source,
+                    "template watch event failed: {source}"
+                );
             }
             WatchEvent::RegistryRebuilt {
                 template_count,
@@ -311,12 +399,14 @@ impl DiagnosticReporter {
                     DiagnosticStage::Compile,
                     &warnings,
                 );
-                info!(
-                    event = "template.registry.rebuilt",
-                    template_count,
-                    warning_count = warnings.len(),
-                    "template registry rebuilt"
-                );
+                if self.format == OutputFormat::Json {
+                    info!(
+                        event = "template.registry.rebuilt",
+                        template_count,
+                        warning_count = warnings.len(),
+                        "template registry rebuilt"
+                    );
+                }
             }
             WatchEvent::RegistryRebuildFailed(source) => {
                 self.report_build_error(DiagnosticContext::Watch, &source);
@@ -332,12 +422,14 @@ impl DiagnosticReporter {
                     DiagnosticStage::Compile,
                     &warnings,
                 );
-                info!(
-                    event = "template.reload.completed",
-                    template = %template,
-                    warning_count = warnings.len(),
-                    "template reloaded"
-                );
+                if self.format == OutputFormat::Json {
+                    info!(
+                        event = "template.reload.completed",
+                        template = %template,
+                        warning_count = warnings.len(),
+                        "template reloaded"
+                    );
+                }
             }
             WatchEvent::TemplateReloadFailed(source) => {
                 match &source {
@@ -402,13 +494,30 @@ impl DiagnosticReporter {
         message: &str,
     ) {
         match self.format {
-            OutputFormat::Pretty => {
+            OutputFormat::Pretty if context.is_prebuild() => {
                 if let Some(template) = template {
-                    eprintln!("error: template `{template}`: {message}");
+                    println!("error: template `{template}`: {message}");
                 } else {
-                    eprintln!("error: {message}");
+                    println!("error: {message}");
                 }
             }
+            OutputFormat::Pretty => match template {
+                Some(template) => error!(
+                    event = "compiler.diagnostic",
+                    context = context.as_str(),
+                    stage = stage.as_str(),
+                    template = %template,
+                    diagnostic_message = message,
+                    "template `{template}`: {message}"
+                ),
+                None => error!(
+                    event = "compiler.diagnostic",
+                    context = context.as_str(),
+                    stage = stage.as_str(),
+                    diagnostic_message = message,
+                    "{message}"
+                ),
+            },
             OutputFormat::Json => {
                 if let Some(template) = template {
                     error!(
@@ -450,23 +559,46 @@ impl DiagnosticReporter {
     ) {
         let report_id = self.next_report_id.fetch_add(1, Ordering::Relaxed);
         match self.format {
-            OutputFormat::Pretty => self.report_pretty(template, diagnostic),
+            OutputFormat::Pretty if context.is_prebuild() => {
+                let destination = match diagnostic.severity {
+                    DiagnosticSeverity::Error => OutputDestination::Stdout,
+                    DiagnosticSeverity::Warning => OutputDestination::Stderr,
+                };
+                self.report_pretty(template, diagnostic, destination);
+            }
+            OutputFormat::Pretty => {
+                self.report_runtime_pretty(context, stage, template, diagnostic)
+            }
+            OutputFormat::Json
+                if context.is_prebuild() && diagnostic.severity == DiagnosticSeverity::Warning =>
+            {
+                with_stderr_logs(|| {
+                    self.report_json(report_id, context, stage, template, diagnostic);
+                });
+            }
             OutputFormat::Json => self.report_json(report_id, context, stage, template, diagnostic),
         }
     }
 
-    fn report_pretty(&self, template: Option<&TemplateId>, diagnostic: &CompilationDiagnostic) {
+    fn report_pretty(
+        &self,
+        template: Option<&TemplateId>,
+        diagnostic: &CompilationDiagnostic,
+        destination: OutputDestination,
+    ) {
+        let stream = destination.standard_stream(self.term_color(destination));
         let Some(location) = diagnostic.location.as_ref() else {
             let level = match diagnostic.severity {
                 DiagnosticSeverity::Error => "error",
                 DiagnosticSeverity::Warning => "warning",
             };
-            eprintln!("{level}: {}", diagnostic.message);
+            let mut writer = stream.lock();
+            let _ = writeln!(writer, "{level}: {}", diagnostic.message);
             for hint in &diagnostic.hints {
-                eprintln!("  = help: {}", format_related(hint));
+                let _ = writeln!(writer, "  = help: {}", format_related(hint));
             }
             for trace in &diagnostic.trace {
-                eprintln!("  = note: {}", format_related(trace));
+                let _ = writeln!(writer, "  = note: {}", format_related(trace));
             }
             return;
         };
@@ -475,7 +607,9 @@ impl DiagnosticReporter {
                 DiagnosticSeverity::Error => "error",
                 DiagnosticSeverity::Warning => "warning",
             };
-            eprintln!(
+            let mut writer = stream.lock();
+            let _ = writeln!(
+                writer,
                 "{level}: {}\n  --> {}:{}:{}",
                 diagnostic.message,
                 self.display_path(template, &location.path).display(),
@@ -520,13 +654,62 @@ impl DiagnosticReporter {
         );
         rendered = rendered.with_notes(notes);
 
-        let writer = StandardStream::stderr(self.term_color());
         let config = term::Config::default();
         let styles = Styles::default();
-        let lock = writer.lock();
+        let lock = stream.lock();
         let mut styled = StylesWriter::new(lock, &styles);
         if let Err(error) = term::emit_to_write_style(&mut styled, &config, &files, &rendered) {
-            eprintln!("error: failed to render compiler diagnostic: {error}");
+            drop(styled);
+            let mut writer = stream.lock();
+            let _ = writeln!(
+                writer,
+                "error: failed to render compiler diagnostic: {error}"
+            );
+        }
+    }
+
+    fn report_runtime_pretty(
+        &self,
+        context: DiagnosticContext,
+        stage: DiagnosticStage,
+        template: Option<&TemplateId>,
+        diagnostic: &CompilationDiagnostic,
+    ) {
+        let message = format_diagnostic_message(template, diagnostic);
+        match diagnostic.severity {
+            DiagnosticSeverity::Error => error!(
+                event = "compiler.diagnostic",
+                context = context.as_str(),
+                stage = stage.as_str(),
+                diagnostic_message = %diagnostic.message,
+                "{message}"
+            ),
+            DiagnosticSeverity::Warning => warn!(
+                event = "compiler.diagnostic",
+                context = context.as_str(),
+                stage = stage.as_str(),
+                diagnostic_message = %diagnostic.message,
+                "{message}"
+            ),
+        }
+
+        for hint in &diagnostic.hints {
+            info!(
+                event = "compiler.hint",
+                context = context.as_str(),
+                stage = stage.as_str(),
+                "help: {}",
+                format_related(hint)
+            );
+        }
+        for trace in &diagnostic.trace {
+            info!(
+                event = "compiler.trace",
+                context = context.as_str(),
+                stage = stage.as_str(),
+                "note: {}",
+                format_related(trace)
+            );
         }
     }
 
@@ -579,12 +762,34 @@ impl DiagnosticReporter {
         }
     }
 
-    fn term_color(&self) -> TermColorChoice {
+    fn term_color(&self, destination: OutputDestination) -> TermColorChoice {
         match self.color {
             ColorChoice::Always => TermColorChoice::Always,
             ColorChoice::Never => TermColorChoice::Never,
-            ColorChoice::Auto if std::io::stderr().is_terminal() => TermColorChoice::Auto,
+            ColorChoice::Auto if destination.is_terminal() => TermColorChoice::Auto,
             ColorChoice::Auto => TermColorChoice::Never,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum OutputDestination {
+    Stdout,
+    Stderr,
+}
+
+impl OutputDestination {
+    fn standard_stream(self, color: TermColorChoice) -> StandardStream {
+        match self {
+            Self::Stdout => StandardStream::stdout(color),
+            Self::Stderr => StandardStream::stderr(color),
+        }
+    }
+
+    fn is_terminal(self) -> bool {
+        match self {
+            Self::Stdout => std::io::stdout().is_terminal(),
+            Self::Stderr => std::io::stderr().is_terminal(),
         }
     }
 }
@@ -626,6 +831,10 @@ impl DiagnosticContext {
             Self::Render => "render",
         }
     }
+
+    fn is_prebuild(self) -> bool {
+        matches!(self, Self::Check | Self::Startup)
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -653,21 +862,22 @@ pub fn init_tracing(format: OutputFormat, color: ColorChoice) {
     let ansi = match color {
         ColorChoice::Always => true,
         ColorChoice::Never => false,
-        ColorChoice::Auto => std::io::stderr().is_terminal(),
+        ColorChoice::Auto => std::io::stdout().is_terminal(),
     };
 
     let result = match format {
         OutputFormat::Pretty => tracing_subscriber::fmt()
             .with_env_filter(filter)
-            .with_writer(std::io::stderr)
+            .with_writer(RoutedMakeWriter)
             .with_target(false)
             .with_ansi(ansi)
+            .fmt_fields(MessageOnlyFields)
             .compact()
             .finish()
             .try_init(),
         OutputFormat::Json => tracing_subscriber::fmt()
             .with_env_filter(filter)
-            .with_writer(std::io::stderr)
+            .with_writer(RoutedMakeWriter)
             .with_ansi(false)
             .json()
             .flatten_event(true)
@@ -677,6 +887,105 @@ pub fn init_tracing(format: OutputFormat, color: ColorChoice) {
 
     if let Err(error) = result {
         eprintln!("warning: logging subscriber was not installed: {error}");
+    }
+}
+
+thread_local! {
+    static USE_STDERR_FOR_LOG: Cell<bool> = const { Cell::new(false) };
+}
+
+fn with_stderr_logs<T>(emit: impl FnOnce() -> T) -> T {
+    USE_STDERR_FOR_LOG.with(|destination| {
+        let previous = destination.replace(true);
+        let _guard = StderrLogGuard { previous };
+        emit()
+    })
+}
+
+struct StderrLogGuard {
+    previous: bool,
+}
+
+impl Drop for StderrLogGuard {
+    fn drop(&mut self) {
+        USE_STDERR_FOR_LOG.set(self.previous);
+    }
+}
+
+fn with_feedback_destination<T>(context: DiagnosticContext, emit: impl FnOnce() -> T) -> T {
+    if context.is_prebuild() {
+        with_stderr_logs(emit)
+    } else {
+        emit()
+    }
+}
+
+#[derive(Clone, Copy)]
+struct RoutedMakeWriter;
+
+enum RoutedWriter {
+    Stdout(std::io::Stdout),
+    Stderr(std::io::Stderr),
+}
+
+impl Write for RoutedWriter {
+    fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
+        match self {
+            Self::Stdout(writer) => writer.write(buffer),
+            Self::Stderr(writer) => writer.write(buffer),
+        }
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        match self {
+            Self::Stdout(writer) => writer.flush(),
+            Self::Stderr(writer) => writer.flush(),
+        }
+    }
+}
+
+impl<'writer> MakeWriter<'writer> for RoutedMakeWriter {
+    type Writer = RoutedWriter;
+
+    fn make_writer(&'writer self) -> Self::Writer {
+        if USE_STDERR_FOR_LOG.get() {
+            RoutedWriter::Stderr(std::io::stderr())
+        } else {
+            RoutedWriter::Stdout(std::io::stdout())
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct MessageOnlyFields;
+
+impl<'writer> FormatFields<'writer> for MessageOnlyFields {
+    fn format_fields<R: RecordFields>(&self, writer: Writer<'writer>, fields: R) -> fmt::Result {
+        let mut visitor = MessageVisitor {
+            writer,
+            result: Ok(()),
+        };
+        fields.record(&mut visitor);
+        visitor.finish()
+    }
+}
+
+struct MessageVisitor<'writer> {
+    writer: Writer<'writer>,
+    result: fmt::Result,
+}
+
+impl Visit for MessageVisitor<'_> {
+    fn record_debug(&mut self, field: &Field, value: &dyn fmt::Debug) {
+        if field.name() == "message" && self.result.is_ok() {
+            self.result = write!(self.writer, "{value:?}");
+        }
+    }
+}
+
+impl VisitOutput<fmt::Result> for MessageVisitor<'_> {
+    fn finish(self) -> fmt::Result {
+        self.result
     }
 }
 
@@ -890,6 +1199,22 @@ fn emit_json_related(
             stage = stage.as_str(),
             message = %related.message,
         );
+    }
+}
+
+fn format_diagnostic_message(
+    template: Option<&TemplateId>,
+    diagnostic: &CompilationDiagnostic,
+) -> String {
+    let subject = template
+        .map(|template| format!("template `{template}`: "))
+        .unwrap_or_default();
+    match diagnostic.location.as_ref() {
+        Some(location) => format!(
+            "{subject}{} at {}:{}:{}",
+            diagnostic.message, location.path, location.start.line, location.start.column
+        ),
+        None => format!("{subject}{}", diagnostic.message),
     }
 }
 

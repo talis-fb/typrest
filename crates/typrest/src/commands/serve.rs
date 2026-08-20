@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use tracing::info;
+use tracing::{error, info};
 use typrest_core::{PdfCompiler, RenderService, TemplateRegistry, TypstCompiler};
 
 use crate::http::config::ServerConfig;
@@ -8,8 +8,8 @@ use crate::http::state::AppState;
 use crate::loader::filesystem::FilesystemLoader;
 use crate::loader::watch::start_template_watcher;
 use crate::output::{
-    ColorChoice as ServerColorChoice, DiagnosticContext, DiagnosticReporter, DiagnosticStage,
-    LifecycleReporter, OutputFormat,
+    ColorChoice as ServerColorChoice, DiagnosticContext, DiagnosticReporter, LifecycleReporter,
+    OutputFormat,
 };
 use crate::package::universal_package::UniversePackageRepository;
 
@@ -66,19 +66,12 @@ pub(crate) async fn run_serve(
             Arc::new(move |event| watch_lifecycle.report_registry_event(event)),
             Arc::new(move |registry| ready_lifecycle.report_ready(registry)),
         ) {
-            Ok(watcher) => {
-                info!(
-                    templates_dir = %config.templates_root.display(),
-                    "template watch mode enabled"
-                );
-                Some(watcher)
-            }
+            Ok(watcher) => Some(watcher),
             Err(error) => {
-                reporter.report_simple_error(
-                    DiagnosticContext::Startup,
-                    DiagnosticStage::Load,
-                    None,
-                    &format!("template watcher failed: {error}"),
+                error!(
+                    event = "template.watch.start.failed",
+                    error = %error,
+                    "template watcher failed: {error}"
                 );
                 return false;
             }
@@ -86,6 +79,17 @@ pub(crate) async fn run_serve(
     } else {
         None
     };
+
+    if output_format == OutputFormat::Pretty {
+        eprintln!("\n======== Starting server =========");
+    }
+    if _watcher.is_some() {
+        info!(
+            event = "template.watch.enabled",
+            templates_dir = %config.templates_root.display(),
+            "template watch mode enabled"
+        );
+    }
 
     let render_service = RenderService::new(registry.clone(), compiler);
     let state = AppState::new(registry, render_service, reporter.clone());
@@ -96,11 +100,10 @@ pub(crate) async fn run_serve(
     match crate::http::serve(server_config, state).await {
         Ok(()) => true,
         Err(error) => {
-            reporter.report_simple_error(
-                DiagnosticContext::Startup,
-                DiagnosticStage::Load,
-                None,
-                &error.to_string(),
+            error!(
+                event = "server.failed",
+                error = %error,
+                "typrest server failed: {error}"
             );
             false
         }

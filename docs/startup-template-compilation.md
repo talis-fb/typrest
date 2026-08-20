@@ -26,10 +26,10 @@ request-specific.
     templates succeed.
 
 Registry build and reload APIs optionally report presentation-neutral template lifecycle events.
-The application output layer renders those events for `check`, startup, and watch mode; callers that
-do not need progress continue to use the no-observer APIs. Missing-package lifecycle events remain
-owned by the application package repository, keeping CLI presentation and filesystem knowledge out
-of `typrest-core`.
+The application output layer renders pre-build events as stderr feedback and watch events as stdout
+backend logs; callers that do not need progress continue to use the no-observer APIs.
+Missing-package lifecycle events remain owned by the application package repository, keeping CLI
+presentation and filesystem knowledge out of `typrest-core`.
 
 An empty templates directory produces an empty registry and may start successfully. Compiler
 warnings are reported with their full diagnostic context but do not fail startup.
@@ -90,8 +90,9 @@ after newer changes and overwrite them.
 - The candidate is built without holding the registry write lock.
 - Success swaps the affected entry or complete registry with one short write operation.
 - Failure is reported and the last known good entry or registry remains active.
-- Template compilation and actual missing-package installation progress use the same output policy
-  as initial startup. Successful full rebuilds emit a refreshed ready-template overview.
+- Template compilation and actual missing-package installation progress are timestamped stdout logs
+  because watch reloads occur while the backend is running. Successful full rebuilds emit a
+  refreshed ready count.
 
 The loader module emits typed watch outcomes. The application output module formats diagnostics
 and operational logs, so watch management has no dependency on HTTP or presentation code.
@@ -106,3 +107,4 @@ deterministic sample payloads, real Typst warmup, aggregate startup failures, pr
 successful replacement, and last-known-good behavior after a failed reload.
 
 See [Architecture](architecture.md), [Diagnostics](diagnostics.md), and [Testing](testing.md).
+The stream and formatting contract is defined in [Logging and process output](logging.md).

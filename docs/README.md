@@ -15,7 +15,8 @@ the smallest relevant document before changing code or a public contract.
 | Change the Typst integration | [Typst integration reference](typst-integration.md) | Implementation reference |
 | Change package resolution | [ADR-0011](adr/0011-resolve-preview-packages-during-preparation.md) | Accepted decision |
 | Change workspace boundaries | [ADR-0012](adr/0012-consolidate-application-packages.md) | Accepted decision |
-| Change diagnostics or logging | [Compiler diagnostics and logging](diagnostics.md) | Current contract |
+| Change compiler diagnostics | [Compiler diagnostics](diagnostics.md) | Current contract |
+| Change logs or process streams | [Logging and process output](logging.md) | Current contract |
 | Add or update tests | [Testing guide](testing.md) | Development guide |
 | Use or develop the Web UI | [Web UI development guide](webui-development.md) | Development guide |
 | Change Web UI behavior | [Web UI specification](webui-spec.md) | Current specification |

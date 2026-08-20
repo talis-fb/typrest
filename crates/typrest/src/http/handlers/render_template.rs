@@ -69,7 +69,7 @@ pub async fn render_template(
                 pdf_size,
                 warning_count = document.warnings().len(),
                 status = "ok",
-                "render completed"
+                "rendered template `{template_for_log}` in {elapsed_ms} ms"
             );
             Ok(pdf_response(document))
         }
@@ -92,7 +92,8 @@ pub async fn render_template(
                 latency_ms = elapsed_ms,
                 status = "error",
                 error_kind = render_error_kind(&error),
-                "render failed"
+                "failed to render template `{template_for_log}` after {elapsed_ms} ms: {}",
+                render_error_kind(&error)
             );
             Err(ApiError::from_render_error(error))
         }

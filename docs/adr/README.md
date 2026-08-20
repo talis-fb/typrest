@@ -27,6 +27,7 @@ accepted decision.
 | [ADR-0010](0010-derive-template-ids-from-folder-routes.md) | Derive template IDs and direct routes from folders | 2026-08 | Accepted |
 | [ADR-0011](0011-resolve-preview-packages-during-preparation.md) | Resolve preview packages during preparation | 2026-08 | Accepted |
 | [ADR-0012](0012-consolidate-application-packages.md) | Consolidate application packages around the core boundary | 2026-08 | Accepted |
+| [ADR-0013](0013-separate-prebuild-feedback-from-backend-logs.md) | Separate pre-build feedback from backend logs | 2026-08 | Accepted |
 
 ## Adding a Decision
 

@@ -9,8 +9,11 @@ pub struct WithWarnings<T> {
 }
 
 impl<T> WithWarnings<T> {
-    pub fn new(value: T, warnings: Vec<CompilationDiagnostic>) -> Self {
-        Self { value, warnings }
+    pub fn new(value: T, warnings: impl IntoIterator<Item = CompilationDiagnostic>) -> Self {
+        Self {
+            value,
+            warnings: warnings.into_iter().collect(),
+        }
     }
 
     pub fn value(&self) -> &T {

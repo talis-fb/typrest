@@ -20,7 +20,11 @@ pub(crate) async fn serve(config: ServerConfig, state: AppState) -> Result<(), S
     let address = SocketAddr::from((config.host, config.port));
     let listener = tokio::net::TcpListener::bind(address).await?;
 
-    info!(event = "server.listening", %address, "typrest server listening");
+    info!(
+        event = "server.listening",
+        %address,
+        "typrest server listening on {address}"
+    );
     axum::serve(listener, app_router).await?;
 
     Ok(())

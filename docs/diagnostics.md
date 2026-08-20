@@ -1,6 +1,7 @@
-# Compiler Diagnostics and Logging
+# Compiler diagnostics
 
-> Status: Current contract for CLI, logs, and HTTP compilation failures.
+> Status: Current contract for CLI and HTTP compilation failures. Stream routing is defined in
+> [Logging and process output](logging.md).
 
 ## Diagnostic Model
 
@@ -18,9 +19,9 @@ No public type, HTTP response, or log record exposes a `typst::*` type.
 
 ## Pretty Output
 
-Pretty output is the default and writes compiler failures and warnings to stderr. When source
-location data is available it includes an annotated excerpt, primary range, hints as help messages,
-and traces as notes.
+Pretty output is the default. Pre-build warnings are written to stderr and all errors are written to
+stdout. When source location data is available it includes an annotated excerpt, primary range,
+hints as help messages, and traces as notes. Runtime diagnostics are stdout backend logs.
 
 ```bash
 typrest --color always check
@@ -29,10 +30,9 @@ typrest serve --color never
 
 Warnings are visible but do not turn a successful compile into a failure.
 
-`check`, server startup, and watch compilation also write stable, non-animated lifecycle lines to
-stderr. The default output includes template compilation start/completion/failure, actual missing
-package installation start/completion/failure, and an ordered ready-template overview after a
-successful complete build. It omits package output when imports are already loaded or cached.
+`check` and server startup write stable, non-animated lifecycle feedback to stderr. Watch
+compilation happens after the backend starts and uses timestamped stdout logs. See the logging
+contract for exact output and stream ownership.
 
 ## JSON Lines Output
 
@@ -45,8 +45,8 @@ Compiler events use `compiler.diagnostic`, `compiler.hint`, and `compiler.trace`
 relates secondary events to their primary diagnostic. Events include context (`check`, `startup`,
 `watch`, or `render`), compiler stage, template, message, and virtual range.
 
-JSON logs omit source excerpts, payloads, PDF bytes, ANSI codes, and absolute filesystem paths.
-`RUST_LOG` controls operational verbosity.
+JSON diagnostics omit source excerpts, payloads, PDF bytes, ANSI codes, and physical compiler source
+paths. `RUST_LOG` controls tracing-backed verbosity.
 
 Lifecycle records use `template.compilation.started`, `template.compilation.completed`,
 `template.compilation.failed`, `package.install.started`, `package.install.completed`,

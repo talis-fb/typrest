@@ -123,9 +123,9 @@ Warnings are displayed and return exit status `0`. Configuration, load, schema, 
 export failure returns exit status `1`.
 
 While checking, the command writes concise lifecycle status to stderr: each template reports when
-compilation starts and completes, and a successful check ends with an ID-ordered `Templates ready`
-overview. Missing packages report installation start and completion. Packages already loaded or
-present in `.typrest/packages` do not produce default output.
+compilation starts and completes, and a successful check ends with `Templates ready: <count>`.
+Missing packages report installation start and completion. Packages already loaded or present in
+`.typrest/packages` do not produce default output. Warnings use stderr; all errors use stdout.
 
 ## `typrest serve`
 
@@ -143,9 +143,10 @@ typrest serve [--port <port>] [--hostname <ipv4>] [--watch]
 when project configuration is missing or invalid, the templates root is invalid, or any startup
 template fails.
 
-Startup uses the same package, template-compilation, warning, error, and ready-template feedback as
-`check`. Watch mode also reports compilation progress. A successful full watch rebuild prints a new
-ready-template overview, while a single-template reload prints only that template's lifecycle.
+Startup uses the same package, template-compilation, warning, error, and ready-count feedback as
+`check`, followed in pretty mode by a server-transition banner on stderr. Once running, every server
+log uses stdout. Watch compilation is timestamped backend activity; a successful full rebuild logs a
+new ready count, while a single-template reload logs only that template's lifecycle.
 
 Watch behavior is defined in [Startup Template Compilation](startup-template-compilation.md).
 
@@ -157,7 +158,8 @@ Watch behavior is defined in [Startup Template Compilation](startup-template-com
 | `--color auto\|always\|never` | `auto` | ANSI policy for pretty output |
 | `RUST_LOG` | runtime default | Operational log filtering |
 
-JSON output never contains ANSI codes. See [Compiler Diagnostics and Logging](diagnostics.md).
+JSON output never contains ANSI codes. See [Compiler diagnostics](diagnostics.md) and
+[Logging and process output](logging.md).
 The CLI does not currently expose `--verbose`; lifecycle output is centrally classified so routine
 cache hits and other verbose details can be enabled by that future option without changing package
 or compilation behavior.

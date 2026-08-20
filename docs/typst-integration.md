@@ -88,7 +88,7 @@ all errors in their original order. `world.rs` immediately maps Typst severities
 tracepoints to the owned diagnostic model.
 
 PDF export errors use `CompilationError::ExportFailed`; compilation errors use
-`CompilationError::Failed`. See [Compiler Diagnostics and Logging](diagnostics.md) for the public
+`CompilationError::Failed`. See [Compiler diagnostics](diagnostics.md) for the public
 contract.
 
 ## Upgrade Checklist

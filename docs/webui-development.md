@@ -190,5 +190,5 @@ live directory scan.
 - [Web UI Specification](webui-spec.md)
 - [`typrest.toml` Specification](typrest-toml-spec.md)
 - [Schema Specification](schema-v1.md)
-- [Compiler Diagnostics and Logging](diagnostics.md)
+- [Compiler diagnostics](diagnostics.md)
 - [Testing Guide](testing.md)

@@ -33,11 +33,11 @@ fn check_succeeds_without_starting_a_server() {
     assert!(output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("Compiling template `invoice`...")
-            && stderr.contains("Compiled template `invoice`.")
-            && stderr.contains("Templates ready (1):\n  - invoice"),
+        stderr
+            == "Compiling template `invoice`\n Compiled template `invoice`\n\nTemplates ready: 1\n",
         "stderr was: {stderr}"
     );
+    assert!(output.stdout.is_empty());
     assert!(!stderr.contains("server listening"));
 }
 
@@ -53,11 +53,15 @@ fn check_pretty_prints_annotated_typst_source() {
         .unwrap();
 
     assert!(!output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("error:"));
-    assert!(stderr.contains("templates/invoice/main.typ"));
-    assert!(stderr.contains("#let broken ="));
-    assert!(stderr.contains('^'));
+    assert!(stdout.contains("error:"));
+    assert!(stdout.contains("templates/invoice/main.typ"));
+    assert!(stdout.contains("#let broken ="));
+    assert!(stdout.contains('^'));
+    assert!(stdout.contains("ERROR template compilation failed"));
+    assert!(stderr.contains("Compiling template `invoice`"));
+    assert!(!stderr.contains("error:"));
 }
 
 #[test]
@@ -73,30 +77,37 @@ fn check_json_is_jsonl_and_omits_source_excerpts() {
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    let records = stderr
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let feedback_records = stderr
+        .lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+        .collect::<Vec<_>>();
+    let error_records = stdout
         .lines()
         .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
         .collect::<Vec<_>>();
 
-    assert!(!records.is_empty(), "stderr was: {stderr}");
+    assert!(!feedback_records.is_empty(), "stderr was: {stderr}");
     assert!(
-        records.iter().any(|record| {
+        error_records.iter().any(|record| {
             record["event"] == "compiler.diagnostic" && record["path"] == "main.typ"
         }),
-        "records were: {records:#?}"
+        "records were: {error_records:#?}"
     );
-    assert!(records.iter().any(|record| {
+    assert!(feedback_records.iter().any(|record| {
         record["event"] == "template.compilation.started"
             && record["context"] == "check"
             && record["template"] == "invoice"
     }));
-    assert!(records.iter().any(|record| {
+    assert!(error_records.iter().any(|record| {
         record["event"] == "template.compilation.failed"
             && record["context"] == "check"
             && record["template"] == "invoice"
     }));
     assert!(!stderr.contains("#let broken ="));
+    assert!(!stdout.contains("#let broken ="));
     assert!(!stderr.contains("\u{1b}["));
+    assert!(!stdout.contains("\u{1b}["));
 }
 
 #[test]
@@ -132,6 +143,7 @@ fn check_json_reports_ready_templates() {
             record["event"] == "template.ready" && record["template"] == "invoice"
         })
     );
+    assert!(output.stdout.is_empty());
 }
 
 #[test]
@@ -165,6 +177,64 @@ fn cached_packages_do_not_produce_default_package_output() {
 }
 
 #[test]
+fn check_writes_prebuild_warnings_to_stderr() {
+    let root = tempdir().unwrap();
+    write_project(root.path(), "<orphan>");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_typrest"))
+        .current_dir(root.path())
+        .args(["check", "--color", "never"])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("warning:"), "stderr was: {stderr}");
+    assert!(stderr.contains("not attached"), "stderr was: {stderr}");
+    assert!(output.stdout.is_empty());
+
+    let json_output = Command::new(env!("CARGO_BIN_EXE_typrest"))
+        .current_dir(root.path())
+        .args(["check", "--log-format", "json"])
+        .output()
+        .unwrap();
+    let records = String::from_utf8_lossy(&json_output.stderr)
+        .lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+        .collect::<Vec<_>>();
+    assert!(
+        records.iter().any(|record| {
+            record["event"] == "compiler.diagnostic" && record["level"] == "WARN"
+        })
+    );
+    assert!(json_output.stdout.is_empty());
+}
+
+#[test]
+fn check_reports_multiple_templates_in_order_with_a_count_only_summary() {
+    let root = tempdir().unwrap();
+    write_project(root.path(), "Hello");
+    for template in ["resume", "support/thanks-cart", "support/welcome-doc"] {
+        let template_dir = root.path().join("templates").join(template);
+        fs::create_dir_all(&template_dir).unwrap();
+        fs::write(template_dir.join("main.typ"), "Hello").unwrap();
+    }
+
+    let output = Command::new(env!("CARGO_BIN_EXE_typrest"))
+        .current_dir(root.path())
+        .args(["check", "--color", "never"])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&output.stderr),
+        "Compiling template `invoice`\n Compiled template `invoice`\nCompiling template `resume`\n Compiled template `resume`\nCompiling template `support/thanks-cart`\n Compiled template `support/thanks-cart`\nCompiling template `support/welcome-doc`\n Compiled template `support/welcome-doc`\n\nTemplates ready: 4\n"
+    );
+    assert!(output.stdout.is_empty());
+}
+
+#[test]
 fn check_reports_an_empty_ready_registry_without_compilation_lines() {
     let root = tempdir().unwrap();
     fs::create_dir_all(root.path().join("templates")).unwrap();
@@ -182,10 +252,7 @@ fn check_reports_an_empty_ready_registry_without_compilation_lines() {
 
     assert!(output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        stderr.contains("Templates ready (0)."),
-        "stderr was: {stderr}"
-    );
+    assert!(stderr == "Templates ready: 0\n", "stderr was: {stderr}");
     assert!(
         !stderr.contains("Compiling template"),
         "stderr was: {stderr}"

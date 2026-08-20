@@ -28,6 +28,7 @@ The repository contains:
 | Registry, startup, or watch mode | [`docs/startup-template-compilation.md`](docs/startup-template-compilation.md) |
 | Typst compiler or fonts | [`docs/typst-integration.md`](docs/typst-integration.md), [`docs/diagnostics.md`](docs/diagnostics.md) |
 | HTTP handlers or errors | [`docs/architecture.md`](docs/architecture.md#http-surface), [`docs/diagnostics.md`](docs/diagnostics.md) |
+| Logging or process streams | [`docs/logging.md`](docs/logging.md) |
 | Web UI | [`docs/webui-spec.md`](docs/webui-spec.md), [`docs/webui-development.md`](docs/webui-development.md) |
 | Tests | [`docs/testing.md`](docs/testing.md) |
 
