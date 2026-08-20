@@ -25,6 +25,12 @@ request-specific.
 10. Report every collected failure and pass prepared registry/render state to HTTP only when all
     templates succeed.
 
+Registry build and reload APIs optionally report presentation-neutral template lifecycle events.
+The application output layer renders those events for `check`, startup, and watch mode; callers that
+do not need progress continue to use the no-observer APIs. Missing-package lifecycle events remain
+owned by the application package repository, keeping CLI presentation and filesystem knowledge out
+of `typrest-core`.
+
 An empty templates directory produces an empty registry and may start successfully. Compiler
 warnings are reported with their full diagnostic context but do not fail startup.
 
@@ -84,6 +90,8 @@ after newer changes and overwrite them.
 - The candidate is built without holding the registry write lock.
 - Success swaps the affected entry or complete registry with one short write operation.
 - Failure is reported and the last known good entry or registry remains active.
+- Template compilation and actual missing-package installation progress use the same output policy
+  as initial startup. Successful full rebuilds emit a refreshed ready-template overview.
 
 The loader module emits typed watch outcomes. The application output module formats diagnostics
 and operational logs, so watch management has no dependency on HTTP or presentation code.

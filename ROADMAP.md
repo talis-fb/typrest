@@ -44,6 +44,7 @@ rendered over HTTP with payload validation and structured diagnostics.
 - [x] PDF render, health, and prepared-template metadata routes
 - [x] Structured validation and compilation error responses
 - [x] Pretty diagnostics, JSON Lines output, warnings, hints, traces, and safe locations
+- [x] Concise package-install, template-compilation, and ready-registry lifecycle feedback
 - [x] Unit, integration, server, CLI, and end-to-end test coverage
 
 ### Development Web UI

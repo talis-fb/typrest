@@ -20,6 +20,14 @@ impl TemplateRegistry {
         loader: &dyn TemplateLoader,
         compiler: &dyn PdfCompiler,
     ) -> Result<WithWarnings<TemplateRegistry>, WithWarnings<TemplateRegistryBuildFailure>> {
+        Self::build_with_observer(loader, compiler, &|_| {}).await
+    }
+
+    pub async fn build_with_observer(
+        loader: &dyn TemplateLoader,
+        compiler: &dyn PdfCompiler,
+        observer: &(dyn Fn(TemplateRegistryEvent) + Send + Sync),
+    ) -> Result<WithWarnings<TemplateRegistry>, WithWarnings<TemplateRegistryBuildFailure>> {
         let names = match loader.list().await {
             Ok(names) => names,
             Err(source) => {
@@ -38,13 +46,24 @@ impl TemplateRegistry {
         let mut warnings = Vec::new();
 
         for name in names {
+            observer(TemplateRegistryEvent::CompilationStarted {
+                template: name.clone(),
+            });
             match prepare_template_bundle(loader, compiler, &name).await {
                 Ok(bundle) => {
                     let (bundle_prepared_template, bundle_warnings) = bundle.into_parts();
-                    registry.replace(name, bundle_prepared_template);
+                    let warning_count = bundle_warnings.len();
+                    registry.replace(name.clone(), bundle_prepared_template);
                     warnings.extend(bundle_warnings);
+                    observer(TemplateRegistryEvent::CompilationCompleted {
+                        template: name,
+                        warning_count,
+                    });
                 }
-                Err(error) => failures.push(error),
+                Err(error) => {
+                    observer(TemplateRegistryEvent::CompilationFailed { template: name });
+                    failures.push(error);
+                }
             }
         }
 
@@ -67,11 +86,38 @@ impl TemplateRegistry {
         compiler: &dyn PdfCompiler,
         template_id: &TemplateId,
     ) -> Result<WithWarnings<()>, TemplateRegistryError> {
-        let bundle = prepare_template_bundle(loader, compiler, template_id).await?;
+        self.reload_with_observer(loader, compiler, template_id, &|_| {})
+            .await
+    }
+
+    pub async fn reload_with_observer(
+        &self,
+        loader: &dyn TemplateLoader,
+        compiler: &dyn PdfCompiler,
+        template_id: &TemplateId,
+        observer: &(dyn Fn(TemplateRegistryEvent) + Send + Sync),
+    ) -> Result<WithWarnings<()>, TemplateRegistryError> {
+        observer(TemplateRegistryEvent::CompilationStarted {
+            template: template_id.clone(),
+        });
+        let bundle = match prepare_template_bundle(loader, compiler, template_id).await {
+            Ok(bundle) => bundle,
+            Err(error) => {
+                observer(TemplateRegistryEvent::CompilationFailed {
+                    template: template_id.clone(),
+                });
+                return Err(error);
+            }
+        };
 
         let (prepared_template_bundle, warnings) = bundle.into_parts();
+        let warning_count = warnings.len();
 
         self.replace(template_id.clone(), prepared_template_bundle);
+        observer(TemplateRegistryEvent::CompilationCompleted {
+            template: template_id.clone(),
+            warning_count,
+        });
         Ok(WithWarnings::new((), warnings))
     }
 
@@ -116,6 +162,20 @@ impl TemplateRegistry {
     pub fn insert_for_test(&self, template_id: TemplateId, entry: PreparedTemplateBundle) {
         self.replace(template_id, entry);
     }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum TemplateRegistryEvent {
+    CompilationStarted {
+        template: TemplateId,
+    },
+    CompilationCompleted {
+        template: TemplateId,
+        warning_count: usize,
+    },
+    CompilationFailed {
+        template: TemplateId,
+    },
 }
 
 async fn prepare_template_bundle(
@@ -232,8 +292,8 @@ impl TemplateRegistryBuildFailure {
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
-    use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{Arc, Mutex};
 
     use async_trait::async_trait;
     use bytes::Bytes;
@@ -245,7 +305,7 @@ mod tests {
         TemplateId, TemplateLoader, TemplateSource,
     };
 
-    use super::TemplateRegistry;
+    use super::{TemplateRegistry, TemplateRegistryEvent};
 
     struct CountingLoader {
         bundle: TemplateBundle,
@@ -387,6 +447,77 @@ mod tests {
         assert_eq!(loader.loads.load(Ordering::SeqCst), 1);
         assert_eq!(compiler.prepares.load(Ordering::SeqCst), 1);
         assert_eq!(compiler.compiles.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn observed_build_reports_template_compilation_lifecycle() {
+        let loader = CountingLoader {
+            bundle: bundle(),
+            loads: AtomicUsize::new(0),
+        };
+        let compiler = CountingCompiler {
+            prepares: AtomicUsize::new(0),
+            compiles: AtomicUsize::new(0),
+        };
+        let events = Mutex::new(Vec::new());
+
+        let build = futures_executor::block_on(TemplateRegistry::build_with_observer(
+            &loader,
+            &compiler,
+            &|event| events.lock().unwrap().push(event),
+        ))
+        .unwrap();
+
+        assert_eq!(build.value().ids().len(), 1);
+        assert_eq!(
+            *events.lock().unwrap(),
+            [
+                TemplateRegistryEvent::CompilationStarted {
+                    template: TemplateId::new("invoice").unwrap(),
+                },
+                TemplateRegistryEvent::CompilationCompleted {
+                    template: TemplateId::new("invoice").unwrap(),
+                    warning_count: 0,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn observed_build_reports_each_failure_and_keeps_aggregating() {
+        let compiler = CountingCompiler {
+            prepares: AtomicUsize::new(0),
+            compiles: AtomicUsize::new(0),
+        };
+        let events = Mutex::new(Vec::new());
+
+        let error = match futures_executor::block_on(TemplateRegistry::build_with_observer(
+            &FailingLoader,
+            &compiler,
+            &|event| events.lock().unwrap().push(event),
+        )) {
+            Ok(_) => panic!("both templates should fail"),
+            Err(error) => error,
+        };
+
+        assert_eq!(error.value().failures().len(), 2);
+        assert_eq!(
+            *events.lock().unwrap(),
+            [
+                TemplateRegistryEvent::CompilationStarted {
+                    template: TemplateId::new("first").unwrap(),
+                },
+                TemplateRegistryEvent::CompilationFailed {
+                    template: TemplateId::new("first").unwrap(),
+                },
+                TemplateRegistryEvent::CompilationStarted {
+                    template: TemplateId::new("second").unwrap(),
+                },
+                TemplateRegistryEvent::CompilationFailed {
+                    template: TemplateId::new("second").unwrap(),
+                },
+            ]
+        );
     }
 
     #[test]

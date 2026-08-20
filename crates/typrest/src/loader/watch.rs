@@ -6,12 +6,20 @@ use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watche
 use tokio::sync::mpsc;
 use typrest_core::{
     CompilationDiagnostic, PdfCompiler, TemplateId, TemplateRegistry, TemplateRegistryBuildFailure,
-    TemplateRegistryError, WithWarnings,
+    TemplateRegistryError, TemplateRegistryEvent, WithWarnings,
 };
 
 use crate::loader::filesystem::FilesystemLoader;
 
 pub(crate) type WatchEventHandler = Arc<dyn Fn(WatchEvent) + Send + Sync>;
+pub(crate) type RegistryEventHandler = Arc<dyn Fn(TemplateRegistryEvent) + Send + Sync>;
+pub(crate) type RegistryReadyHandler = Arc<dyn Fn(&TemplateRegistry) + Send + Sync>;
+
+struct WatchHandlers {
+    event: WatchEventHandler,
+    registry_event: RegistryEventHandler,
+    registry_ready: RegistryReadyHandler,
+}
 
 #[derive(Debug)]
 pub(crate) enum WatchEvent {
@@ -44,6 +52,8 @@ pub(crate) fn start_template_watcher(
     registry: TemplateRegistry,
     compiler: Arc<dyn PdfCompiler>,
     on_event: WatchEventHandler,
+    on_registry_event: RegistryEventHandler,
+    on_registry_ready: RegistryReadyHandler,
 ) -> notify::Result<TemplateWatcher> {
     let root = loader.root().to_owned();
     let watch_root = root.clone();
@@ -56,6 +66,11 @@ pub(crate) fn start_template_watcher(
     )?;
 
     watcher.watch(&watch_root, RecursiveMode::Recursive)?;
+    let handlers = WatchHandlers {
+        event: on_event,
+        registry_event: on_registry_event,
+        registry_ready: on_registry_ready,
+    };
     let worker = tokio::spawn(async move {
         while let Some(result) = receiver.recv().await {
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -69,7 +84,7 @@ pub(crate) fn start_template_watcher(
                 loader.as_ref(),
                 &registry,
                 compiler.as_ref(),
-                &on_event,
+                &handlers,
             )
             .await;
         }
@@ -87,7 +102,7 @@ async fn handle_events(
     loader: &FilesystemLoader,
     registry: &TemplateRegistry,
     compiler: &dyn PdfCompiler,
-    on_event: &WatchEventHandler,
+    handlers: &WatchHandlers,
 ) {
     let mut rebuild_all = false;
     let mut templates = Vec::new();
@@ -97,7 +112,7 @@ async fn handle_events(
             Ok(event) if is_relevant_event(&event) => event,
             Ok(_) => continue,
             Err(error) => {
-                on_event(WatchEvent::BackendFailed(error));
+                (handlers.event)(WatchEvent::BackendFailed(error));
                 continue;
             }
         };
@@ -125,12 +140,28 @@ async fn handle_events(
     }
 
     if rebuild_all {
-        reload_all(loader, registry, compiler, on_event).await;
+        reload_all_observed(
+            loader,
+            registry,
+            compiler,
+            &handlers.event,
+            handlers.registry_event.as_ref(),
+            handlers.registry_ready.as_ref(),
+        )
+        .await;
         return;
     }
 
     for template in templates {
-        reload_template(loader, registry, compiler, &template, on_event).await;
+        reload_template_observed(
+            loader,
+            registry,
+            compiler,
+            &template,
+            &handlers.event,
+            handlers.registry_event.as_ref(),
+        )
+        .await;
     }
 }
 
@@ -152,13 +183,25 @@ fn is_topology_event(event: &Event) -> bool {
     })
 }
 
+#[cfg(test)]
 async fn reload_all(
     loader: &FilesystemLoader,
     registry: &TemplateRegistry,
     compiler: &dyn PdfCompiler,
     on_event: &WatchEventHandler,
 ) {
-    match TemplateRegistry::build(loader, compiler).await {
+    reload_all_observed(loader, registry, compiler, on_event, &|_| {}, &|_| {}).await;
+}
+
+async fn reload_all_observed(
+    loader: &FilesystemLoader,
+    registry: &TemplateRegistry,
+    compiler: &dyn PdfCompiler,
+    on_event: &WatchEventHandler,
+    on_registry_event: &(dyn Fn(TemplateRegistryEvent) + Send + Sync),
+    on_registry_ready: &(dyn Fn(&TemplateRegistry) + Send + Sync),
+) {
+    match TemplateRegistry::build_with_observer(loader, compiler, on_registry_event).await {
         Ok(build) => {
             let template_count = build.value().ids().len();
             let warnings = build.warnings().to_vec();
@@ -167,6 +210,7 @@ async fn reload_all(
                 template_count,
                 warnings,
             });
+            on_registry_ready(registry);
         }
         Err(build_error) => {
             on_event(WatchEvent::RegistryRebuildFailed(build_error));
@@ -174,6 +218,7 @@ async fn reload_all(
     }
 }
 
+#[cfg(test)]
 async fn reload_template(
     loader: &FilesystemLoader,
     registry: &TemplateRegistry,
@@ -181,7 +226,21 @@ async fn reload_template(
     template: &TemplateId,
     on_event: &WatchEventHandler,
 ) {
-    match registry.reload(loader, compiler, template).await {
+    reload_template_observed(loader, registry, compiler, template, on_event, &|_| {}).await;
+}
+
+async fn reload_template_observed(
+    loader: &FilesystemLoader,
+    registry: &TemplateRegistry,
+    compiler: &dyn PdfCompiler,
+    template: &TemplateId,
+    on_event: &WatchEventHandler,
+    on_registry_event: &(dyn Fn(TemplateRegistryEvent) + Send + Sync),
+) {
+    match registry
+        .reload_with_observer(loader, compiler, template, on_registry_event)
+        .await
+    {
         Ok(reload) => {
             on_event(WatchEvent::TemplateReloaded {
                 template: template.clone(),
@@ -241,8 +300,8 @@ fn is_private_discovery_path(root: &Path, path: &Path) -> bool {
 mod tests {
     use std::fs;
     use std::path::Path;
-    use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::sync::{Arc, Mutex};
 
     use async_trait::async_trait;
     use bytes::Bytes;
@@ -256,6 +315,7 @@ mod tests {
 
     use super::{
         ChangedTemplate, WatchEventHandler, changed_template, reload_all, reload_template,
+        reload_template_observed,
     };
 
     struct MockCompiler {
@@ -400,6 +460,39 @@ mod tests {
         let after_failure = registry.get(&name).unwrap();
 
         assert!(std::sync::Arc::ptr_eq(&second, &after_failure));
+    }
+
+    #[tokio::test]
+    async fn observed_reload_reports_compilation_progress() {
+        let root = tempdir().unwrap();
+        write_template(root.path(), "invoice", "invoice");
+        let loader = FilesystemLoader::new(root.path());
+        let registry = TemplateRegistry::default();
+        let compiler = MockCompiler {
+            fail: AtomicBool::new(false),
+            prepares: AtomicUsize::new(0),
+        };
+        let name = TemplateId::new("invoice").unwrap();
+        let on_event = ignore_events();
+        let events = Mutex::new(Vec::new());
+
+        reload_template_observed(&loader, &registry, &compiler, &name, &on_event, &|event| {
+            events.lock().unwrap().push(event)
+        })
+        .await;
+
+        assert_eq!(
+            *events.lock().unwrap(),
+            [
+                typrest_core::TemplateRegistryEvent::CompilationStarted {
+                    template: name.clone(),
+                },
+                typrest_core::TemplateRegistryEvent::CompilationCompleted {
+                    template: name,
+                    warning_count: 0,
+                },
+            ]
+        );
     }
 
     #[tokio::test]

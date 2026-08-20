@@ -21,7 +21,9 @@ pub use diagnostic::{
 pub use errors::{CompilationError, RenderError, ValidationError};
 pub use loader::{LoaderError, TemplateLoader};
 pub use package::{PackageCoordinate, PackageRepository, PackageResolutionError, PackageSource};
-pub use registry::{TemplateRegistry, TemplateRegistryBuildFailure, TemplateRegistryError};
+pub use registry::{
+    TemplateRegistry, TemplateRegistryBuildFailure, TemplateRegistryError, TemplateRegistryEvent,
+};
 pub use render::RenderService;
 pub use render_request::RenderRequest;
 pub use schema::{

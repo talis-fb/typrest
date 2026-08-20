@@ -9,7 +9,7 @@ use crate::loader::filesystem::FilesystemLoader;
 use crate::loader::watch::start_template_watcher;
 use crate::output::{
     ColorChoice as ServerColorChoice, DiagnosticContext, DiagnosticReporter, DiagnosticStage,
-    OutputFormat,
+    LifecycleReporter, OutputFormat,
 };
 use crate::package::universal_package::UniversePackageRepository;
 
@@ -26,12 +26,23 @@ pub(crate) async fn run_serve(
         return false;
     };
     let reporter = DiagnosticReporter::new(output_format, color, &config.templates_root);
+    let lifecycle = LifecycleReporter::new(output_format, DiagnosticContext::Startup);
     let loader = Arc::new(FilesystemLoader::new(&config.templates_root));
-    let packages = Arc::new(UniversePackageRepository::new(&config.package_cache_dir));
+    let packages = Arc::new(
+        UniversePackageRepository::new(&config.package_cache_dir)
+            .with_event_handler(lifecycle.package_event_handler()),
+    );
     let compiler: Arc<dyn PdfCompiler> =
         Arc::new(TypstCompiler::new().with_package_repository(packages));
 
-    let registry_build = match TemplateRegistry::build(loader.as_ref(), compiler.as_ref()).await {
+    let registry_observer = |event| lifecycle.report_registry_event(event);
+    let registry_build = match TemplateRegistry::build_with_observer(
+        loader.as_ref(),
+        compiler.as_ref(),
+        &registry_observer,
+    )
+    .await
+    {
         Ok(build) => build,
         Err(error) => {
             reporter.report_build_error(DiagnosticContext::Startup, &error);
@@ -39,22 +50,21 @@ pub(crate) async fn run_serve(
         }
     };
     reporter.report_build(DiagnosticContext::Startup, &registry_build);
-    let (registry, warnings) = registry_build.into_parts();
-    info!(
-        event = "templates.startup.completed",
-        template_count = registry.ids().len(),
-        warning_count = warnings.len(),
-        status = "ok",
-        "templates compiled successfully"
-    );
+    let (registry, _) = registry_build.into_parts();
+    lifecycle.report_ready(&registry);
+    lifecycle.set_context(DiagnosticContext::Watch);
 
     let _watcher = if watch {
         let watch_reporter = reporter.clone();
+        let watch_lifecycle = lifecycle.clone();
+        let ready_lifecycle = lifecycle.clone();
         match start_template_watcher(
             loader,
             registry.clone(),
             compiler.clone(),
             Arc::new(move |event| watch_reporter.report_watch_event(event)),
+            Arc::new(move |event| watch_lifecycle.report_registry_event(event)),
+            Arc::new(move |registry| ready_lifecycle.report_ready(registry)),
         ) {
             Ok(watcher) => {
                 info!(

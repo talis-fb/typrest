@@ -6,20 +6,38 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use bytes::Bytes;
 use typrest_core::{PackageCoordinate, PackageRepository, PackageResolutionError, PackageSource};
-use typst_kit::downloader::SystemDownloader;
+use typst_kit::downloader::{Downloader, SystemDownloader};
 use typst_kit::packages::{FsPackages, SystemPackages, UniversePackages};
 use typst_syntax::package::PackageSpec;
+
+pub(crate) type PackageEventHandler = Arc<dyn Fn(PackageEvent) + Send + Sync>;
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum PackageEvent {
+    CacheHit { package: PackageCoordinate },
+    InstallationStarted { package: PackageCoordinate },
+    InstallationCompleted { package: PackageCoordinate },
+    InstallationFailed { package: PackageCoordinate },
+}
 
 #[derive(Clone)]
 pub struct UniversePackageRepository {
     packages: Arc<SystemPackages>,
     loaded: Arc<Mutex<BTreeMap<PackageCoordinate, Arc<PackageSource>>>>,
+    on_event: PackageEventHandler,
 }
 
 impl UniversePackageRepository {
     pub fn new(cache_dir: impl Into<std::path::PathBuf>) -> Self {
-        let cache = FsPackages::new(cache_dir);
         let downloader = SystemDownloader::new(format!("typrest/{}", env!("CARGO_PKG_VERSION")));
+        Self::with_downloader(cache_dir, downloader)
+    }
+
+    fn with_downloader(
+        cache_dir: impl Into<std::path::PathBuf>,
+        downloader: impl Downloader,
+    ) -> Self {
+        let cache = FsPackages::new(cache_dir);
         Self {
             packages: Arc::new(SystemPackages::from_parts(
                 None,
@@ -27,7 +45,13 @@ impl UniversePackageRepository {
                 UniversePackages::new(downloader),
             )),
             loaded: Arc::new(Mutex::new(BTreeMap::new())),
+            on_event: Arc::new(|_| {}),
         }
+    }
+
+    pub(crate) fn with_event_handler(mut self, on_event: PackageEventHandler) -> Self {
+        self.on_event = on_event;
+        self
     }
 
     fn loaded(
@@ -75,6 +99,19 @@ impl PackageRepository for UniversePackageRepository {
                 message: error.to_string(),
             }
         })?;
+        let installing = self
+            .packages
+            .cache()
+            .is_none_or(|cache| cache.obtain(&spec).is_none());
+        if installing {
+            (self.on_event)(PackageEvent::InstallationStarted {
+                package: package.clone(),
+            });
+        } else {
+            (self.on_event)(PackageEvent::CacheHit {
+                package: package.clone(),
+            });
+        }
         let packages = self.packages.clone();
         let source = tokio::task::spawn_blocking(move || {
             let root =
@@ -90,9 +127,23 @@ impl PackageRepository for UniversePackageRepository {
         .map_err(|error| PackageResolutionError::Cache {
             package: package.clone(),
             message: format!("package resolver task failed: {error}"),
-        })??;
+        })
+        .and_then(|result| result);
 
-        self.remember(package.clone(), Arc::new(source))
+        let resolved = source.and_then(|source| self.remember(package.clone(), Arc::new(source)));
+        if installing {
+            let event = if resolved.is_ok() {
+                PackageEvent::InstallationCompleted {
+                    package: package.clone(),
+                }
+            } else {
+                PackageEvent::InstallationFailed {
+                    package: package.clone(),
+                }
+            };
+            (self.on_event)(event);
+        }
+        resolved
     }
 }
 
@@ -184,11 +235,24 @@ fn cache_error(
 
 #[cfg(test)]
 mod tests {
+    use std::any::Any;
     use std::fs;
+    use std::io::{self, Read};
+    use std::sync::{Arc, Mutex};
 
     use typrest_core::{PackageCoordinate, PackageRepository, PackageResolutionError};
+    use typst_kit::downloader::Downloader;
 
-    use super::UniversePackageRepository;
+    use super::{PackageEvent, UniversePackageRepository};
+
+    #[derive(Debug)]
+    struct FailingDownloader;
+
+    impl Downloader for FailingDownloader {
+        fn stream(&self, _: &dyn Any, _: &str) -> io::Result<(Option<usize>, Box<dyn Read>)> {
+            Err(io::Error::other("offline test"))
+        }
+    }
 
     #[tokio::test]
     async fn loads_preview_package_from_project_cache() {
@@ -208,6 +272,61 @@ mod tests {
 
         assert!(source.files().contains_key("typst.toml"));
         assert!(source.files().contains_key("src/lib.typ"));
+    }
+
+    #[tokio::test]
+    async fn reports_cache_hits_without_installation_events() {
+        let root = tempfile::tempdir().unwrap();
+        let package_dir = root.path().join("preview").join("fixture").join("1.0.0");
+        fs::create_dir_all(&package_dir).unwrap();
+        fs::write(
+            package_dir.join("typst.toml"),
+            "[package]\nname = \"fixture\"\nversion = \"1.0.0\"\nentrypoint = \"lib.typ\"\n",
+        )
+        .unwrap();
+        fs::write(package_dir.join("lib.typ"), "#let value = 42").unwrap();
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let captured = events.clone();
+        let repository = UniversePackageRepository::new(root.path())
+            .with_event_handler(Arc::new(move |event| captured.lock().unwrap().push(event)));
+        let coordinate = PackageCoordinate::new("preview", "fixture", "1.0.0");
+
+        repository.resolve(&coordinate).await.unwrap();
+        repository.resolve(&coordinate).await.unwrap();
+
+        assert_eq!(
+            *events.lock().unwrap(),
+            [PackageEvent::CacheHit {
+                package: coordinate,
+            }]
+        );
+    }
+
+    #[tokio::test]
+    async fn reports_failed_installation_for_a_missing_package() {
+        let root = tempfile::tempdir().unwrap();
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let captured = events.clone();
+        let repository = UniversePackageRepository::with_downloader(root.path(), FailingDownloader)
+            .with_event_handler(Arc::new(move |event| {
+                captured.lock().unwrap().push(event);
+            }));
+        let coordinate = PackageCoordinate::new("preview", "missing", "1.0.0");
+
+        let error = repository.resolve(&coordinate).await.unwrap_err();
+
+        assert!(matches!(error, PackageResolutionError::Download { .. }));
+        assert_eq!(
+            *events.lock().unwrap(),
+            [
+                PackageEvent::InstallationStarted {
+                    package: coordinate.clone(),
+                },
+                PackageEvent::InstallationFailed {
+                    package: coordinate,
+                },
+            ]
+        );
     }
 
     #[tokio::test]

@@ -2,7 +2,7 @@ use std::io::IsTerminal;
 use std::ops::Range;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use codespan_reporting::files::SimpleFiles;
@@ -14,10 +14,11 @@ use tracing_subscriber::EnvFilter;
 use tracing_subscriber::util::SubscriberInitExt;
 use typrest_core::{
     CompilationDiagnostic, CompilationError, DiagnosticSeverity, TemplateId, TemplateRegistry,
-    TemplateRegistryBuildFailure, TemplateRegistryError, WithWarnings,
+    TemplateRegistryBuildFailure, TemplateRegistryError, TemplateRegistryEvent, WithWarnings,
 };
 
 use crate::loader::watch::WatchEvent;
+use crate::package::universal_package::{PackageEvent, PackageEventHandler};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum OutputFormat {
@@ -30,6 +31,188 @@ pub enum ColorChoice {
     Auto,
     Always,
     Never,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+enum OutputDetail {
+    Default,
+    Verbose,
+}
+
+#[derive(Clone)]
+pub struct LifecycleReporter {
+    format: OutputFormat,
+    context: Arc<AtomicU8>,
+    max_detail: OutputDetail,
+}
+
+impl LifecycleReporter {
+    pub fn new(format: OutputFormat, context: DiagnosticContext) -> Self {
+        Self {
+            format,
+            context: Arc::new(AtomicU8::new(context as u8)),
+            max_detail: OutputDetail::Default,
+        }
+    }
+
+    pub fn set_context(&self, context: DiagnosticContext) {
+        self.context.store(context as u8, Ordering::Relaxed);
+    }
+
+    pub fn package_event_handler(&self) -> PackageEventHandler {
+        let reporter = self.clone();
+        Arc::new(move |event| reporter.report_package_event(event))
+    }
+
+    pub fn report_registry_event(&self, event: TemplateRegistryEvent) {
+        let context = self.context();
+        match (self.format, event) {
+            (OutputFormat::Pretty, TemplateRegistryEvent::CompilationStarted { template }) => {
+                eprintln!("Compiling template `{template}`...");
+            }
+            (
+                OutputFormat::Pretty,
+                TemplateRegistryEvent::CompilationCompleted { template, .. },
+            ) => {
+                eprintln!("Compiled template `{template}`.");
+            }
+            (OutputFormat::Pretty, TemplateRegistryEvent::CompilationFailed { template }) => {
+                eprintln!("Failed to compile template `{template}`.");
+            }
+            (OutputFormat::Json, TemplateRegistryEvent::CompilationStarted { template }) => {
+                info!(
+                    event = "template.compilation.started",
+                    context = context.as_str(),
+                    template = %template,
+                    status = "started",
+                    "template compilation started"
+                );
+            }
+            (
+                OutputFormat::Json,
+                TemplateRegistryEvent::CompilationCompleted {
+                    template,
+                    warning_count,
+                },
+            ) => {
+                info!(
+                    event = "template.compilation.completed",
+                    context = context.as_str(),
+                    template = %template,
+                    warning_count,
+                    status = "ok",
+                    "template compilation completed"
+                );
+            }
+            (OutputFormat::Json, TemplateRegistryEvent::CompilationFailed { template }) => {
+                error!(
+                    event = "template.compilation.failed",
+                    context = context.as_str(),
+                    template = %template,
+                    status = "error",
+                    "template compilation failed"
+                );
+            }
+        }
+    }
+
+    pub fn report_ready(&self, registry: &TemplateRegistry) {
+        let ids = registry.ids();
+        let context = self.context();
+        match self.format {
+            OutputFormat::Pretty if ids.is_empty() => eprintln!("Templates ready (0)."),
+            OutputFormat::Pretty => {
+                eprintln!("Templates ready ({}):", ids.len());
+                for template in ids {
+                    eprintln!("  - {template}");
+                }
+            }
+            OutputFormat::Json => {
+                info!(
+                    event = "templates.ready",
+                    context = context.as_str(),
+                    template_count = ids.len(),
+                    status = "ok",
+                    "templates ready"
+                );
+                for template in ids {
+                    info!(
+                        event = "template.ready",
+                        context = context.as_str(),
+                        template = %template,
+                        status = "ok",
+                        "template ready"
+                    );
+                }
+            }
+        }
+    }
+
+    fn report_package_event(&self, event: PackageEvent) {
+        let detail = match event {
+            PackageEvent::CacheHit { .. } => OutputDetail::Verbose,
+            _ => OutputDetail::Default,
+        };
+        if detail > self.max_detail {
+            return;
+        }
+
+        let context = self.context();
+        match (self.format, event) {
+            (OutputFormat::Pretty, PackageEvent::CacheHit { package }) => {
+                eprintln!("Using cached package `{package}`.");
+            }
+            (OutputFormat::Pretty, PackageEvent::InstallationStarted { package }) => {
+                eprintln!("Installing package `{package}`...");
+            }
+            (OutputFormat::Pretty, PackageEvent::InstallationCompleted { package }) => {
+                eprintln!("Installed package `{package}`.");
+            }
+            (OutputFormat::Pretty, PackageEvent::InstallationFailed { package }) => {
+                eprintln!("Failed to install package `{package}`.");
+            }
+            (OutputFormat::Json, PackageEvent::CacheHit { package }) => {
+                info!(
+                    event = "package.cache.hit",
+                    context = context.as_str(),
+                    package = %package,
+                    status = "ok",
+                    "package found in cache"
+                );
+            }
+            (OutputFormat::Json, PackageEvent::InstallationStarted { package }) => {
+                info!(
+                    event = "package.install.started",
+                    context = context.as_str(),
+                    package = %package,
+                    status = "started",
+                    "package installation started"
+                );
+            }
+            (OutputFormat::Json, PackageEvent::InstallationCompleted { package }) => {
+                info!(
+                    event = "package.install.completed",
+                    context = context.as_str(),
+                    package = %package,
+                    status = "ok",
+                    "package installation completed"
+                );
+            }
+            (OutputFormat::Json, PackageEvent::InstallationFailed { package }) => {
+                error!(
+                    event = "package.install.failed",
+                    context = context.as_str(),
+                    package = %package,
+                    status = "error",
+                    "package installation failed"
+                );
+            }
+        }
+    }
+
+    fn context(&self) -> DiagnosticContext {
+        DiagnosticContext::from_u8(self.context.load(Ordering::Relaxed))
+    }
 }
 
 #[derive(Clone)]
@@ -416,7 +599,8 @@ fn watch_error_template(error: &TemplateRegistryError) -> Option<&TemplateId> {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
 pub enum DiagnosticContext {
     Check,
     Startup,
@@ -425,6 +609,15 @@ pub enum DiagnosticContext {
 }
 
 impl DiagnosticContext {
+    fn from_u8(value: u8) -> Self {
+        match value {
+            value if value == Self::Check as u8 => Self::Check,
+            value if value == Self::Startup as u8 => Self::Startup,
+            value if value == Self::Watch as u8 => Self::Watch,
+            _ => Self::Render,
+        }
+    }
+
     fn as_str(self) -> &'static str {
         match self {
             Self::Check => "check",
@@ -484,22 +677,6 @@ pub fn init_tracing(format: OutputFormat, color: ColorChoice) {
 
     if let Err(error) = result {
         eprintln!("warning: logging subscriber was not installed: {error}");
-    }
-}
-
-pub fn log_check_success(format: OutputFormat, build: &WithWarnings<TemplateRegistry>) {
-    match format {
-        OutputFormat::Pretty => eprintln!("templates compiled successfully"),
-        OutputFormat::Json => {
-            info!(
-                target: "typrest",
-                event = "templates.check.completed",
-                template_count = build.value().ids().len(),
-                warning_count = build.warnings().len(),
-                status = "ok",
-                "templates compiled successfully"
-            );
-        }
     }
 }
 

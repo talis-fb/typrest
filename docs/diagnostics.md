@@ -29,6 +29,11 @@ typrest serve --color never
 
 Warnings are visible but do not turn a successful compile into a failure.
 
+`check`, server startup, and watch compilation also write stable, non-animated lifecycle lines to
+stderr. The default output includes template compilation start/completion/failure, actual missing
+package installation start/completion/failure, and an ordered ready-template overview after a
+successful complete build. It omits package output when imports are already loaded or cached.
+
 ## JSON Lines Output
 
 ```bash
@@ -42,6 +47,12 @@ relates secondary events to their primary diagnostic. Events include context (`c
 
 JSON logs omit source excerpts, payloads, PDF bytes, ANSI codes, and absolute filesystem paths.
 `RUST_LOG` controls operational verbosity.
+
+Lifecycle records use `template.compilation.started`, `template.compilation.completed`,
+`template.compilation.failed`, `package.install.started`, `package.install.completed`,
+`package.install.failed`, `templates.ready`, and `template.ready`. They include a `context`, stable
+template or package identifier where applicable, and status/count fields. Cached-package events are
+classified as verbose and are not emitted by the current default output policy.
 
 ## HTTP Contract
 

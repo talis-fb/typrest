@@ -148,15 +148,16 @@ mod tests {
     }
 
     #[test]
-    fn typst_owned_imports_are_confined_to_private_compiler_files() {
+    fn typst_owned_imports_are_confined_to_compiler_and_package_resolver_boundaries() {
         let workspace = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .and_then(Path::parent)
             .unwrap();
-        let allowed = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/compiler");
+        let compiler = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/compiler");
+        let package_resolver = workspace.join("crates/typrest/src/package/universal_package.rs");
         let mut violations = Vec::new();
 
-        find_typst_imports(workspace, &allowed, &mut violations);
+        find_typst_imports(workspace, &compiler, &package_resolver, &mut violations);
 
         assert!(
             violations.is_empty(),
@@ -170,9 +171,10 @@ mod tests {
     }
 
     #[test]
-    fn application_crates_do_not_depend_directly_on_typst_owned_crates() {
+    fn application_crates_only_depend_on_typst_package_tooling_in_the_package_resolver() {
         let crates_dir = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
         let core_manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
+        let package_resolver_manifest = crates_dir.join("typrest/Cargo.toml");
         let mut violations = Vec::new();
 
         for entry in fs::read_dir(crates_dir).unwrap() {
@@ -182,8 +184,18 @@ mod tests {
             }
             let contents = fs::read_to_string(&manifest).unwrap();
             if contents.lines().any(|line| {
-                let line = line.trim_start();
-                line.starts_with("typst ") || line.starts_with("typst-")
+                let dependency = line
+                    .trim_start()
+                    .split('=')
+                    .next()
+                    .unwrap_or_default()
+                    .trim()
+                    .split('.')
+                    .next()
+                    .unwrap_or_default();
+                let is_package_tooling = manifest == package_resolver_manifest
+                    && matches!(dependency, "typst-kit" | "typst-syntax");
+                (dependency == "typst" || dependency.starts_with("typst-")) && !is_package_tooling
             }) {
                 violations.push(manifest);
             }
@@ -283,7 +295,12 @@ mod tests {
         assert_eq!(packages.resolutions.load(Ordering::SeqCst), 0);
     }
 
-    fn find_typst_imports(root: &Path, allowed: &Path, violations: &mut Vec<std::path::PathBuf>) {
+    fn find_typst_imports(
+        root: &Path,
+        compiler: &Path,
+        package_resolver: &Path,
+        violations: &mut Vec<std::path::PathBuf>,
+    ) {
         for entry in fs::read_dir(root).unwrap() {
             let entry = entry.unwrap();
             let path = entry.path();
@@ -291,9 +308,10 @@ mod tests {
                 continue;
             }
             if path.is_dir() {
-                find_typst_imports(&path, allowed, violations);
+                find_typst_imports(&path, compiler, package_resolver, violations);
             } else if path.extension().is_some_and(|extension| extension == "rs")
-                && !path.starts_with(allowed)
+                && !path.starts_with(compiler)
+                && path != package_resolver
             {
                 let source = fs::read_to_string(&path).unwrap();
                 let typst_owned_prefixes = [
