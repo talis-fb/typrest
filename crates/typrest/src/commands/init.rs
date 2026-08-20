@@ -86,6 +86,7 @@ fn resolve_target_root(
 
 const TYPREST_TOML: &str = r#"schema_version = "v1"
 templates_root = "templates"
+web_ui = true
 "#;
 
 const MAIN_TYP: &str = r#"#let data = json(bytes(sys.inputs.data))
@@ -122,7 +123,7 @@ mod tests {
 
         assert_eq!(
             config,
-            "schema_version = \"v1\"\ntemplates_root = \"templates\"\n"
+            "schema_version = \"v1\"\ntemplates_root = \"templates\"\nweb_ui = true\n"
         );
         assert!(main.contains("#let data = json(bytes(sys.inputs.data))"));
         assert!(main.contains("= Hello #data.name"));
@@ -145,7 +146,7 @@ mod tests {
 
         assert_eq!(
             config,
-            "schema_version = \"v1\"\ntemplates_root = \"templates\"\n"
+            "schema_version = \"v1\"\ntemplates_root = \"templates\"\nweb_ui = true\n"
         );
         assert!(main.contains("#let data = json(bytes(sys.inputs.data))"));
         assert!(main.contains("= Hello #data.name"));
@@ -168,7 +169,7 @@ mod tests {
 
         assert_eq!(
             config,
-            "schema_version = \"v1\"\ntemplates_root = \"templates\"\n"
+            "schema_version = \"v1\"\ntemplates_root = \"templates\"\nweb_ui = true\n"
         );
         assert!(main.contains("#let data = json(bytes(sys.inputs.data))"));
         assert!(main.contains("= Hello #data.name"));

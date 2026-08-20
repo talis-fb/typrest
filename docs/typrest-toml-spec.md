@@ -96,11 +96,12 @@ See the [Web UI Specification](webui-spec.md) for its complete route and securit
 
 ## Generated Default
 
-`typrest init` omits `web_ui`, so generated projects contain:
+`typrest init` enables the Web UI, so generated projects contain:
 
 ```toml
 schema_version = "v1"
 templates_root = "templates"
+web_ui = true
 ```
 
 ## Non-goals

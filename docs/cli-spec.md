@@ -76,6 +76,7 @@ Generated `typrest.toml`:
 ```toml
 schema_version = "v1"
 templates_root = "templates"
+web_ui = true
 ```
 
 Generated template:
