@@ -26,10 +26,9 @@ request-specific.
     templates succeed.
 
 Registry build and reload APIs optionally report presentation-neutral template lifecycle events.
-The application output layer renders pre-build events as stderr feedback and watch events as stdout
-backend logs; callers that do not need progress continue to use the no-observer APIs.
-Missing-package lifecycle events remain owned by the application package repository, keeping CLI
-presentation and filesystem knowledge out of `typrest-core`.
+Application callbacks match those events and emit tracing records directly. Callers that do not
+need progress continue to use the no-observer APIs. Missing-package lifecycle events are logged
+directly by the application package repository, keeping filesystem knowledge out of `typrest-core`.
 
 An empty templates directory produces an empty registry and may start successfully. Compiler
 warnings are reported with their full diagnostic context but do not fail startup.
@@ -90,12 +89,11 @@ after newer changes and overwrite them.
 - The candidate is built without holding the registry write lock.
 - Success swaps the affected entry or complete registry with one short write operation.
 - Failure is reported and the last known good entry or registry remains active.
-- Template compilation and actual missing-package installation progress are timestamped stdout logs
-  because watch reloads occur while the backend is running. Successful full rebuilds emit a
-  refreshed ready count.
+- Template compilation and actual missing-package installation progress are tracing events on
+  stdout. Successful full rebuilds emit a refreshed ready count.
 
-The loader module emits typed watch outcomes. The application output module formats diagnostics
-and operational logs, so watch management has no dependency on HTTP or presentation code.
+Watch management emits reload outcomes where they occur and delegates only compiler diagnostic
+formatting to `logging/compiler_diagnostics.rs`. It has no dependency on HTTP code.
 
 Startup and watch mode intentionally differ: startup requires every template to be valid, while a
 watch failure preserves service availability.

@@ -19,9 +19,9 @@ No public type, HTTP response, or log record exposes a `typst::*` type.
 
 ## Pretty Output
 
-Pretty output is the default. Pre-build warnings are written to stderr and all errors are written to
-stdout. When source location data is available it includes an annotated excerpt, primary range,
-hints as help messages, and traces as notes. Runtime diagnostics are stdout backend logs.
+Pretty output is the default. All output uses stdout. When source location data is available,
+pre-build compiler diagnostics include an annotated excerpt, primary range, hints as help messages,
+and traces as notes. Runtime diagnostics are tracing records without source excerpts.
 
 ```bash
 typrest --color always check
@@ -30,9 +30,8 @@ typrest serve --color never
 
 Warnings are visible but do not turn a successful compile into a failure.
 
-`check` and server startup write stable, non-animated lifecycle feedback to stderr. Watch
-compilation happens after the backend starts and uses timestamped stdout logs. See the logging
-contract for exact output and stream ownership.
+`check`, server startup, and watch compilation use the same timestamped tracing event set. See the
+logging contract for exact output and stream ownership.
 
 ## JSON Lines Output
 
@@ -46,13 +45,13 @@ relates secondary events to their primary diagnostic. Events include context (`c
 `watch`, or `render`), compiler stage, template, message, and virtual range.
 
 JSON diagnostics omit source excerpts, payloads, PDF bytes, ANSI codes, and physical compiler source
-paths. `RUST_LOG` controls tracing-backed verbosity.
+paths. They use tracing, so `RUST_LOG` controls their visibility.
 
 Lifecycle records use `template.compilation.started`, `template.compilation.completed`,
 `template.compilation.failed`, `package.install.started`, `package.install.completed`,
 `package.install.failed`, `templates.ready`, and `template.ready`. They include a `context`, stable
 template or package identifier where applicable, and status/count fields. Cached-package events are
-classified as verbose and are not emitted by the current default output policy.
+logged at `DEBUG` and are hidden by the default filter.
 
 ## HTTP Contract
 

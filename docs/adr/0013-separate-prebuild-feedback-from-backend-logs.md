@@ -1,7 +1,7 @@
 # ADR-0013: Separate pre-build feedback from backend logs
 
 - **Date:** 2026-08
-- **Status:** Accepted
+- **Status:** Superseded by [ADR-0014](0014-use-one-stdout-tracing-stream.md)
 
 ## Context
 

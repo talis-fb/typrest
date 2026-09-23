@@ -81,9 +81,9 @@ Watch mode builds candidates without holding the registry write lock. Ordinary s
 replace one entry atomically. Route-topology and `_shared/` changes build a complete candidate and
 swap the registry atomically; failures leave the last known good registry active.
 
-Registry builds and reloads can notify a Typrest-owned lifecycle observer. The core emits only
-template IDs, status, and warning counts; command and watch adapters decide how pretty and JSON
-output is rendered. Package cache/install events stay in the application package resolver.
+Registry builds and reloads can notify an application callback. The core emits only template IDs,
+status, and warning counts; command and watch code match those events and log them directly.
+Package cache/install events stay in and are logged by the application package resolver.
 
 See [Startup Template Compilation](startup-template-compilation.md) for the detailed lifecycle.
 

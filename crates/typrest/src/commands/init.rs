@@ -1,26 +1,17 @@
 use crate::config::CONFIG_FILE;
-use crate::output::{
-    ColorChoice as ServerColorChoice, DiagnosticContext, DiagnosticReporter, DiagnosticStage,
-    OutputFormat,
-};
 use std::fs;
 use std::path::{Path, PathBuf};
+use tracing::error;
 
-pub(crate) async fn run_init(
-    path: Option<PathBuf>,
-    output_format: OutputFormat,
-    color: ServerColorChoice,
-) -> bool {
+pub(crate) async fn run_init(path: Option<PathBuf>) -> bool {
     let current_dir = std::env::current_dir().unwrap_or_default();
-    let reporter = DiagnosticReporter::new(output_format, color, &current_dir);
     match init_project(&current_dir, path.as_deref()) {
         Ok(()) => true,
         Err(error) => {
-            reporter.report_simple_error(
-                DiagnosticContext::Startup,
-                DiagnosticStage::Load,
-                None,
-                &error.to_string(),
+            error!(
+                event = "project.init.failed",
+                error = %error,
+                "failed to initialize project: {error}"
             );
             false
         }

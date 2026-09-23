@@ -123,10 +123,10 @@ content should not be committed.
 Warnings are displayed and return exit status `0`. Configuration, load, schema, compilation, or
 export failure returns exit status `1`.
 
-While checking, the command writes concise lifecycle status to stderr: each template reports when
-compilation starts and completes, and a successful check ends with `Templates ready: <count>`.
-Missing packages report installation start and completion. Packages already loaded or present in
-`.typrest/packages` do not produce default output. Warnings use stderr; all errors use stdout.
+While checking, the command writes timestamped lifecycle events to stdout: each template reports
+when compilation starts and completes, and a successful check reports `templates ready: <count>`.
+Missing packages report installation start and completion. Package cache hits use `DEBUG` and are
+hidden by the default filter. Warnings and errors also use stdout.
 
 ## `typrest serve`
 
@@ -144,10 +144,10 @@ typrest serve [--port <port>] [--hostname <ipv4>] [--watch]
 when project configuration is missing or invalid, the templates root is invalid, or any startup
 template fails.
 
-Startup uses the same package, template-compilation, warning, error, and ready-count feedback as
-`check`, followed in pretty mode by a server-transition banner on stderr. Once running, every server
-log uses stdout. Watch compilation is timestamped backend activity; a successful full rebuild logs a
-new ready count, while a single-template reload logs only that template's lifecycle.
+Startup uses the same package, template-compilation, warning, error, and ready-count events as
+`check`, followed by an ordinary `server.starting` tracing event. Every process event uses stdout.
+A successful full watch rebuild logs a new ready count, while a single-template reload logs that
+template's lifecycle and reload outcome.
 
 Watch behavior is defined in [Startup Template Compilation](startup-template-compilation.md).
 
@@ -157,7 +157,7 @@ Watch behavior is defined in [Startup Template Compilation](startup-template-com
 |---|---|---|
 | `--log-format pretty\|json` | `pretty` | Human diagnostics or JSON Lines |
 | `--color auto\|always\|never` | `auto` | ANSI policy for pretty output |
-| `RUST_LOG` | runtime default | Operational log filtering |
+| `RUST_LOG` | `typrest=info` | Tracing event filtering |
 
 JSON output never contains ANSI codes. See [Compiler diagnostics](diagnostics.md) and
 [Logging and process output](logging.md).
@@ -167,8 +167,8 @@ or compilation behavior.
 
 ## Failure Contract
 
-CLI errors are written through the diagnostic reporter rather than returned as ad hoc panic text.
-The process exits successfully only when the selected command completes successfully.
+CLI errors are emitted as structured tracing events rather than ad hoc panic text. The process exits
+successfully only when the selected command completes successfully.
 
 Store commands, publishing, remote registries, and environment-variable configuration overrides
 are not part of this specification.

@@ -7,6 +7,12 @@ use std::time::Duration;
 
 use tempfile::tempdir;
 
+fn typrest_command() -> Command {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_typrest"));
+    command.env_remove("RUST_LOG");
+    command
+}
+
 fn write_project(root: &Path) {
     fs::create_dir_all(root.join("templates/invoice")).unwrap();
     fs::write(
@@ -27,7 +33,7 @@ fn unused_port() -> u16 {
 
 fn run_server(root: &Path, format: &str) -> Output {
     let port = unused_port();
-    let mut child = Command::new(env!("CARGO_BIN_EXE_typrest"))
+    let mut child = typrest_command()
         .current_dir(root)
         .args([
             "serve",
@@ -63,7 +69,7 @@ fn run_server(root: &Path, format: &str) -> Output {
 }
 
 #[test]
-fn pretty_serve_splits_prebuild_feedback_from_backend_logs() {
+fn pretty_serve_writes_every_event_to_stdout() {
     let root = tempdir().unwrap();
     write_project(root.path());
 
@@ -71,10 +77,11 @@ fn pretty_serve_splits_prebuild_feedback_from_backend_logs() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     let stdout = String::from_utf8_lossy(&output.stdout);
 
-    assert_eq!(
-        stderr,
-        "Compiling template `invoice`\n Compiled template `invoice`\n\nTemplates ready: 1\n\n======== Starting server =========\n"
-    );
+    assert!(stderr.is_empty(), "stderr was: {stderr}");
+    assert!(stdout.contains(" INFO compiling template `invoice`\n"));
+    assert!(stdout.contains(" INFO compiled template `invoice`\n"));
+    assert!(stdout.contains(" INFO templates ready: 1\n"));
+    assert!(stdout.contains(" INFO starting typrest server\n"));
     assert!(stdout.contains(" INFO template watch mode enabled\n"));
     assert!(
         stdout.contains(" INFO typrest server listening on 127.0.0.1:"),
@@ -86,49 +93,43 @@ fn pretty_serve_splits_prebuild_feedback_from_backend_logs() {
 }
 
 #[test]
-fn json_serve_keeps_prebuild_feedback_and_backend_records_separate() {
+fn json_serve_writes_one_json_lines_stream_to_stdout() {
     let root = tempdir().unwrap();
     write_project(root.path());
 
     let output = run_server(root.path(), "json");
-    let feedback = String::from_utf8_lossy(&output.stderr)
-        .lines()
-        .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
-        .collect::<Vec<_>>();
-    let backend = String::from_utf8_lossy(&output.stdout)
+    assert!(output.stderr.is_empty());
+    let records = String::from_utf8_lossy(&output.stdout)
         .lines()
         .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
         .collect::<Vec<_>>();
 
-    assert!(feedback.iter().all(|record| {
-        matches!(
-            record["event"].as_str(),
-            Some(
-                "template.compilation.started"
-                    | "template.compilation.completed"
-                    | "templates.ready"
-                    | "template.ready"
-            )
-        )
+    assert!(records.iter().any(|record| {
+        record["event"] == "template.compilation.started" && record["context"] == "startup"
     }));
-    assert!(backend.iter().any(|record| {
+    assert!(
+        records.iter().any(|record| {
+            record["event"] == "templates.ready" && record["template_count"] == 1
+        })
+    );
+    assert!(records.iter().any(|record| {
         record["event"] == "template.watch.enabled" && record["templates_dir"].is_string()
     }));
     assert!(
-        backend.iter().any(|record| {
+        records.iter().any(|record| {
             record["event"] == "server.listening" && record["address"].is_string()
         })
     );
 }
 
 #[test]
-fn server_bind_errors_are_timestamped_stdout_logs() {
+fn server_bind_errors_use_stdout_only() {
     let root = tempdir().unwrap();
     write_project(root.path());
     let occupied = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
     let port = occupied.local_addr().unwrap().port().to_string();
 
-    let output = Command::new(env!("CARGO_BIN_EXE_typrest"))
+    let output = typrest_command()
         .current_dir(root.path())
         .args([
             "serve",
@@ -150,6 +151,6 @@ fn server_bind_errors_are_timestamped_stdout_logs() {
         "stdout was: {stdout}"
     );
     assert!(!stdout.contains("event="));
-    assert!(stderr.ends_with("======== Starting server =========\n"));
-    assert!(!stderr.contains("ERROR"));
+    assert!(stdout.contains(" INFO starting typrest server\n"));
+    assert!(stderr.is_empty(), "stderr was: {stderr}");
 }

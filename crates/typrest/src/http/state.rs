@@ -1,4 +1,4 @@
-use crate::output::DiagnosticReporter;
+use crate::args::LogFormat;
 
 use typrest_core::{RenderService, TemplateRegistry};
 
@@ -6,19 +6,19 @@ use typrest_core::{RenderService, TemplateRegistry};
 pub struct AppState {
     pub registry: TemplateRegistry,
     pub render_service: RenderService,
-    pub reporter: DiagnosticReporter,
+    pub log_format: LogFormat,
 }
 
 impl AppState {
     pub fn new(
         registry: TemplateRegistry,
         render_service: RenderService,
-        reporter: DiagnosticReporter,
+        log_format: LogFormat,
     ) -> Self {
         Self {
             registry,
             render_service,
-            reporter,
+            log_format,
         }
     }
 }

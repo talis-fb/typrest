@@ -4,37 +4,14 @@ use std::sync::Arc;
 use notify::event::ModifyKind;
 use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use tokio::sync::mpsc;
+use tracing::{error, info, warn};
 use typrest_core::{
-    CompilationDiagnostic, PdfCompiler, TemplateId, TemplateRegistry, TemplateRegistryBuildFailure,
-    TemplateRegistryError, TemplateRegistryEvent, WithWarnings,
+    PdfCompiler, TemplateId, TemplateRegistry, TemplateRegistryError, TemplateRegistryEvent,
 };
 
+use crate::args::LogFormat;
 use crate::loader::filesystem::FilesystemLoader;
-
-pub(crate) type WatchEventHandler = Arc<dyn Fn(WatchEvent) + Send + Sync>;
-pub(crate) type RegistryEventHandler = Arc<dyn Fn(TemplateRegistryEvent) + Send + Sync>;
-pub(crate) type RegistryReadyHandler = Arc<dyn Fn(&TemplateRegistry) + Send + Sync>;
-
-struct WatchHandlers {
-    event: WatchEventHandler,
-    registry_event: RegistryEventHandler,
-    registry_ready: RegistryReadyHandler,
-}
-
-#[derive(Debug)]
-pub(crate) enum WatchEvent {
-    BackendFailed(notify::Error),
-    RegistryRebuilt {
-        template_count: usize,
-        warnings: Vec<CompilationDiagnostic>,
-    },
-    RegistryRebuildFailed(WithWarnings<TemplateRegistryBuildFailure>),
-    TemplateReloaded {
-        template: TemplateId,
-        warnings: Vec<CompilationDiagnostic>,
-    },
-    TemplateReloadFailed(TemplateRegistryError),
-}
+use crate::logging::compiler_diagnostics;
 
 pub struct TemplateWatcher {
     _watcher: RecommendedWatcher,
@@ -51,9 +28,7 @@ pub(crate) fn start_template_watcher(
     loader: Arc<FilesystemLoader>,
     registry: TemplateRegistry,
     compiler: Arc<dyn PdfCompiler>,
-    on_event: WatchEventHandler,
-    on_registry_event: RegistryEventHandler,
-    on_registry_ready: RegistryReadyHandler,
+    log_format: LogFormat,
 ) -> notify::Result<TemplateWatcher> {
     let root = loader.root().to_owned();
     let watch_root = root.clone();
@@ -66,11 +41,6 @@ pub(crate) fn start_template_watcher(
     )?;
 
     watcher.watch(&watch_root, RecursiveMode::Recursive)?;
-    let handlers = WatchHandlers {
-        event: on_event,
-        registry_event: on_registry_event,
-        registry_ready: on_registry_ready,
-    };
     let worker = tokio::spawn(async move {
         while let Some(result) = receiver.recv().await {
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -84,7 +54,7 @@ pub(crate) fn start_template_watcher(
                 loader.as_ref(),
                 &registry,
                 compiler.as_ref(),
-                &handlers,
+                log_format,
             )
             .await;
         }
@@ -102,7 +72,7 @@ async fn handle_events(
     loader: &FilesystemLoader,
     registry: &TemplateRegistry,
     compiler: &dyn PdfCompiler,
-    handlers: &WatchHandlers,
+    log_format: LogFormat,
 ) {
     let mut rebuild_all = false;
     let mut templates = Vec::new();
@@ -112,7 +82,11 @@ async fn handle_events(
             Ok(event) if is_relevant_event(&event) => event,
             Ok(_) => continue,
             Err(error) => {
-                (handlers.event)(WatchEvent::BackendFailed(error));
+                error!(
+                    event = "template.watch.backend.failed",
+                    error = %error,
+                    "template watch event failed: {error}"
+                );
                 continue;
             }
         };
@@ -140,28 +114,12 @@ async fn handle_events(
     }
 
     if rebuild_all {
-        reload_all_observed(
-            loader,
-            registry,
-            compiler,
-            &handlers.event,
-            handlers.registry_event.as_ref(),
-            handlers.registry_ready.as_ref(),
-        )
-        .await;
+        reload_all_observed(loader, registry, compiler, log_format).await;
         return;
     }
 
     for template in templates {
-        reload_template_observed(
-            loader,
-            registry,
-            compiler,
-            &template,
-            &handlers.event,
-            handlers.registry_event.as_ref(),
-        )
-        .await;
+        reload_template_observed(loader, registry, compiler, &template, log_format).await;
     }
 }
 
@@ -188,32 +146,135 @@ async fn reload_all(
     loader: &FilesystemLoader,
     registry: &TemplateRegistry,
     compiler: &dyn PdfCompiler,
-    on_event: &WatchEventHandler,
 ) {
-    reload_all_observed(loader, registry, compiler, on_event, &|_| {}, &|_| {}).await;
+    reload_all_observed(loader, registry, compiler, LogFormat::Pretty).await;
 }
 
 async fn reload_all_observed(
     loader: &FilesystemLoader,
     registry: &TemplateRegistry,
     compiler: &dyn PdfCompiler,
-    on_event: &WatchEventHandler,
-    on_registry_event: &(dyn Fn(TemplateRegistryEvent) + Send + Sync),
-    on_registry_ready: &(dyn Fn(&TemplateRegistry) + Send + Sync),
+    log_format: LogFormat,
 ) {
-    match TemplateRegistry::build_with_observer(loader, compiler, on_registry_event).await {
+    let on_registry_event = |event| log_registry_event(event);
+    match TemplateRegistry::build_with_observer(loader, compiler, &on_registry_event).await {
         Ok(build) => {
             let template_count = build.value().ids().len();
-            let warnings = build.warnings().to_vec();
+            for warning in build.warnings() {
+                compiler_diagnostics::trace(
+                    log_format,
+                    "watch",
+                    "compile",
+                    warning.template.as_ref(),
+                    warning,
+                );
+            }
             registry.replace_all(build.value());
-            on_event(WatchEvent::RegistryRebuilt {
+            info!(
+                event = "template.registry.rebuilt",
                 template_count,
-                warnings,
-            });
-            on_registry_ready(registry);
+                warning_count = build.warnings().len(),
+                "template registry rebuilt"
+            );
+            info!(
+                event = "templates.ready",
+                context = "watch",
+                template_count,
+                status = "ok",
+                "templates ready: {template_count}"
+            );
+            for template in registry.ids() {
+                info!(
+                    event = "template.ready",
+                    context = "watch",
+                    template = %template,
+                    status = "ok",
+                    "template ready: `{template}`"
+                );
+            }
         }
         Err(build_error) => {
-            on_event(WatchEvent::RegistryRebuildFailed(build_error));
+            for warning in build_error.warnings() {
+                compiler_diagnostics::trace(
+                    log_format,
+                    "watch",
+                    "compile",
+                    warning.template.as_ref(),
+                    warning,
+                );
+            }
+            for failure in build_error.value().failures() {
+                match failure {
+                    TemplateRegistryError::List { source } => error!(
+                        event = "compiler.diagnostic",
+                        context = "watch",
+                        stage = "load",
+                        diagnostic_message = %source,
+                        "{source}"
+                    ),
+                    TemplateRegistryError::Load { template, source } => error!(
+                        event = "compiler.diagnostic",
+                        context = "watch",
+                        stage = "load",
+                        template = %template,
+                        diagnostic_message = %source,
+                        "template `{template}`: {source}"
+                    ),
+                    TemplateRegistryError::Prepare { template, source } => {
+                        for value in source.report().diagnostics() {
+                            compiler_diagnostics::trace(
+                                log_format,
+                                "watch",
+                                "prepare",
+                                Some(template),
+                                value,
+                            );
+                        }
+                    }
+                    TemplateRegistryError::SamplePayload {
+                        template,
+                        violations,
+                    } => {
+                        let message = violations
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect::<Vec<_>>()
+                            .join("; ");
+                        error!(
+                            event = "compiler.diagnostic",
+                            context = "watch",
+                            stage = "prepare",
+                            template = %template,
+                            diagnostic_message = message,
+                            "template `{template}`: {message}"
+                        );
+                    }
+                    TemplateRegistryError::Warmup { template, source } => {
+                        for value in source.report().diagnostics() {
+                            compiler_diagnostics::trace(
+                                log_format,
+                                "watch",
+                                "compile",
+                                Some(template),
+                                value,
+                            );
+                        }
+                    }
+                }
+            }
+            error!(
+                event = "templates.check.failed",
+                context = "watch",
+                template_count = build_error.value().template_count(),
+                failed_count = build_error.value().failures().len(),
+                warning_count = build_error.warnings().len(),
+                "template compilation failed"
+            );
+            warn!(
+                event = "template.registry.rebuild.failed",
+                last_known_good = true,
+                "template registry rebuild failed; keeping last known good version"
+            );
         }
     }
 }
@@ -224,9 +285,8 @@ async fn reload_template(
     registry: &TemplateRegistry,
     compiler: &dyn PdfCompiler,
     template: &TemplateId,
-    on_event: &WatchEventHandler,
 ) {
-    reload_template_observed(loader, registry, compiler, template, on_event, &|_| {}).await;
+    reload_template_observed(loader, registry, compiler, template, LogFormat::Pretty).await;
 }
 
 async fn reload_template_observed(
@@ -234,22 +294,125 @@ async fn reload_template_observed(
     registry: &TemplateRegistry,
     compiler: &dyn PdfCompiler,
     template: &TemplateId,
-    on_event: &WatchEventHandler,
-    on_registry_event: &(dyn Fn(TemplateRegistryEvent) + Send + Sync),
+    log_format: LogFormat,
 ) {
+    let on_registry_event = |event| log_registry_event(event);
     match registry
-        .reload_with_observer(loader, compiler, template, on_registry_event)
+        .reload_with_observer(loader, compiler, template, &on_registry_event)
         .await
     {
         Ok(reload) => {
-            on_event(WatchEvent::TemplateReloaded {
-                template: template.clone(),
-                warnings: reload.warnings().to_vec(),
-            });
+            for warning in reload.warnings() {
+                compiler_diagnostics::trace(
+                    log_format,
+                    "watch",
+                    "compile",
+                    warning.template.as_ref(),
+                    warning,
+                );
+            }
+            info!(
+                event = "template.reload.completed",
+                template = %template,
+                warning_count = reload.warnings().len(),
+                "template reloaded"
+            );
         }
         Err(error) => {
-            on_event(WatchEvent::TemplateReloadFailed(error));
+            match &error {
+                TemplateRegistryError::List { source } => error!(
+                    event = "compiler.diagnostic",
+                    context = "watch",
+                    stage = "load",
+                    diagnostic_message = %source,
+                    "{source}"
+                ),
+                TemplateRegistryError::Load { template, source } => error!(
+                    event = "compiler.diagnostic",
+                    context = "watch",
+                    stage = "load",
+                    template = %template,
+                    diagnostic_message = %source,
+                    "template `{template}`: {source}"
+                ),
+                TemplateRegistryError::Prepare { template, source } => {
+                    for value in source.report().diagnostics() {
+                        compiler_diagnostics::trace(
+                            log_format,
+                            "watch",
+                            "prepare",
+                            Some(template),
+                            value,
+                        );
+                    }
+                }
+                TemplateRegistryError::SamplePayload {
+                    template,
+                    violations,
+                } => {
+                    let message = violations
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join("; ");
+                    error!(
+                        event = "compiler.diagnostic",
+                        context = "watch",
+                        stage = "prepare",
+                        template = %template,
+                        diagnostic_message = message,
+                        "template `{template}`: {message}"
+                    );
+                }
+                TemplateRegistryError::Warmup { template, source } => {
+                    for value in source.report().diagnostics() {
+                        compiler_diagnostics::trace(
+                            log_format,
+                            "watch",
+                            "compile",
+                            Some(template),
+                            value,
+                        );
+                    }
+                }
+            }
+            warn!(
+                event = "template.reload.failed",
+                template = %template,
+                last_known_good = true,
+                "template reload failed; keeping last known good version"
+            );
         }
+    }
+}
+
+fn log_registry_event(event: TemplateRegistryEvent) {
+    match event {
+        TemplateRegistryEvent::CompilationStarted { template } => info!(
+            event = "template.compilation.started",
+            context = "watch",
+            template = %template,
+            status = "started",
+            "compiling template `{template}`"
+        ),
+        TemplateRegistryEvent::CompilationCompleted {
+            template,
+            warning_count,
+        } => info!(
+            event = "template.compilation.completed",
+            context = "watch",
+            template = %template,
+            warning_count,
+            status = "ok",
+            "compiled template `{template}`"
+        ),
+        TemplateRegistryEvent::CompilationFailed { template } => error!(
+            event = "template.compilation.failed",
+            context = "watch",
+            template = %template,
+            status = "error",
+            "failed to compile template `{template}`"
+        ),
     }
 }
 
@@ -301,7 +464,6 @@ mod tests {
     use std::fs;
     use std::path::Path;
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-    use std::sync::{Arc, Mutex};
 
     use async_trait::async_trait;
     use bytes::Bytes;
@@ -313,10 +475,7 @@ mod tests {
 
     use crate::loader::filesystem::FilesystemLoader;
 
-    use super::{
-        ChangedTemplate, WatchEventHandler, changed_template, reload_all, reload_template,
-        reload_template_observed,
-    };
+    use super::{ChangedTemplate, changed_template, reload_all, reload_template};
 
     struct MockCompiler {
         fail: AtomicBool,
@@ -352,10 +511,6 @@ mod tests {
             "schemaVersion: v1\nrequest:\n  body:\n    type: object\n",
         )
         .unwrap();
-    }
-
-    fn ignore_events() -> WatchEventHandler {
-        Arc::new(|_| {})
     }
 
     #[test]
@@ -424,13 +579,11 @@ mod tests {
             prepares: AtomicUsize::new(0),
         };
         let name = TemplateId::new("invoice").unwrap();
-        let on_event = ignore_events();
-
-        reload_template(&loader, &registry, &compiler, &name, &on_event).await;
+        reload_template(&loader, &registry, &compiler, &name).await;
         let first = registry.get(&name).unwrap();
 
         fs::write(root.path().join("invoice/main.typ"), "second").unwrap();
-        reload_template(&loader, &registry, &compiler, &name, &on_event).await;
+        reload_template(&loader, &registry, &compiler, &name).await;
         let second = registry.get(&name).unwrap();
         assert!(!std::sync::Arc::ptr_eq(&first, &second));
 
@@ -439,13 +592,13 @@ mod tests {
             r#"{"schemaVersion":"v1","request":{"body":{}}}"#,
         )
         .unwrap();
-        reload_template(&loader, &registry, &compiler, &name, &on_event).await;
+        reload_template(&loader, &registry, &compiler, &name).await;
         let after_conflict = registry.get(&name).unwrap();
         assert!(std::sync::Arc::ptr_eq(&second, &after_conflict));
         fs::remove_file(root.path().join("invoice/schema.json")).unwrap();
 
         fs::write(root.path().join("invoice/schema.yml"), "schemaVersion: [").unwrap();
-        reload_template(&loader, &registry, &compiler, &name, &on_event).await;
+        reload_template(&loader, &registry, &compiler, &name).await;
         let after_schema_error = registry.get(&name).unwrap();
         assert!(std::sync::Arc::ptr_eq(&second, &after_schema_error));
         fs::write(
@@ -456,43 +609,10 @@ mod tests {
 
         compiler.fail.store(true, Ordering::SeqCst);
         fs::write(root.path().join("invoice/main.typ"), "#let broken =").unwrap();
-        reload_template(&loader, &registry, &compiler, &name, &on_event).await;
+        reload_template(&loader, &registry, &compiler, &name).await;
         let after_failure = registry.get(&name).unwrap();
 
         assert!(std::sync::Arc::ptr_eq(&second, &after_failure));
-    }
-
-    #[tokio::test]
-    async fn observed_reload_reports_compilation_progress() {
-        let root = tempdir().unwrap();
-        write_template(root.path(), "invoice", "invoice");
-        let loader = FilesystemLoader::new(root.path());
-        let registry = TemplateRegistry::default();
-        let compiler = MockCompiler {
-            fail: AtomicBool::new(false),
-            prepares: AtomicUsize::new(0),
-        };
-        let name = TemplateId::new("invoice").unwrap();
-        let on_event = ignore_events();
-        let events = Mutex::new(Vec::new());
-
-        reload_template_observed(&loader, &registry, &compiler, &name, &on_event, &|event| {
-            events.lock().unwrap().push(event)
-        })
-        .await;
-
-        assert_eq!(
-            *events.lock().unwrap(),
-            [
-                typrest_core::TemplateRegistryEvent::CompilationStarted {
-                    template: name.clone(),
-                },
-                typrest_core::TemplateRegistryEvent::CompilationCompleted {
-                    template: name,
-                    warning_count: 0,
-                },
-            ]
-        );
     }
 
     #[tokio::test]
@@ -506,11 +626,9 @@ mod tests {
             fail: AtomicBool::new(false),
             prepares: AtomicUsize::new(0),
         };
-        let on_event = ignore_events();
-
-        reload_all(&loader, &registry, &compiler, &on_event).await;
+        reload_all(&loader, &registry, &compiler).await;
         let first_count = compiler.prepares.load(Ordering::SeqCst);
-        reload_all(&loader, &registry, &compiler, &on_event).await;
+        reload_all(&loader, &registry, &compiler).await;
 
         assert_eq!(first_count, 2);
         assert_eq!(compiler.prepares.load(Ordering::SeqCst), 4);
@@ -528,13 +646,12 @@ mod tests {
             fail: AtomicBool::new(false),
             prepares: AtomicUsize::new(0),
         };
-        let on_event = ignore_events();
-        reload_all(&loader, &registry, &compiler, &on_event).await;
+        reload_all(&loader, &registry, &compiler).await;
         let previous_names = registry.ids();
 
         fs::write(root.path().join("financial/main.typ"), "financial").unwrap();
         compiler.fail.store(true, Ordering::SeqCst);
-        reload_all(&loader, &registry, &compiler, &on_event).await;
+        reload_all(&loader, &registry, &compiler).await;
 
         assert_eq!(registry.ids(), previous_names);
     }
@@ -550,9 +667,7 @@ mod tests {
             fail: AtomicBool::new(false),
             prepares: AtomicUsize::new(0),
         };
-        let on_event = ignore_events();
-
-        reload_all(&loader, &registry, &compiler, &on_event).await;
+        reload_all(&loader, &registry, &compiler).await;
         assert_eq!(
             registry
                 .ids()
@@ -563,7 +678,7 @@ mod tests {
         );
 
         fs::write(root.path().join("financial/main.typ"), "financial").unwrap();
-        reload_all(&loader, &registry, &compiler, &on_event).await;
+        reload_all(&loader, &registry, &compiler).await;
         assert_eq!(
             registry
                 .ids()
@@ -574,7 +689,7 @@ mod tests {
         );
 
         fs::remove_file(root.path().join("financial/main.typ")).unwrap();
-        reload_all(&loader, &registry, &compiler, &on_event).await;
+        reload_all(&loader, &registry, &compiler).await;
         assert_eq!(
             registry
                 .ids()

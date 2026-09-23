@@ -51,11 +51,11 @@ mod tests {
         TemplateId, TemplateLoader, TemplateRegistry, TemplateRegistryError, TemplateSource,
     };
 
+    use crate::args::LogFormat;
     use crate::http::config::ServerConfig;
     use crate::http::router::router;
     use crate::http::state::AppState;
     use crate::loader::filesystem::FilesystemLoader;
-    use crate::output::{ColorChoice, DiagnosticReporter, OutputFormat};
     use crate::package::universal_package::UniversePackageRepository;
 
     #[derive(Clone)]
@@ -83,7 +83,7 @@ mod tests {
         let registry = registry_from_loader(loader.as_ref());
         let render_service = RenderService::new(registry.clone(), compiler);
         router(
-            AppState::new(registry, render_service, test_reporter(".")),
+            AppState::new(registry, render_service, LogFormat::Pretty),
             &ServerConfig::new(0),
         )
     }
@@ -96,13 +96,9 @@ mod tests {
         let registry = registry_from_loader(loader.as_ref());
         let render_service = RenderService::new(registry.clone(), compiler);
         router(
-            AppState::new(registry, render_service, test_reporter(".")),
+            AppState::new(registry, render_service, LogFormat::Pretty),
             &ServerConfig::new(0).with_web_ui(true),
         )
-    }
-
-    fn test_reporter(root: impl AsRef<std::path::Path>) -> DiagnosticReporter {
-        DiagnosticReporter::new(OutputFormat::Pretty, ColorChoice::Never, root.as_ref())
     }
 
     fn registry_from_loader(loader: &MemoryLoader) -> TemplateRegistry {
@@ -946,7 +942,7 @@ Hello #data.name
             .into_value();
         let render_service = RenderService::new(registry.clone(), compiler);
         let app = router(
-            AppState::new(registry, render_service, test_reporter(root.path())),
+            AppState::new(registry, render_service, LogFormat::Pretty),
             &ServerConfig::new(0),
         );
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -998,7 +994,7 @@ Hello #data.name
         );
 
         let loader = FilesystemLoader::new(&templates);
-        let packages = Arc::new(UniversePackageRepository::new(&cache));
+        let packages = Arc::new(UniversePackageRepository::new(&cache, "test"));
         let compiler =
             Arc::new(typrest_core::TypstCompiler::new().with_package_repository(packages));
         let registry = TemplateRegistry::build(&loader, compiler.as_ref())
@@ -1039,7 +1035,7 @@ Hello #data.name
             .into_value();
         let render_service = RenderService::new(registry.clone(), compiler);
         let app = router(
-            AppState::new(registry, render_service, test_reporter(&examples_dir)),
+            AppState::new(registry, render_service, LogFormat::Pretty),
             &ServerConfig::new(0),
         );
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();

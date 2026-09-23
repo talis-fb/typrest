@@ -4,6 +4,12 @@ use std::process::Command;
 
 use tempfile::tempdir;
 
+fn typrest_command() -> Command {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_typrest"));
+    command.env_remove("RUST_LOG");
+    command
+}
+
 fn write_project(root: &Path, main: &str) {
     fs::create_dir_all(root.join("templates/invoice")).unwrap();
     fs::write(
@@ -24,21 +30,20 @@ fn check_succeeds_without_starting_a_server() {
     let root = tempdir().unwrap();
     write_project(root.path(), "Hello");
 
-    let output = Command::new(env!("CARGO_BIN_EXE_typrest"))
+    let output = typrest_command()
         .current_dir(root.path())
         .args(["check", "--color", "never"])
         .output()
         .unwrap();
 
     assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        stderr
-            == "Compiling template `invoice`\n Compiled template `invoice`\n\nTemplates ready: 1\n",
-        "stderr was: {stderr}"
-    );
-    assert!(output.stdout.is_empty());
-    assert!(!stderr.contains("server listening"));
+    assert!(stdout.contains(" INFO compiling template `invoice`\n"));
+    assert!(stdout.contains(" INFO compiled template `invoice`\n"));
+    assert!(stdout.contains(" INFO templates ready: 1\n"));
+    assert!(stderr.is_empty(), "stderr was: {stderr}");
+    assert!(!stdout.contains("server listening"));
 }
 
 #[test]
@@ -46,7 +51,7 @@ fn check_pretty_prints_annotated_typst_source() {
     let root = tempdir().unwrap();
     write_project(root.path(), "#let broken =");
 
-    let output = Command::new(env!("CARGO_BIN_EXE_typrest"))
+    let output = typrest_command()
         .current_dir(root.path())
         .args(["check", "--color", "never"])
         .output()
@@ -60,8 +65,25 @@ fn check_pretty_prints_annotated_typst_source() {
     assert!(stdout.contains("#let broken ="));
     assert!(stdout.contains('^'));
     assert!(stdout.contains("ERROR template compilation failed"));
-    assert!(stderr.contains("Compiling template `invoice`"));
-    assert!(!stderr.contains("error:"));
+    assert!(stdout.contains("compiling template `invoice`"));
+    assert!(stderr.is_empty(), "stderr was: {stderr}");
+}
+
+#[test]
+fn check_pretty_preserves_call_traces() {
+    let root = tempdir().unwrap();
+    write_project(root.path(), "#let helper() = tetx(\"x\")\n#helper()");
+
+    let output = typrest_command()
+        .current_dir(root.path())
+        .args(["check", "--color", "never"])
+        .output()
+        .unwrap();
+
+    assert!(!output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("note:"), "stdout was: {stdout}");
+    assert!(output.stderr.is_empty());
 }
 
 #[test]
@@ -69,7 +91,7 @@ fn check_json_is_jsonl_and_omits_source_excerpts() {
     let root = tempdir().unwrap();
     write_project(root.path(), "#let broken =");
 
-    let output = Command::new(env!("CARGO_BIN_EXE_typrest"))
+    let output = typrest_command()
         .current_dir(root.path())
         .args(["check", "--log-format", "json"])
         .output()
@@ -78,36 +100,60 @@ fn check_json_is_jsonl_and_omits_source_excerpts() {
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let feedback_records = stderr
-        .lines()
-        .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
-        .collect::<Vec<_>>();
-    let error_records = stdout
+    let records = stdout
         .lines()
         .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
         .collect::<Vec<_>>();
 
-    assert!(!feedback_records.is_empty(), "stderr was: {stderr}");
     assert!(
-        error_records.iter().any(|record| {
+        records.iter().any(|record| {
             record["event"] == "compiler.diagnostic" && record["path"] == "main.typ"
         }),
-        "records were: {error_records:#?}"
+        "records were: {records:#?}"
     );
-    assert!(feedback_records.iter().any(|record| {
+    assert!(records.iter().any(|record| {
         record["event"] == "template.compilation.started"
             && record["context"] == "check"
             && record["template"] == "invoice"
     }));
-    assert!(error_records.iter().any(|record| {
+    assert!(records.iter().any(|record| {
         record["event"] == "template.compilation.failed"
             && record["context"] == "check"
             && record["template"] == "invoice"
     }));
-    assert!(!stderr.contains("#let broken ="));
     assert!(!stdout.contains("#let broken ="));
-    assert!(!stderr.contains("\u{1b}["));
     assert!(!stdout.contains("\u{1b}["));
+    assert!(stderr.is_empty(), "stderr was: {stderr}");
+}
+
+#[test]
+fn check_json_correlates_diagnostics_and_traces() {
+    let root = tempdir().unwrap();
+    write_project(root.path(), "#let helper() = missing\n#helper()");
+
+    let output = typrest_command()
+        .current_dir(root.path())
+        .args(["check", "--log-format", "json"])
+        .output()
+        .unwrap();
+
+    let records = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+        .collect::<Vec<_>>();
+    let primary = records
+        .iter()
+        .find(|record| record["event"] == "compiler.diagnostic")
+        .unwrap();
+    let trace = records
+        .iter()
+        .find(|record| record["event"] == "compiler.trace")
+        .unwrap();
+
+    assert_eq!(trace["report_id"], primary["report_id"]);
+    assert!(trace["related_index"].is_number());
+    assert!(!String::from_utf8_lossy(&output.stdout).contains("#let helper"));
+    assert!(output.stderr.is_empty());
 }
 
 #[test]
@@ -115,14 +161,14 @@ fn check_json_reports_ready_templates() {
     let root = tempdir().unwrap();
     write_project(root.path(), "Hello");
 
-    let output = Command::new(env!("CARGO_BIN_EXE_typrest"))
+    let output = typrest_command()
         .current_dir(root.path())
         .args(["check", "--log-format", "json"])
         .output()
         .unwrap();
 
     assert!(output.status.success());
-    let records = String::from_utf8_lossy(&output.stderr)
+    let records = String::from_utf8_lossy(&output.stdout)
         .lines()
         .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
         .collect::<Vec<_>>();
@@ -143,7 +189,7 @@ fn check_json_reports_ready_templates() {
             record["event"] == "template.ready" && record["template"] == "invoice"
         })
     );
-    assert!(output.stdout.is_empty());
+    assert!(output.stderr.is_empty());
 }
 
 #[test]
@@ -162,43 +208,44 @@ fn cached_packages_do_not_produce_default_package_output() {
     .unwrap();
     fs::write(package_dir.join("lib.typ"), "#let value = [cached]").unwrap();
 
-    let output = Command::new(env!("CARGO_BIN_EXE_typrest"))
+    let output = typrest_command()
         .current_dir(root.path())
         .args(["check", "--color", "never"])
         .output()
         .unwrap();
 
     assert!(output.status.success());
-    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        !stderr.to_lowercase().contains("package"),
-        "stderr was: {stderr}"
+        !stdout.to_lowercase().contains("package"),
+        "stdout was: {stdout}"
     );
+    assert!(output.stderr.is_empty());
 }
 
 #[test]
-fn check_writes_prebuild_warnings_to_stderr() {
+fn check_writes_prebuild_warnings_to_stdout() {
     let root = tempdir().unwrap();
     write_project(root.path(), "<orphan>");
 
-    let output = Command::new(env!("CARGO_BIN_EXE_typrest"))
+    let output = typrest_command()
         .current_dir(root.path())
         .args(["check", "--color", "never"])
         .output()
         .unwrap();
 
     assert!(output.status.success());
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("warning:"), "stderr was: {stderr}");
-    assert!(stderr.contains("not attached"), "stderr was: {stderr}");
-    assert!(output.stdout.is_empty());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("warning:"), "stdout was: {stdout}");
+    assert!(stdout.contains("not attached"), "stdout was: {stdout}");
+    assert!(output.stderr.is_empty());
 
-    let json_output = Command::new(env!("CARGO_BIN_EXE_typrest"))
+    let json_output = typrest_command()
         .current_dir(root.path())
         .args(["check", "--log-format", "json"])
         .output()
         .unwrap();
-    let records = String::from_utf8_lossy(&json_output.stderr)
+    let records = String::from_utf8_lossy(&json_output.stdout)
         .lines()
         .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
         .collect::<Vec<_>>();
@@ -207,7 +254,7 @@ fn check_writes_prebuild_warnings_to_stderr() {
             record["event"] == "compiler.diagnostic" && record["level"] == "WARN"
         })
     );
-    assert!(json_output.stdout.is_empty());
+    assert!(json_output.stderr.is_empty());
 }
 
 #[test]
@@ -220,18 +267,31 @@ fn check_reports_multiple_templates_in_order_with_a_count_only_summary() {
         fs::write(template_dir.join("main.typ"), "Hello").unwrap();
     }
 
-    let output = Command::new(env!("CARGO_BIN_EXE_typrest"))
+    let output = typrest_command()
         .current_dir(root.path())
         .args(["check", "--color", "never"])
         .output()
         .unwrap();
 
     assert!(output.status.success());
-    assert_eq!(
-        String::from_utf8_lossy(&output.stderr),
-        "Compiling template `invoice`\n Compiled template `invoice`\nCompiling template `resume`\n Compiled template `resume`\nCompiling template `support/thanks-cart`\n Compiled template `support/thanks-cart`\nCompiling template `support/welcome-doc`\n Compiled template `support/welcome-doc`\n\nTemplates ready: 4\n"
-    );
-    assert!(output.stdout.is_empty());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let messages = [
+        "compiling template `invoice`",
+        "compiled template `invoice`",
+        "compiling template `resume`",
+        "compiled template `resume`",
+        "compiling template `support/thanks-cart`",
+        "compiled template `support/thanks-cart`",
+        "compiling template `support/welcome-doc`",
+        "compiled template `support/welcome-doc`",
+        "templates ready: 4",
+    ];
+    let mut previous = 0;
+    for message in messages {
+        let position = stdout[previous..].find(message).unwrap() + previous;
+        previous = position + message.len();
+    }
+    assert!(output.stderr.is_empty());
 }
 
 #[test]
@@ -244,17 +304,80 @@ fn check_reports_an_empty_ready_registry_without_compilation_lines() {
     )
     .unwrap();
 
-    let output = Command::new(env!("CARGO_BIN_EXE_typrest"))
+    let output = typrest_command()
         .current_dir(root.path())
         .args(["check", "--color", "never"])
         .output()
         .unwrap();
 
     assert!(output.status.success());
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr == "Templates ready: 0\n", "stderr was: {stderr}");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains(" INFO templates ready: 0\n"));
     assert!(
-        !stderr.contains("Compiling template"),
-        "stderr was: {stderr}"
+        !stdout.contains("compiling template"),
+        "stdout was: {stdout}"
     );
+    assert!(output.stderr.is_empty());
+}
+
+#[test]
+fn rust_log_off_suppresses_tracing_but_not_pretty_compiler_diagnostics() {
+    let root = tempdir().unwrap();
+    write_project(root.path(), "#let broken =");
+
+    let output = typrest_command()
+        .current_dir(root.path())
+        .env("RUST_LOG", "off")
+        .args(["check", "--color", "never"])
+        .output()
+        .unwrap();
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("#let broken ="));
+    assert!(stdout.contains('^'));
+    assert!(!stdout.contains("compiling template"));
+    assert!(output.stderr.is_empty());
+}
+
+#[test]
+fn pretty_compiler_diagnostics_apply_stdout_color_policy() {
+    let root = tempdir().unwrap();
+    write_project(root.path(), "#let broken =");
+
+    let output = typrest_command()
+        .current_dir(root.path())
+        .args(["check", "--color", "always"])
+        .output()
+        .unwrap();
+
+    assert!(String::from_utf8_lossy(&output.stdout).contains("\u{1b}["));
+    assert!(output.stderr.is_empty());
+}
+
+#[test]
+fn cached_packages_are_logged_at_debug() {
+    let root = tempdir().unwrap();
+    write_project(
+        root.path(),
+        "#import \"@preview/fixture:1.0.0\": value\n#value",
+    );
+    let package_dir = root.path().join(".typrest/packages/preview/fixture/1.0.0");
+    fs::create_dir_all(&package_dir).unwrap();
+    fs::write(
+        package_dir.join("typst.toml"),
+        "[package]\nname = \"fixture\"\nversion = \"1.0.0\"\nentrypoint = \"lib.typ\"\n",
+    )
+    .unwrap();
+    fs::write(package_dir.join("lib.typ"), "#let value = [cached]").unwrap();
+
+    let output = typrest_command()
+        .current_dir(root.path())
+        .env("RUST_LOG", "typrest=debug")
+        .args(["check", "--color", "never"])
+        .output()
+        .unwrap();
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains(" DEBUG using cached package `@preview/fixture:1.0.0`"));
+    assert!(output.stderr.is_empty());
 }

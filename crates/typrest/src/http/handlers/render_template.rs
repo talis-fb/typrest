@@ -11,7 +11,7 @@ use typrest_core::{CompilationError, Document, RenderError, RenderRequest, Templ
 
 use crate::http::errors::ApiError;
 use crate::http::state::AppState;
-use crate::output::{DiagnosticContext, DiagnosticStage};
+use crate::logging::compiler_diagnostics;
 
 pub async fn render_template(
     State(state): State<AppState>,
@@ -56,12 +56,15 @@ pub async fn render_template(
     match result {
         Ok(document) => {
             let pdf_size = document.bytes().len();
-            state.reporter.report_warnings(
-                DiagnosticContext::Render,
-                DiagnosticStage::Compile,
-                &template_for_log,
-                document.warnings(),
-            );
+            for warning in document.warnings() {
+                compiler_diagnostics::trace(
+                    state.log_format,
+                    "render",
+                    "compile",
+                    Some(&template_for_log),
+                    warning,
+                );
+            }
             info!(
                 event = "render.completed",
                 template = %template_for_log,
@@ -76,15 +79,18 @@ pub async fn render_template(
         Err(error) => {
             if let RenderError::CompilationError(compilation_error) = &error {
                 let stage = match compilation_error {
-                    CompilationError::Failed(_) => DiagnosticStage::Compile,
-                    CompilationError::ExportFailed(_) => DiagnosticStage::Export,
+                    CompilationError::Failed(_) => "compile",
+                    CompilationError::ExportFailed(_) => "export",
                 };
-                state.reporter.report_compilation(
-                    DiagnosticContext::Render,
-                    stage,
-                    &template_for_log,
-                    compilation_error,
-                );
+                for value in compilation_error.report().diagnostics() {
+                    compiler_diagnostics::trace(
+                        state.log_format,
+                        "render",
+                        stage,
+                        Some(&template_for_log),
+                        value,
+                    );
+                }
             }
             warn!(
                 event = "render.failed",
