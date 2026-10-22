@@ -1,11 +1,16 @@
 # ADR-XXXX: Decision Title
 
 - **Date:** YYYY-MM
-- **Status:** In discussion
+- **Status:** Proposed
+
+<!-- Status: Proposed, Accepted, Superseded, or Rejected. When superseded, add
+     "- **Superseded by:** [ADR-NNNN](NNNN-title.md)" and, in the new record,
+     "- **Supersedes:** [ADR-MMMM](MMMM-title.md)". -->
 
 ## Context
 
-Describe the problem, constraints, and forces that make a decision necessary.
+Describe the problem, constraints, and forces that make a decision necessary. State the context so
+the record stands alone.
 
 ## Decision
 

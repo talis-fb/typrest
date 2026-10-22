@@ -1,46 +1,67 @@
 # Architectural Decision Records
 
-This directory records non-obvious architectural decisions for Typrest. Each ADR is an immutable
-historical record: clarify wording when necessary, but use a new ADR to change or reverse an
-accepted decision.
+This directory records why Typrest made a small number of costly-to-reverse architectural choices.
+An ADR explains a decision; it is never the only place that describes current behavior. Current
+behavior lives in [specifications](../specs/README.md) and [architecture documents](../architecture/overview.md).
 
-## Status Values
+## When an ADR is warranted
 
-- **Accepted**: active unless superseded.
-- **In discussion**: proposed but not approved for implementation.
+Write an ADR only when all of the following hold:
+
+1. At least two viable alternatives were seriously considered.
+2. The choice is costly to reverse, or it constrains a boundary, public contract, security
+   property, or operational behavior.
+3. The rationale cannot be derived from the product vision, a specification, or an obvious
+   engineering default.
+
+Do not write an ADR for:
+
+- restating the product premise;
+- describing the current structure, module layout, or behavior;
+- product scope and MVP boundaries, which belong in the [product vision](../product/vision.md) and
+  [`ROADMAP.md`](../../ROADMAP.md);
+- routine implementation choices, refactors, or a decision whose only alternative is a strawman.
+
+AI agents must propose an ADR and obtain human approval before creating one. They must not create
+ADRs to log routine changes.
+
+## Status values
+
+- **Proposed**: under discussion and not approved for implementation.
+- **Accepted**: approved and active unless superseded.
+- **Superseded**: replaced by a later ADR. Link to the superseding record.
 - **Rejected**: considered and not selected.
-- **Superseded**: replaced wholly or partly by a later ADR.
 
-## Decision Index
+## Immutability
+
+ADRs are append-only. Clarify wording when necessary, but do not delete or rewrite an accepted
+decision. Change or reverse it with a new ADR, then mark the earlier record **Superseded** and link
+both records. Numbers are permanent: never renumber or reuse one. Gaps are expected.
+
+The set below was pruned once, before the first release, to remove records that restated the
+product premise or described intermediate prototype decisions. Git history is the archive for the
+deleted records.
+
+## Decision index
 
 | ID | Decision | Date | Status |
 |---|---|---|---|
-| [ADR-0001](0001-integrate-typst-as-rust-library.md) | Integrate Typst as a Rust library | 2025-11 | Accepted |
-| [ADR-0002](0002-abstract-template-loading.md) | Abstract template loading behind a trait | 2025-11 | Superseded in part |
-| [ADR-0003](0003-package-filesystem-templates-with-deployment.md) | Package filesystem templates with the deployment | 2025-11 | Accepted |
 | [ADR-0004](0004-resolve-shared-during-loading.md) | Resolve `_shared/` during loading | 2025-11 | Accepted |
 | [ADR-0005](0005-inject-request-data-through-sys-inputs.md) | Inject request data through `sys.inputs` | 2025-11 | Accepted |
-| [ADR-0006](0006-restrict-template-names-to-safe-ascii.md) | Restrict template names to safe ASCII identifiers | 2026-06 | Superseded by ADR-0010 |
 | [ADR-0007](0007-expose-typrest-owned-compiler-diagnostics.md) | Expose Typrest-owned compiler diagnostics | 2026-07 | Accepted |
-| [ADR-0008](0008-embed-tracked-development-web-ui.md) | Embed the tracked development Web UI | 2026-07 | Superseded in part by ADR-0009 |
-| [ADR-0009](0009-gate-static-web-ui-routes.md) | Gate static Web UI routes, not metadata routes | 2026-08 | Superseded in part by ADR-0010 |
+| [ADR-0008](0008-embed-tracked-development-web-ui.md) | Embed the tracked development Web UI | 2026-07 | Accepted |
 | [ADR-0010](0010-derive-template-ids-from-folder-routes.md) | Derive template IDs and direct routes from folders | 2026-08 | Accepted |
 | [ADR-0011](0011-resolve-preview-packages-during-preparation.md) | Resolve preview packages during preparation | 2026-08 | Accepted |
 | [ADR-0012](0012-consolidate-application-packages.md) | Consolidate application packages around the core boundary | 2026-08 | Accepted |
-| [ADR-0013](0013-separate-prebuild-feedback-from-backend-logs.md) | Separate pre-build feedback from backend logs | 2026-08 | Superseded |
 | [ADR-0014](0014-use-one-stdout-tracing-stream.md) | Use one stdout tracing stream | 2026-08 | Accepted |
 
-## Adding a Decision
+## Adding a decision
 
-1. Copy [`template.md`](template.md) to the next four-digit sequence, such as
-   `0010-short-decision-title.md`.
-2. Keep the numeric identifier forever; do not reorder or reuse numbers.
-3. Describe the context, decision, considered alternatives, and consequences.
-4. Add the ADR to the ordered table above.
-5. When replacing an earlier decision, link both records and update the earlier status to
-   **Superseded** or **Superseded in part**.
-6. Update related specifications, architecture documentation, tests, and roadmap entries in the
-   same change.
-
-Use ADRs for decisions with meaningful architectural, compatibility, security, operational, or
-product-scope consequences. Routine implementation details do not need an ADR.
+1. Get human approval for the proposal.
+2. Copy [`template.md`](template.md) to the next unused four-digit number, such as
+   `0015-short-decision-title.md`, with status **Proposed**.
+3. Describe the context, decision, alternatives, and consequences.
+4. Add the record to the index above.
+5. When the decision is approved, set the status to **Accepted**. When replacing an earlier decision,
+   link both records and mark the earlier one **Superseded**.
+6. Update affected specifications, architecture documents, tests, and `ROADMAP.md` in the same change.
