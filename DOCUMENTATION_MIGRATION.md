@@ -60,8 +60,7 @@ Adapt this structure to the actual project after the audit. Do not create empty 
 - `docs/adr/`
 - `docs/plans/README.md`
 - `docs/plans/template.md`
-- `docs/plans/active/`
-- `docs/plans/completed/` (only if D4 keeps completed plans)
+- `docs/plans/`: active implementation plans, one file each, deleted when completed (D4).
 
 Potential specifications include CLI behavior, configuration, schema versions, template discovery and loading, compilation, diagnostics, logging, and Web UI behavior.
 
@@ -161,7 +160,6 @@ Produce an audit report, appended to this file as an "Audit Report" section, con
 - Questions requiring human decisions
 - Proposed requirement ID namespaces
 - Proposed final documentation tree
-- Proposed answers to the [Decisions Needed](#14-decisions-needed)
 
 Do not modify existing documentation or application code during this phase, apart from the approved migration plan and audit report.
 
@@ -207,7 +205,7 @@ Move the rules from this plan that must outlive it into `docs/adr/README.md`:
 - The ADR admission criteria (section 4.1).
 - The append-only rule that applies after the migration (end of section 4.2).
 - The rule that agents propose an ADR and obtain human approval before creating one.
-- The approved ADR status set (see [Decisions Needed](#14-decisions-needed)).
+- The approved ADR status set (D6 in [Approved Decisions](#14-approved-decisions)).
 
 Put the documentation authoring conventions in `docs/README.md`, extending its existing
 "Documentation Conventions" section, unless the audit shows a separate guide is clearly needed.
@@ -264,7 +262,7 @@ Check that:
 
 Run these checks:
 
-- Verify links and anchors with the method chosen in [Decisions Needed](#14-decisions-needed).
+- Verify links and anchors with the link check script from D7.
 - Search the repository for references to deleted ADRs (`ADR-0001`, `ADR-0002`, `ADR-0003`,
   `ADR-0006`, `ADR-0009`, `ADR-0013`, and their file names); none may remain.
 - Search for references to `DOCUMENTATION_MIGRATION`; none may remain outside this file.
@@ -350,17 +348,217 @@ At the end of each phase, summarize the work and identify the decisions needed b
 
 Do not interpret permission to migrate documentation as permission to invent product requirements or modify application behavior.
 
-## 14. Decisions Needed
+## 14. Approved Decisions
 
-Resolve these before Phase 2. The audit report proposes an answer for each; record the approved
-answer here.
+These decisions are approved. Phase 2 writes the lasting ones into the permanent documentation.
 
-| # | Decision | Recommendation |
+- **D1 — Requirement ID scope.** Assign requirement IDs only to externally observable contracts:
+  schema v1, the CLI, `typrest.toml`, and the HTTP surface. Architecture documents and guides have
+  no IDs.
+- **D2 — Removed IDs.** IDs are unique within their namespace. When a requirement is removed, keep
+  its ID in place marked as removed (for example, `SCHEMA-012: (removed)`); there is no separate
+  registry. Removed IDs are never reused.
+- **D3 — Document templates.** Provide templates only for ADRs, plans, and specifications. Vision,
+  architecture, and development documents follow the conventions in `docs/README.md`.
+- **D4 — Completed plans.** Delete a plan when it is completed; Git history is the archive. There
+  is no `docs/plans/completed/` directory.
+- **D5 — Normative language.** Use lowercase `must`, `must not`, `should`, and `may`, not
+  uppercase RFC 2119 keywords.
+- **D6 — ADR statuses.** Use Proposed, Accepted, Superseded, and Rejected. "In discussion" becomes
+  Proposed; "Superseded in part" is no longer used.
+- **D7 — Link validation.** Commit a small script that checks relative links and anchors, and run
+  it manually during the migration. Whether to add it to CI is a separate decision.
+
+## 15. Audit Report
+
+Phase 1 output. Nothing outside this file was modified. Evidence: every Markdown file in the
+repository, `crates/typrest/src/http/{router,errors}.rs`, `.github/workflows/ci.yml`, and the file
+listing of the repository root.
+
+### 15.1 Existing file inventory and proposed destinations
+
+| Current file | Lines | Kind today | Proposed destination | Action |
+|---|---|---|---|---|
+| `README.md` | 200 | User intro + quickstart + restated contracts | `README.md` | Keep. Replace the HTTP API section with a short summary linking the HTTP spec. |
+| `AGENTS.md` | 123 | Agent entry point | `AGENTS.md` | Rewrite in Phase 5. |
+| `CONTRIBUTING.md` | 158 | Contributor workflow | `CONTRIBUTING.md` | Keep. Align with `AGENTS.md` in Phase 5. |
+| `ROADMAP.md` | 92 | Status | `ROADMAP.md` | Keep. Fix links; add the Store-mode and packaging scope moved out of ADR-0003. |
+| `docs/README.md` | 48 | Index + conventions | `docs/README.md` | Rewrite: new index and authoring conventions. |
+| `docs/architecture.md` | 160 | Architecture, domain terms, HTTP route table | `docs/architecture/overview.md` | `git mv`, then move the HTTP route table to the HTTP spec. |
+| `docs/startup-template-compilation.md` | 108 | Architecture with some observable behavior | `docs/architecture/template-lifecycle.md` | `git mv`. Replace the duplicated warmup-payload rules with a link to the schema spec. |
+| `docs/typst-integration.md` | 111 | Implementation reference | `docs/architecture/compiler.md` | `git mv`. Absorbs the ADR-0001 residue and the single Typst-upgrade checklist. |
+| `docs/cli-spec.md` | 174 | Spec | `docs/specs/cli.md` | `git mv`, add IDs. |
+| `docs/typrest-toml-spec.md` | 112 | Spec | `docs/specs/typrest-toml.md` | `git mv`, add IDs. |
+| `docs/schema-v1.md` | 212 | Spec | `docs/specs/schema-v1.md` | `git mv`, add IDs. |
+| `docs/diagnostics.md` | 104 | Spec plus duplicated Typst-upgrade steps | `docs/specs/diagnostics.md` | `git mv`. Move the upgrade checklist to `compiler.md`. The HTTP body example becomes a link to the HTTP spec. |
+| `docs/logging.md` | 75 | Spec | `docs/specs/logging.md` | `git mv`. |
+| `docs/webui-spec.md` | 209 | Spec mixing HTTP routes and client behavior | `docs/specs/webui.md` | `git mv`. The route and security contract moves to the HTTP spec. Client behavior stays. |
+| `docs/webui-development.md` | 194 | Guide | `docs/development/webui.md` | `git mv`. Trim the "Use the Workspace" section that restates the spec. |
+| `docs/testing.md` | 112 | Guide | `docs/development/testing.md` | `git mv`. |
+| `docs/adr/README.md`, `template.md` | 46, 23 | ADR process | same paths | Rewrite for D6 and the lasting rules from section 4. |
+| `docs/adr/0001`–`0014` | — | ADRs | see 15.2 | 14 → 8. |
+| `.github/workflows/ci.yml` | — | CI | unchanged | No documentation job exists. D7 keeps the link check manual. |
+| `DOCUMENTATION_MIGRATION.md` | — | Plan | deleted at the end | — |
+| `opencode.json` (untracked) | — | Unrelated tool config | untouched | Not part of the migration. Do not stage it. |
+| `Dockerfile`, `docker-compose.yml` | — | Obsolete, non-Markdown | untouched | Out of scope. Docs already flag them as obsolete, and ROADMAP tracks the fix. |
+
+There is no existing documentation script. CI runs only `cargo fmt`, `clippy` and `test`; it does not
+run the Web UI checks.
+
+### 15.2 Confirmed ADR dispositions
+
+The proposal in 4.3 holds. The notes below add what the audit found.
+
+| ADR | Disposition | Content move before deletion / rewrite notes |
 |---|---|---|
-| D1 | Requirement ID scope | Assign IDs only to externally observable contracts: schema v1, CLI, `typrest.toml`, and the HTTP surface. Architecture documents and guides have no IDs. |
-| D2 | Requirement ID registry | Keep IDs unique per namespace within each specification. Mark removed IDs as removed in place instead of keeping a separate registry. |
-| D3 | Document templates | Provide templates only for ADRs, plans, and specifications. Vision, architecture, and development documents follow the conventions in `docs/README.md` without a template. |
-| D4 | Completed plans | Delete plans when they are completed; Git history is the archive, consistent with the ADR pruning policy. Drop `docs/plans/completed/`. |
-| D5 | Normative language | Keep lowercase `must`/`must not`/`should`/`may`, as `docs/README.md` already does, instead of uppercase RFC 2119 keywords. |
-| D6 | ADR status set | Use Proposed, Accepted, Superseded, and Rejected. Drop "In discussion" (replaced by Proposed) and "Superseded in part" (removed by the merges in section 4.3). |
-| D7 | Link validation method | Use a small, committed shell or script check for relative links and anchors, run manually during the migration; decide separately whether to add it to CI. Adopting an external tool such as `lychee` requires justification under section 12. |
+| 0001 | Delete | Single binary, compiler ACL and joint pinning already live in `architecture.md` and `typst-integration.md`. Add one short "why in-process Typst" paragraph to the vision. Reasons: browser automation is heavy, language-specific PDF libraries couple callers to one ecosystem, a child process adds a binary dependency and per-render overhead. |
+| 0002 | Delete | Loader/registry boundary is already in `architecture.md`. The statement "handlers never receive a loader" survives in ADR-0012 and `AGENTS.md`. |
+| 0003 | Delete | Vision gets "templates are deployment artifacts". `ROADMAP.md` already defers Store mode. The Docker note is already an open item in `ROADMAP.md`. |
+| 0004 | Keep | No change. |
+| 0005 | Keep | The plan says keep. Its only alternative is a temp file, which is close to the "strawman" exclusion in 4.1. See question Q6. |
+| 0006 | Delete | Fully superseded. The safe-ASCII rule and its examples (`invoice-v2` valid, `../invoice` invalid) are already carried by ADR-0010 and `architecture.md`. Put the examples in the template-layout spec. |
+| 0007 | Keep | Replace "three Typst crates" with the five pinned crates. |
+| 0008 | Rewrite, absorb 0009 | One Web UI decision. Context: no runtime asset directory, no npm inside Cargo. Decision: committed `webui/dist`, embedded assets, `web_ui` gates only the static routes, metadata routes always mounted. Use the current `/_webui` paths, not `/webui`. |
+| 0009 | Delete | Its security consequence moves to the HTTP spec: metadata routes are internal, unversioned, and unauthenticated, so confidential deployments need network controls. This text already exists in `webui-spec.md`, `typrest-toml-spec.md` and `webui-development.md`. |
+| 0010 | Rewrite header | Remove both `Supersedes` lines and any 0006/0009 wording. Keep the reference to ADR-0004. |
+| 0011 | Keep | No change. |
+| 0012 | Rewrite last bullet | Replace the ADR-0002 bullet with a standalone statement: the `TemplateLoader` abstraction lives in `typrest-core`, and the filesystem implementation lives in the application package. |
+| 0013 | Delete | Fully superseded. |
+| 0014 | Rewrite context | Describe the earlier design directly: pre-build feedback on stderr, running-server logs on stdout. Drop the `Supersedes` line and the ADR-0013 link. |
+
+References to deleted ADRs found by the audit:
+
+- `docs/README.md`: no direct 0001/0002/0003/0006/0009/0013 links. It links 0011 and 0012 as the "documentation" for package resolution and workspace boundaries (see 15.4).
+- `docs/adr/0003`, `0010`, `0012`, `0014`: contain links to deleted records.
+- `docs/adr/0013`: links `logging.md`. It is deleted anyway.
+- `docs/adr/README.md`: index rows and the "Superseded in part" statuses.
+
+No source or non-Markdown file references `docs/` or any ADR.
+
+### 15.3 Overlap and duplication
+
+| Topic | Currently stated in | Canonical home |
+|---|---|---|
+| Route table, `web_ui` gating, metadata routes always mounted | `architecture.md`, `typrest-toml-spec.md`, `webui-spec.md`, `webui-development.md`, `README.md`, `AGENTS.md`, ADR-0009 | New HTTP spec. Others link. |
+| "No auth, bind to loopback" | `typrest-toml-spec.md`, `webui-spec.md`, `webui-development.md`, `README.md`, ADR-0009 | New HTTP spec, Web UI spec for the UI-specific warning. |
+| Warmup sample payload precedence | `schema-v1.md` and `startup-template-compilation.md` (identical lists) | `schema-v1.md`. |
+| Typst upgrade checklist | `diagnostics.md` and `typst-integration.md` | `compiler.md`. |
+| Exact version pin of Typst crates | `architecture.md`, `typst-integration.md`, `diagnostics.md`, ADR-0007, `AGENTS.md` | `compiler.md` states it. `AGENTS.md` keeps a one-line rule. |
+| `sys.inputs.data` snippet | `README.md`, `cli-spec.md`, `typst-integration.md`, ADR-0005 | `compiler.md` for the mechanism. `README.md` and `cli-spec.md` keep their examples because the scaffold output is part of the CLI spec. |
+| Template discovery rules | `README.md`, `architecture.md`, `cli-spec.md`, ADR-0010, `AGENTS.md` | New template-layout spec. |
+| Package resolution rules | `README.md`, `cli-spec.md`, `typst-integration.md`, ADR-0011 | Template-layout spec (author-visible rules). `compiler.md` keeps the mechanism. ADR-0011 keeps the rationale. |
+| Validation commands | `README.md`, `AGENTS.md`, `CONTRIBUTING.md`, `testing.md`, `webui-development.md` | `development/testing.md`. Others keep a short list or link. |
+| Stream and event contract | `logging.md`, `diagnostics.md`, `cli-spec.md`, ADR-0014 | `logging.md`. |
+| Registry/startup lifecycle | `architecture.md` and `startup-template-compilation.md` | `template-lifecycle.md`. `overview.md` keeps a diagram and a link. |
+| Web UI use and behavior | `webui-spec.md` and `webui-development.md` | `webui.md` spec. The guide keeps only setup, local dev, troubleshooting. |
+
+### 15.4 Contradictions and inconsistencies
+
+1. **Pin count.** `diagnostics.md` says "update all three exact versions" and ADR-0007 says "three Typst crates", while both name five pinned crates (`typst`, `typst-pdf`, `typst-assets`, `typst-kit`, `typst-syntax`). `architecture.md`, `typst-integration.md` and `AGENTS.md` list five. Resolve to five.
+2. **HTTP surface in `AGENTS.md`.** It lists the routes but omits `GET /{*template_id}`. The router (`router.rs`) mounts it, and `architecture.md`, `README.md` and `webui-spec.md` document it. The router is the truth.
+3. **ADR-0009 route names.** It documents `/webui`, but the router mounts `/_webui` (changed by ADR-0010). It is being merged anyway.
+4. **ADR README.** The "Adding a Decision" example uses `0010-...` as the next number, which is stale. The status set includes "In discussion" and "Superseded in part", which D6 removes.
+5. **Docs index uses ADRs as the only reference** for package resolution (ADR-0011) and workspace boundaries (ADR-0012). That breaks principle 8. Current behavior needs a spec or architecture home.
+6. **`docs/README.md` conventions** say "Use `must` for normative requirements" but do not define `should` or `may`. D5 needs the fuller convention.
+
+No contradiction between code and docs on routes or error codes. I checked `router.rs` and `errors.rs`: `template_not_found` (404), `schema_validation_failed` (422), `compilation_failed` (500), and `invalid_template_id` / `invalid_json` (400) all match the docs.
+
+### 15.5 Outdated or unsupported claims
+
+- `webui-spec.md` and `webui-development.md` say "Rust and Docker builds do not invoke Node". The Docker files are obsolete, so the Docker half is unverified. Reword to Cargo builds only.
+- `testing.md` says "CI configuration remains authoritative for required jobs". CI runs no Web UI or documentation checks, so the Web UI commands are conventions, not CI-enforced.
+- `README.md` and `testing.md` say the Docker files are obsolete. Accurate today. The statement is removed once ROADMAP closes that item, and not before.
+- `typst-integration.md` says the architecture test rejects imports outside `compiler/`. I did not verify the test exists (Phase 4 task).
+- `webui-spec.md` "Acceptance Criteria" asserts test-like facts (blob revocation, content types). I have not verified each against the frontend tests. Phase 4 must either verify them or reword them as requirements.
+- `testing.md` names focused commands such as `cargo test -p typrest --test check`. Verify each runs before keeping it.
+
+### 15.6 Important behavior lacking documentation
+
+- **No HTTP spec.** The render contract (`GET`/`POST /{*template_id}`, 200 with `application/pdf`, bodyless GET/POST behavior, 400 `invalid_json`, 400 `invalid_template_id`, 404, 422, 500 envelope) is described only in `README.md` and in fragments of `webui-spec.md` and `diagnostics.md`. The `/_healthz` response body appears only in `README.md`.
+- **Template layout and discovery** has no spec. It is spread over `README.md`, `architecture.md`, `cli-spec.md` and ADR-0010: segment character rules, the `_` prefix, `templates/main.typ` being invalid, nested `main.typ`, `_shared/` precedence, `schema.json` vs `schema.yaml` handling, custom font discovery (lowercase `.ttf`/`.otf`).
+- **Package support** has no spec: literal fully versioned `@preview` only, cache location, failure behavior in `check`, startup and watch.
+- **Behavior I could not confirm from code in this phase** and will not document without checking: maximum payload size, request content-type enforcement, the response when a template is removed in watch mode, and HTTP response headers for PDFs other than `Content-Type`.
+
+### 15.7 Requirements inferable with confidence
+
+These are already stated normatively in current documents, so they can become IDs without invention:
+
+- Schema v1 rules: file selection, document shape, field table, required/default/enum/type semantics, validation order, load-time errors, sample payload derivation.
+- `typrest.toml` fields, `templates_root` resolution and rejection rules, `web_ui` effects.
+- CLI syntax, `init` outputs and failure conditions, `check`/`serve` exit status and options, discovery from ancestors.
+- HTTP routes, availability by `web_ui`, error codes and statuses, safe-diagnostic rule (no source text or physical paths).
+
+### 15.8 Questions requiring a human decision
+
+| # | Question | Recommendation |
+|---|---|---|
+| Q1 | D1 limits IDs to schema, CLI, `typrest.toml` and HTTP. Template layout/discovery and package imports are also externally observable contracts. Add a `TEMPLATE` namespace and a `docs/specs/templates.md`? | Yes. It is the largest uncovered contract, and ADR-0010 and ADR-0011 currently carry it. |
+| Q2 | Create `docs/specs/http-api.md` as the single home for routes, errors, health and metadata? | Yes (see 15.6). |
+| Q3 | Web UI client behavior (form controls, mode conversion, Blob lifecycle) falls outside D1. Keep it as an ID-free spec? | Yes. Its static routes and caching go to the HTTP spec with IDs. |
+| Q4 | Language and location of the link-check script (D7). | A single-file Python 3, standard-library-only script at `scripts/check-doc-links.py`. The repo has no Python today, so the alternative is a small Node script under `webui/`, which ties documentation to the frontend toolchain. |
+| Q5 | Rewritten ADRs 0008 and 0014: keep the original date or use the rewrite date? | Keep the original decision date and add a one-line "Rewritten during the 2026 documentation migration" note. |
+| Q6 | ADR-0005 and ADR-0007 are borderline against 4.1 (weak alternatives). Keep both as the plan says? | Keep. Both constrain a public contract (template authoring and diagnostic boundary). Revisit only if you want a stricter set. |
+| Q7 | Fix the "three vs five crates" wording as part of migration even though it changes a stated number? | Yes. Code and the other documents agree on five. |
+
+### 15.9 Proposed requirement ID namespaces
+
+Format `NAMESPACE-NNN`, zero-padded, per D2. Counts are estimates from the current prose, to be fixed in Phase 3.
+
+| Namespace | Spec | Est. count |
+|---|---|---|
+| `SCHEMA` | `docs/specs/schema-v1.md` | ~45 |
+| `CONFIG` | `docs/specs/typrest-toml.md` | ~15 |
+| `CLI` | `docs/specs/cli.md` | ~30 |
+| `HTTP` | `docs/specs/http-api.md` | ~35 |
+| `TEMPLATE` (pending Q1) | `docs/specs/templates.md` | ~25 |
+
+`logging.md`, `diagnostics.md` and `webui.md` get no IDs under D1 unless you extend it.
+
+### 15.10 Proposed final documentation tree
+
+```text
+AGENTS.md
+README.md
+CONTRIBUTING.md
+ROADMAP.md
+scripts/check-doc-links.py            # D7, location pending Q4
+docs/
+  README.md                           # index + authoring conventions
+  product/
+    vision.md
+  specs/
+    README.md
+    template.md                       # spec template (D3)
+    cli.md
+    typrest-toml.md
+    schema-v1.md
+    templates.md                      # pending Q1
+    http-api.md                       # pending Q2
+    diagnostics.md
+    logging.md
+    webui.md
+  architecture/
+    README.md
+    overview.md
+    template-lifecycle.md
+    compiler.md
+  development/
+    README.md
+    testing.md
+    webui.md
+  adr/
+    README.md
+    template.md
+    0004-… 0005-… 0007-… 0008-… 0010-… 0011-… 0012-… 0014-…
+  plans/
+    README.md
+    template.md
+```
+
+`docs/specs/README.md` and `docs/development/README.md` are short indexes. `docs/architecture/README.md` is
+optional and may be folded into `docs/README.md` if it ends up with fewer than ten lines.
+
+### 15.11 Decisions needed before Phase 2
+
+Answer Q1–Q7, or reply "accept recommendations". Phase 2 then creates the conventions and templates,
+and Phase 3 migrates the files.
