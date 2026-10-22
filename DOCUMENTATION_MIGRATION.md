@@ -1,6 +1,6 @@
 # Documentation Standard Migration
 
-Status: Draft  
+Status: Executed; awaiting review  
 Type: Repository-wide documentation refactor
 
 This file is temporary. It'll be deleted when the migration is complete. Any rule in it that must
@@ -315,21 +315,21 @@ Review the final Git diff for accidental source-code changes, lost content, unne
 
 The migration is complete only when:
 
-- [ ] The documentation hierarchy has a clearly defined purpose for each document category.
-- [ ] All existing documentation has been inventoried and accounted for.
-- [ ] Every original ADR has a recorded disposition, and still-true content from deleted ADRs lives in its canonical document.
-- [ ] Every surviving ADR meets the admission criteria and stands alone without links to deleted ADRs.
-- [ ] The new templates and conventions are documented.
-- [ ] Current behavior is documented without silently inventing requirements.
-- [ ] Known contradictions and ambiguities are explicitly recorded.
-- [ ] Normative requirements use stable IDs and consistent language.
-- [ ] Specifications, architecture, ADRs, and plans have distinct responsibilities.
-- [ ] Internal links and documentation indexes have been validated.
-- [ ] `AGENTS.md` is concise, accurate, and actionable.
-- [ ] Existing application behavior and source code remain unchanged unless a separate, explicitly approved change is required.
+- [x] The documentation hierarchy has a clearly defined purpose for each document category.
+- [x] All existing documentation has been inventoried and accounted for.
+- [x] Every original ADR has a recorded disposition, and still-true content from deleted ADRs lives in its canonical document.
+- [x] Every surviving ADR meets the admission criteria and stands alone without links to deleted ADRs.
+- [x] The new templates and conventions are documented.
+- [x] Current behavior is documented without silently inventing requirements.
+- [x] Known contradictions and ambiguities are explicitly recorded.
+- [x] Normative requirements use stable IDs and consistent language.
+- [x] Specifications, architecture, ADRs, and plans have distinct responsibilities.
+- [x] Internal links and documentation indexes have been validated.
+- [x] `AGENTS.md` is concise, accurate, and actionable.
+- [x] Existing application behavior and source code remain unchanged unless a separate, explicitly approved change is required.
 - [ ] The final migration report has been reviewed.
-- [ ] All blocking decisions have been resolved or explicitly left for human approval.
-- [ ] The lasting rules from this plan live in `docs/adr/README.md` and `docs/README.md`.
+- [x] All blocking decisions have been resolved or explicitly left for human approval.
+- [x] The lasting rules from this plan live in `docs/adr/README.md` and `docs/README.md`.
 - [ ] No file references `DOCUMENTATION_MIGRATION.md` and it can be deleted when user decide.
 ## 12. Out of Scope
 
@@ -562,3 +562,115 @@ optional and may be folded into `docs/README.md` if it ends up with fewer than t
 
 Answer Q1–Q7, or reply "accept recommendations". Phase 2 then creates the conventions and templates,
 and Phase 3 migrates the files.
+
+## 16. Final Report
+
+All approved recommendations (Q1–Q7) were applied.
+
+### Final documentation tree
+
+```text
+AGENTS.md  README.md  CONTRIBUTING.md  ROADMAP.md
+scripts/check-doc-links.py
+docs/
+  README.md
+  product/vision.md
+  specs/      README.md template.md cli.md typrest-toml.md templates.md schema-v1.md
+              http-api.md diagnostics.md logging.md webui.md
+  architecture/  overview.md template-lifecycle.md compiler.md
+  development/   README.md testing.md webui.md
+  adr/        README.md template.md 0004 0005 0007 0008 0010 0011 0012 0014
+  plans/      README.md template.md
+```
+
+`docs/architecture/README.md` was not created; the index in `docs/README.md` covers it.
+
+### Original document → destination
+
+| Original | Destination |
+|---|---|
+| `docs/architecture.md` | `docs/architecture/overview.md` (HTTP route table → `specs/http-api.md`) |
+| `docs/startup-template-compilation.md` | `docs/architecture/template-lifecycle.md` (warmup rules → `SCHEMA-100`) |
+| `docs/typst-integration.md` | `docs/architecture/compiler.md` (absorbs ADR-0001 residue and the upgrade checklist) |
+| `docs/cli-spec.md` | `docs/specs/cli.md` (`CLI-*`; discovery → `specs/templates.md`) |
+| `docs/typrest-toml-spec.md` | `docs/specs/typrest-toml.md` (`CONFIG-*`) |
+| `docs/schema-v1.md` | `docs/specs/schema-v1.md` (`SCHEMA-*`) |
+| `docs/diagnostics.md` | `docs/specs/diagnostics.md` (HTTP body → `HTTP-041..044`; upgrade steps → `compiler.md`) |
+| `docs/logging.md` | `docs/specs/logging.md` |
+| `docs/webui-spec.md` | `docs/specs/webui.md` (routes, caching, security → `HTTP-050..064`) |
+| `docs/webui-development.md` | `docs/development/webui.md` |
+| `docs/testing.md` | `docs/development/testing.md` |
+| ADR 0001, 0002, 0003, 0006, 0013 | deleted; content per 15.2 (vision, `ROADMAP.md`, `compiler.md`, `templates.md`) |
+| ADR 0008 + 0009 | merged into rewritten ADR-0008 |
+| ADR 0010, 0012, 0014 | rewritten to stand alone |
+| ADR 0004, 0005, 0007, 0011 | kept (0007: five crates) |
+| `docs/adr/README.md`, `template.md`, `docs/README.md` | rewritten |
+| `README.md`, `ROADMAP.md`, `CONTRIBUTING.md`, `AGENTS.md` | links repaired, duplicated contracts replaced by links |
+
+New: `product/vision.md`, `specs/http-api.md`, `specs/templates.md`, `specs/README.md`, `specs/template.md`,
+`development/README.md`, `plans/README.md`, `plans/template.md`, `scripts/check-doc-links.py`.
+
+### Requirement IDs
+
+| Namespace | Count |
+|---|---|
+| `SCHEMA` | 42 |
+| `CONFIG` | 14 |
+| `CLI` | 23 |
+| `TEMPLATE` | 26 |
+| `HTTP` | 28 |
+
+No removed IDs exist yet. Counts differ from the estimates in 15.9 because requirements were grouped
+by observable behavior.
+
+### Validation results
+
+| Check | Result |
+|---|---|
+| `python3 -I scripts/check-doc-links.py` | 0 broken links |
+| `git diff --check` | clean |
+| References to deleted ADRs (numbers and file names) | none outside this file |
+| References to `DOCUMENTATION_MIGRATION` | only this file |
+| `git diff --stat main -- ':!*.md'` | only `scripts/check-doc-links.py` (the D7 script, added on purpose); no source code changed |
+| `cargo test --workspace` | all pass |
+| `cargo test -p typrest-core compiler`, `-p typrest-core schema`, `-p typrest project`, `-p typrest http`, `-p typrest --test check` (the commands in `testing.md`) | all run and pass |
+| `typrest --help`, `typrest serve --help` | match `CLI-001`, `CLI-002`, and the `serve` options table |
+| Typst imports outside `compiler/` | none (`rg` check) |
+
+Not run: `cargo fmt`/`clippy` (no Rust file changed) and the Web UI commands (no frontend change).
+
+### Contradictions and corrections made
+
+1. `README.md` claimed that a bodyless request to a schema-backed template returns the invalid-JSON
+   error. The handler uses `{}` for any empty body and then validates it; `POST` without
+   `Content-Type: application/json` returns `400 invalid_json`. The code was treated as truth
+   (`HTTP-021`, `HTTP-022`). The behavior is covered by the `post_render_requires_json_content_type`
+   test, but no test covers an empty-body request to a schema with required properties.
+2. "Three" vs five pinned Typst crates: corrected to five (ADR-0007, `compiler.md`).
+3. `AGENTS.md` omitted `GET /{*template_id}`; the section now links to the HTTP spec.
+4. Docs and `testing.md` claimed an "architecture test" rejecting Typst imports outside `compiler/`.
+   None exists. The docs now say so and give an `rg` check.
+5. `TEMPLATE-014` records that any visited non-underscore directory with an invalid segment fails
+   discovery, even without `main.typ`. The prior prose implied only template folders were checked.
+   This is current code behavior, not verified by a dedicated test.
+
+### Open questions and known gaps
+
+- Not verified: maximum payload size; response when a watched template is removed;
+  `HTTP-064` and `CLI-004` are taken from router code and earlier prose, without new tests.
+- `webui.md` acceptance criteria were reduced to behaviors the spec itself describes; frontend tests
+  under `webui/` were not audited against them.
+- Whether to run the link check in CI is deferred (tracked in `ROADMAP.md`).
+- Docker files remain obsolete and out of scope; `ROADMAP.md` still tracks them.
+- `opencode.json` is untracked, unrelated, and was not touched.
+
+### Recommended follow-up
+
+- Add an automated test that rejects Typst imports outside `compiler/`, or drop the rule's claim of enforcement.
+- Add an end-to-end test for the empty-body, required-property case.
+- Decide on CI for the link check.
+
+### Delete this file
+
+Delete `DOCUMENTATION_MIGRATION.md` once the report is copied into the pull request description.
+The permanent rules now live in `docs/README.md` and `docs/adr/README.md`.
