@@ -1,6 +1,6 @@
 # Documentation Standard Migration
 
-Status: Executed; awaiting review  
+Status: Executed; awaiting review
 Type: Repository-wide documentation refactor
 
 This file is temporary. It'll be deleted when the migration is complete. Any rule in it that must
