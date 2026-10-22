@@ -24,23 +24,25 @@ not implemented. Proposals in these areas require an explicit scope decision bef
 | `crates/typrest-core` | Domain types, validation, prepared registry, rendering, and the Typst compiler boundary |
 | `crates/typrest` | CLI, project loading, package resolution, watch mode, HTTP, and diagnostics |
 | `webui` | Optional Svelte development UI and committed production assets |
-| `docs` | Specifications, architecture, diagnostics, testing guidance, and ADRs |
+| `docs` | Product vision, specifications, architecture, development guides, ADRs, and plans |
 | `examples/templates` | Example templates, schemas, and payloads |
 
-Start with the [documentation index](docs/README.md). Read the relevant specification before
+Start with the [documentation index](docs/README.md). Read the relevant document before
 changing behavior:
 
-- [Architecture](docs/architecture.md) for domain or HTTP-boundary changes;
-- [Schema v1](docs/schema-v1.md) for schema parsing or validation;
-- [CLI specification](docs/cli-spec.md) and [`typrest.toml` specification](docs/typrest-toml-spec.md)
-  for CLI or project-discovery changes;
-- [Startup template compilation](docs/startup-template-compilation.md) for registry, startup, or
+- [Architecture overview](docs/architecture/overview.md) for domain or boundary changes;
+- [Template layout](docs/specs/templates.md) and [Schema v1](docs/specs/schema-v1.md) for template
+  discovery, packages, schema parsing, or validation;
+- [CLI](docs/specs/cli.md) and [`typrest.toml`](docs/specs/typrest-toml.md) specifications for CLI
+  or project-discovery changes;
+- [HTTP API](docs/specs/http-api.md) for routes, responses, and errors;
+- [Template lifecycle](docs/architecture/template-lifecycle.md) for registry, startup, or
   watch-mode changes;
-- [Typst integration](docs/typst-integration.md) and [diagnostics](docs/diagnostics.md) for compiler,
-  fonts, packages, or error-reporting changes;
-- [Web UI development](docs/webui-development.md) and the [Web UI specification](docs/webui-spec.md)
+- [Compiler architecture](docs/architecture/compiler.md) and
+  [diagnostics](docs/specs/diagnostics.md) for compiler, fonts, packages, or error reporting;
+- [Web UI development](docs/development/webui.md) and the [Web UI specification](docs/specs/webui.md)
   for frontend changes;
-- [Testing](docs/testing.md) for test placement and validation guidance.
+- [Testing](docs/development/testing.md) for test placement and validation guidance.
 
 AI coding agents should also follow [AGENTS.md](AGENTS.md). Contributors remain responsible for
 understanding their submissions, verifying generated or assisted work, and ensuring that all
@@ -80,17 +82,21 @@ cd webui
 npm ci
 ```
 
-See the [Web UI development guide](docs/webui-development.md) for the local Vite workflow.
+See the [Web UI development guide](docs/development/webui.md) for the local Vite workflow.
 
 ## Making a Change
 
 1. Create a focused branch from the current default branch.
 2. Keep the change scoped; avoid unrelated cleanup in the same pull request.
 3. Add or update tests for behavior changes and regressions.
-4. Update the canonical specification when a public contract changes.
-5. Add or supersede an [architectural decision record](docs/adr/README.md) when a non-obvious
-   architectural choice changes an accepted decision.
+4. Update the canonical specification, including its requirement IDs, when a public contract
+   changes. Update the architecture document when structure changes.
+5. Propose an [architectural decision record](docs/adr/README.md) with a maintainer before
+   writing one. ADRs are reserved for costly-to-reverse choices with serious alternatives; they are
+   not a change log. An accepted ADR is superseded by a new one, never edited to change its decision.
 6. Update `ROADMAP.md` when delivered scope or project status changes.
+7. For work spanning several changes, a [plan](docs/plans/README.md) may be agreed first; delete it
+   when the work lands.
 
 Treat current code and tests as executable truth when they disagree with prose, then update the
 affected documentation in the same change. Do not silently choose between conflicting accepted
@@ -128,6 +134,7 @@ Before submitting, also run:
 
 ```bash
 git diff --check
+python3 scripts/check-doc-links.py   # when documentation changed
 ```
 
 If you could not run a relevant check, explain why in the pull request.
