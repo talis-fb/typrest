@@ -95,8 +95,8 @@ Templates may also import literal, fully versioned packages from Typst Universe:
 the cache or access the network. Other namespaces and dynamic package import expressions are not
 yet supported; generated `.typrest/` content should not be committed.
 
-See the complete [`schema.yml` v1 specification](docs/schema-v1.md) and the
-[`typrest.toml` specification](docs/typrest-toml-spec.md).
+See the [template layout](docs/specs/templates.md), [`schema.yml` v1](docs/specs/schema-v1.md), and
+[`typrest.toml`](docs/specs/typrest-toml.md) specifications.
 
 ## CLI
 
@@ -117,42 +117,18 @@ Global diagnostic options are available before or after a subcommand:
 --color <auto|always|never>
 ```
 
-See the [CLI specification](docs/cli-spec.md) for exact behavior.
+See the [CLI specification](docs/specs/cli.md) for exact behavior.
 
 ## HTTP API
 
-### `GET /_healthz`
+| Method | Route | Purpose |
+|---|---|---|
+| `POST`, `GET` | `/{*template_id}` | Render a template and return `application/pdf` |
+| `GET` | `/_healthz` | Health check, `{"status":"ok"}` |
+| `GET` | `/_api/templates` | List prepared templates |
+| `GET` | `/_api/templates/{*template_id}` | Template ID and parsed schema |
 
-```json
-{ "status": "ok" }
-```
-
-### `GET /_api/templates`
-
-Returns prepared templates in template-ID order:
-
-```json
-{
-  "templates": [
-    { "id": "financial/invoice", "hasSchema": true },
-    { "id": "welcome", "hasSchema": false }
-  ]
-}
-```
-
-### `GET /_api/templates/{*template_id}`
-
-Returns the prepared template ID and its parsed schema, or `"schema": null` when no schema is
-present. These metadata endpoints currently remain mounted when the Web UI is disabled.
-
-### `GET /{*template_id}` and `POST /{*template_id}`
-
-Both methods render the selected template and return `application/pdf` with status `200`. POST
-accepts a JSON request body with `Content-Type: application/json`. A bodyless GET has the same
-behavior as a bodyless POST: schema-less templates use `{}`, while schema-backed templates retain
-the existing invalid-JSON response.
-
-Errors use a structured JSON envelope:
+`POST` requires `Content-Type: application/json`. Errors use a structured JSON envelope:
 
 ```json
 {
@@ -164,8 +140,8 @@ Errors use a structured JSON envelope:
 }
 ```
 
-Common statuses are `400` for an invalid template ID or JSON request, `404` for a missing
-template, `422` for schema validation failures, and `500` for compilation or PDF export failures.
+See the [HTTP API specification](docs/specs/http-api.md) for the complete contract, status codes,
+and security notes.
 
 ## Development Web UI
 
@@ -179,8 +155,8 @@ web_ui = true
 ```
 
 Run on loopback and open `http://127.0.0.1:8080/_webui`. The UI has no authentication and must not
-be exposed directly to an untrusted network. See the [Web UI guide](docs/webui-development.md) and
-[Web UI specification](docs/webui-spec.md).
+be exposed directly to an untrusted network. See the [Web UI guide](docs/development/webui.md) and
+[Web UI specification](docs/specs/webui.md).
 
 ## Development
 
@@ -192,8 +168,8 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
 
-Start with the [documentation index](docs/README.md), [architecture guide](docs/architecture.md),
-and [testing guide](docs/testing.md). AI coding agents should also read [`AGENTS.md`](AGENTS.md).
+Start with the [documentation index](docs/README.md), [architecture overview](docs/architecture/overview.md),
+and [testing guide](docs/development/testing.md). See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the contribution workflow. AI coding agents should also read [`AGENTS.md`](AGENTS.md).
 
 Copyright 2026 Talison Fabio.
 

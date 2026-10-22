@@ -23,5 +23,6 @@ render source excerpts; JSON logs and HTTP responses expose only safe structured
 
 - Typst imports stay under `crates/typrest-core/src/compiler/`, including private prepared state.
 - Public diagnostics use owned strings, virtual paths, numeric ranges, hints, and traces.
-- The three Typst crates remain exactly and jointly pinned.
+- The five Typst integration crates (`typst`, `typst-pdf`, `typst-assets`, `typst-kit`, and
+  `typst-syntax`) remain exactly and jointly pinned.
 - HTTP responses never expose source excerpts or physical paths.

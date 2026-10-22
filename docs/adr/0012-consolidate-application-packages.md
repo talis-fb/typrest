@@ -37,5 +37,6 @@ receive a loader or package repository.
 - Application modules can evolve through crate-private APIs while the product is a prototype.
 - A new package should be extracted only after an independent consumer, backend, release, or
   measured dependency/compile boundary exists.
-- ADR-0002 remains active for the `TemplateLoader` abstraction, but its assignment of filesystem
-  loading to `typrest-server` is superseded.
+- The `TemplateLoader` abstraction and the in-memory test loader live in `typrest-core`; the
+  filesystem implementation lives in the `typrest` application package, because physical
+  filesystem access is an application concern.

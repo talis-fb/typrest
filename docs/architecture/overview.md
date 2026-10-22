@@ -1,6 +1,6 @@
 # Typrest Architecture
 
-> Status: Current architecture. Code and tests are the executable source of truth.
+- **Status:** Current. Code and tests are the executable source of truth.
 
 ## System Boundary
 
@@ -85,7 +85,7 @@ Registry builds and reloads can notify an application callback. The core emits o
 status, and warning counts; command and watch code match those events and log them directly.
 Package cache/install events stay in and are logged by the application package resolver.
 
-See [Startup Template Compilation](startup-template-compilation.md) for the detailed lifecycle.
+See [Startup Template Compilation](template-lifecycle.md) for the detailed lifecycle.
 
 ## Compiler Anti-Corruption Layer
 
@@ -128,18 +128,10 @@ with the compiler.
 
 ## HTTP Surface
 
-| Method | Route | Availability |
-|---|---|---|
-| `GET` | `/_healthz` | Always |
-| `GET` | `/_api/templates` | Always |
-| `GET` | `/_api/templates/{*template_id}` | Always |
-| `GET` | `/{*template_id}` | Always |
-| `POST` | `/{*template_id}` | Always |
-| `GET` | `/` | Redirects to `/_webui/` only with `web_ui = true` |
-| `GET` | `/_webui`, `/_webui/`, `/_webui/*` | Only with `web_ui = true` |
-
-The metadata handlers read exclusively from `TemplateRegistry`. The current server does not expose
-`/healthz` or `/templates` aliases.
+The routes, request and response contracts, and error envelope are defined in the
+[HTTP API specification](../specs/http-api.md). Handlers read exclusively from `TemplateRegistry`
+through `RenderService`; they never receive a loader or package repository
+([ADR-0012](../adr/0012-consolidate-application-packages.md)).
 
 ## Architectural Invariants
 
@@ -156,5 +148,5 @@ The metadata handlers read exclusively from `TemplateRegistry`. The current serv
 - Package coordinates remain separate virtual roots; package and project paths never collide.
 - Other package namespaces and dynamic package import expressions are unsupported.
 
-See the [architectural decision records](adr/README.md) for rationale and the
-[testing guide](testing.md) for the tests that enforce these boundaries.
+See the [architectural decision records](../adr/README.md) for rationale and the
+[testing guide](../development/testing.md) for the tests that enforce these boundaries.

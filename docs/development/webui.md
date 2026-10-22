@@ -1,7 +1,6 @@
 # Web UI Usage and Development Guide
 
-> Status: Current contributor guide. Normative behavior lives in the
-> [Web UI Specification](webui-spec.md).
+- **Status:** Current. Normative behavior lives in the [Web UI specification](../specs/webui.md).
 
 ## Enable the Web UI
 
@@ -20,8 +19,8 @@ typrest serve --hostname 127.0.0.1
 ```
 
 Open `http://127.0.0.1:8080/_webui`. The UI has no authentication. The metadata endpoints are
-currently mounted even when the static UI is disabled, so protect the server itself from untrusted
-networks.
+mounted even when the static UI is disabled, so protect the server itself from untrusted
+networks (`HTTP-051` in the [HTTP API specification](../specs/http-api.md)).
 
 ## Use the Workspace
 
@@ -152,8 +151,8 @@ GET /_api/templates
 GET /_api/templates/{*template_id}
 ```
 
-Both routes read prepared registry state and are currently mounted independently of `web_ui`.
-They are an internal, unversioned interface for the bundled frontend, not a stable integration API.
+Both routes are defined in the [HTTP API specification](../specs/http-api.md) (`HTTP-030` to
+`HTTP-034`). They are an internal, unversioned interface for the bundled frontend.
 
 ## Troubleshooting
 
@@ -187,8 +186,9 @@ live directory scan.
 
 ## Related Documentation
 
-- [Web UI Specification](webui-spec.md)
-- [`typrest.toml` Specification](typrest-toml-spec.md)
-- [Schema Specification](schema-v1.md)
-- [Compiler diagnostics](diagnostics.md)
+- [Web UI specification](../specs/webui.md)
+- [HTTP API specification](../specs/http-api.md)
+- [`typrest.toml` Specification](../specs/typrest-toml.md)
+- [Schema Specification](../specs/schema-v1.md)
+- [Compiler diagnostics](../specs/diagnostics.md)
 - [Testing Guide](testing.md)

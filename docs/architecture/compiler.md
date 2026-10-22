@@ -1,8 +1,13 @@
 # Typst Integration Reference
 
-> Status: Current implementation reference for the private compiler anti-corruption layer.
+- **Status:** Current. Implementation reference for the private compiler anti-corruption layer.
 
 ## Boundary
+
+Typrest links Typst as a library, so one application binary renders PDFs with no separate Typst
+executable. See the [product vision](../product/vision.md) for why. The integration complexity is
+isolated behind this anti-corruption layer, and [ADR-0007](../adr/0007-expose-typrest-owned-compiler-diagnostics.md)
+explains why diagnostics cross it as Typrest-owned values.
 
 The Typst compiler API can change between releases. Imports of `typst`, `typst-pdf`, and
 `typst-assets` are therefore confined to `crates/typrest-core/src/compiler/`. Outside that
@@ -13,7 +18,11 @@ official Universe package implementation.
 
 The workspace `Cargo.toml` is the canonical dependency source. `typst`, `typst-pdf`,
 `typst-assets`, `typst-kit`, and `typst-syntax` are pinned exactly to one matching version and
-upgraded together.
+upgraded together. Compiler API-sensitive code lives in three private files:
+
+- `world.rs`: the world implementation, compilation, export, spans, diagnostics, and inputs;
+- `fonts.rs`: the font book and decoding APIs;
+- `prepared_template.rs`: private Typst-backed prepared state behind public opaque types.
 
 ## Data Injection
 
@@ -92,20 +101,20 @@ all errors in their original order. `world.rs` immediately maps Typst severities
 tracepoints to the owned diagnostic model.
 
 PDF export errors use `CompilationError::ExportFailed`; compilation errors use
-`CompilationError::Failed`. See [Compiler diagnostics](diagnostics.md) for the public
+`CompilationError::Failed`. See [Compiler diagnostics](../specs/diagnostics.md) for the public
 contract.
 
 ## Upgrade Checklist
 
 When upgrading Typst:
 
-1. change all exact Typst integration versions together;
-2. adapt `world.rs`, `fonts.rs`, and private prepared state as required;
-3. keep public signatures free of Typst types;
-4. run compiler, diagnostics, font, import, payload, and PDF export tests;
-5. review diagnostic snapshots rather than accepting them blindly;
-6. verify the architecture test still rejects compiler imports outside `compiler/`;
-7. update this reference only when the implemented boundary changes.
+1. change all five exact Typst integration versions in one change;
+2. adapt `world.rs`, `fonts.rs`, and private prepared state as required, and keep public signatures
+   free of Typst types;
+3. run compiler, diagnostics, font, import, payload, warning, and PDF export tests;
+4. review diagnostic snapshots rather than accepting them blindly;
+5. verify that no Typst import exists outside `compiler/` (no automated test enforces this today);
+6. update this reference only when the implemented boundary changes.
 
 Do not copy “latest version” snippets from external examples into project documentation. Inspect the
 pinned crate source and current compiler tests when an upstream API differs.

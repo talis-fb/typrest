@@ -2,13 +2,13 @@
 
 - **Date:** 2026-08
 - **Status:** Accepted
-- **Supersedes:** [ADR-0013](0013-separate-prebuild-feedback-from-backend-logs.md)
 
 ## Context
 
-ADR-0013 split pre-build feedback and running-server logs across stderr and stdout. Implementing
-that contract required reporter objects, duplicate output enums, presentation callbacks, and a
-thread-local tracing writer. It also forced consumers to merge two independently ordered streams.
+Typrest previously split its output by phase and severity: concise pre-build feedback and warnings
+went to stderr, while running-server logs and all errors went to stdout. Implementing that contract
+required reporter objects, duplicate output enums, presentation callbacks, and a thread-local
+tracing writer. It also forced consumers to merge two independently ordered streams.
 
 Compiler excerpts still need specialized terminal rendering, but ordinary lifecycle and
 operational events do not need a separate reporting abstraction.
@@ -25,7 +25,7 @@ use tracing. Keep only `LogFormat` in HTTP state for request-time diagnostic sel
 
 ## Alternatives
 
-- Retaining phase-aware stream routing preserves ADR-0013 but keeps substantial coordination code
+- Retaining the phase-aware stream routing keeps substantial coordination code
   and a two-stream operational contract.
 - Sending all output through tracing simplifies filtering but loses annotated source excerpts when
   tracing is disabled.

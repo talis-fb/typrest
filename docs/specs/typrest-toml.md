@@ -1,19 +1,22 @@
 # `typrest.toml` Specification
 
-> Status: Current. The parser lives in `crates/typrest/src/config.rs`.
+- **Status:** Current. The parser lives in `crates/typrest/src/config.rs`.
+- **Scope:** The project configuration file of a filesystem-mode Typrest project.
 
-## Purpose and Location
+## Purpose
 
-`typrest.toml` configures a filesystem-mode Typrest project. It must be named exactly
-`typrest.toml` and live at the project root discovered by `typrest check` and `typrest serve`.
+`typrest.toml` configures a filesystem-mode project. It is found by `typrest check` and
+`typrest serve` as described in the [CLI specification](cli.md#project-model-and-discovery).
+
+## Requirements
+
+### Location and format
 
 ```text
 project/
   typrest.toml
   templates/
 ```
-
-## Format
 
 ```toml
 schema_version = "v1"
@@ -27,36 +30,24 @@ web_ui = false
 | `templates_root` | string | yes | none |
 | `web_ui` | boolean | no | `false` |
 
-Unknown top-level fields are ignored. Invalid TOML or a field with the wrong type is a configuration
-load error.
+- **CONFIG-001:** The file must be named exactly `typrest.toml` and live at the project root.
+- **CONFIG-002:** Invalid TOML, or a field with the wrong type, must be a configuration load error.
+- **CONFIG-003:** Unknown top-level fields must be ignored.
 
-## `schema_version`
+### `schema_version`
 
-The only supported value is `v1`:
+- **CONFIG-010:** The only supported value must be `"v1"`.
+- **CONFIG-011:** A missing, non-string, or unsupported value must fail project loading.
 
-```toml
-schema_version = "v1"
-```
+### `templates_root`
 
-A missing, non-string, or unsupported value fails project loading.
+`templates_root` identifies the directory containing template folders.
 
-## `templates_root`
-
-`templates_root` identifies the directory containing template folders:
-
-```toml
-templates_root = "templates"
-```
-
-Resolution rules:
-
-- resolve the value relative to the directory containing `typrest.toml`;
-- reject absolute paths;
-- normalize `.` and internal `..` components;
-- reject paths whose normalization would leave the project root;
-- require the resolved path to exist and be a directory.
-
-Examples:
+- **CONFIG-020:** The value must be resolved relative to the directory containing `typrest.toml`.
+- **CONFIG-021:** Absolute paths must be rejected.
+- **CONFIG-022:** `.` and internal `..` components must be normalized.
+- **CONFIG-023:** Paths whose normalization would leave the project root must be rejected.
+- **CONFIG-024:** The resolved path must exist and be a directory.
 
 ```toml
 # Valid
@@ -73,40 +64,37 @@ templates_root = "/srv/templates"
 templates_root = "../shared-templates"
 ```
 
-## `web_ui`
+### `web_ui`
 
-`web_ui` controls the embedded development UI and defaults to false:
+- **CONFIG-030:** `web_ui` must default to `false`.
+- **CONFIG-031:** `web_ui = true` must mount the embedded Web UI routes; `web_ui = false` must
+  leave them unmounted. All other routes, including the metadata routes, are independent of the
+  flag. Route behavior is defined in [HTTP API](http-api.md) (`HTTP-002`, `HTTP-064`).
+- **CONFIG-032:** The Web UI has no authentication. Bind to loopback when enabling it; see
+  `HTTP-051`.
 
-```toml
-web_ui = true
-```
+  ```bash
+  typrest serve --hostname 127.0.0.1
+  ```
 
-When true, `GET /` redirects to `/_webui/`, and the server mounts `/_webui`, `/_webui/`, and
-`/_webui/*`. The `/_api/templates` and `/_api/templates/{*template_id}` metadata routes remain
-mounted whether this flag is true or false. `GET /{*template_id}`, `POST /{*template_id}`, and
-`GET /_healthz` are also independent of the flag.
+### Generated default
 
-The Web UI has no authentication. Bind to loopback when enabling it:
+- **CONFIG-040:** `typrest init` must generate a configuration with the Web UI enabled:
 
-```bash
-typrest serve --hostname 127.0.0.1
-```
-
-See the [Web UI Specification](webui-spec.md) for its complete route and security contract.
-
-## Generated Default
-
-`typrest init` enables the Web UI, so generated projects contain:
-
-```toml
-schema_version = "v1"
-templates_root = "templates"
-web_ui = true
-```
+  ```toml
+  schema_version = "v1"
+  templates_root = "templates"
+  web_ui = true
+  ```
 
 ## Non-goals
 
 This format does not define ports, hostnames, watch settings, package policy or cache paths, store
-backends, authentication, per-template overrides, or environment-specific configuration. The
-initial `@preview` package support is automatic and always uses `<project>/.typrest/packages`.
-Update this specification before adding any related fields.
+backends, authentication, per-template overrides, or environment-specific configuration. Package
+support is automatic and always uses `<project>/.typrest/packages`. Update this specification before
+adding any related fields.
+
+## Related documents
+
+- [Web UI specification](webui.md)
+- [Template layout](templates.md)

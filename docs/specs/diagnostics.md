@@ -1,7 +1,8 @@
 # Compiler diagnostics
 
-> Status: Current contract for CLI and HTTP compilation failures. Stream routing is defined in
-> [Logging and process output](logging.md).
+- **Status:** Current. Covers CLI and HTTP compilation failures. Stream routing is defined in
+  [Logging and process output](logging.md).
+- **Scope:** The owned diagnostic model and its pretty and JSON representations.
 
 ## Diagnostic Model
 
@@ -55,50 +56,13 @@ logged at `DEBUG` and are hidden by the default filter.
 
 ## HTTP Contract
 
-Request-time compilation failures use status `500` and expose safe structured diagnostics:
+Request-time compilation failures use status `500` and the `compilation_failed` envelope. The
+response carries safe structured diagnostics and may include `hints` and `trace`; it never includes
+source text or physical paths. The envelope and an example are defined in the
+[HTTP API specification](http-api.md) (`HTTP-041`, `HTTP-043`, `HTTP-044`).
 
-```json
-{
-  "error": "compilation_failed",
-  "message": "unknown variable: amunt",
-  "line": 14,
-  "diagnostics": [
-    {
-      "severity": "error",
-      "message": "unknown variable: amunt",
-      "location": {
-        "path": "main.typ",
-        "range": {
-          "start": { "line": 14, "column": 12 },
-          "end": { "line": 14, "column": 17 }
-        }
-      }
-    }
-  ]
-}
-```
+## Typst compatibility boundary
 
-The response may include `hints` and `trace`. It never includes source text or physical paths.
-Validation and missing-template errors use their separate error contracts.
-
-## Typst Compatibility Boundary
-
-`typst`, `typst-pdf`, `typst-assets`, `typst-kit`, and `typst-syntax` are exactly pinned to the
-same version in the workspace manifest and must be upgraded together. Compiler API-sensitive code
-stays under `crates/typrest-core/src/compiler/`:
-
-- `world.rs`: world implementation, compilation, export, spans, diagnostics, and inputs;
-- `fonts.rs`: font book and decoding APIs;
-- `prepared_template.rs`: private Typst-backed prepared state behind public opaque types.
-
-For every Typst upgrade:
-
-1. update all three exact versions in one change;
-2. adapt only the private compiler ACL;
-3. run compiler and diagnostic fixtures and review snapshots;
-4. test syntax, import, warning, font, payload-dependent, and export behavior;
-5. run the architecture test that rejects compiler imports outside `compiler/`;
-6. update [Typst Integration](typst-integration.md) if the boundary or upstream API changed.
-
-Diagnostic location mapping must degrade to a location-less diagnostic when a span cannot be
-resolved; it must not panic.
+Typst types never cross the compiler boundary, and diagnostic location mapping must degrade to a
+location-less diagnostic when a span cannot be resolved; it must not panic. The pinning rule, private
+compiler files, and upgrade checklist are in the [compiler architecture](../architecture/compiler.md).

@@ -1,6 +1,7 @@
 # Web UI Specification
 
-> Status: Current contract for the bundled development UI and its metadata endpoints.
+- **Status:** Current
+- **Scope:** The bundled development UI. Its routes, caching, and metadata endpoints are defined in the [HTTP API specification](http-api.md).
 
 ## Purpose and Scope
 
@@ -13,86 +14,18 @@ replacement for the rendering API.
 
 ## Configuration and Security
 
-Enable the embedded static UI with:
+Enable the embedded static UI with `web_ui = true` in `typrest.toml`
+([`CONFIG-030`, `CONFIG-031`](typrest-toml.md)). It defaults to false. The UI routes, redirects, and
+caching are `HTTP-002` and `HTTP-060` to `HTTP-064`; the metadata routes it reads are `HTTP-030` to
+`HTTP-034`.
 
-```toml
-schema_version = "v1"
-templates_root = "templates"
-web_ui = true
-```
-
-`web_ui` defaults to false. Current route behavior is:
-
-- `/_webui`, `/_webui/`, and `/_webui/*` exist only when `web_ui = true`;
-- `/` redirects permanently to `/_webui/` only when `web_ui = true`;
-- `/_api/templates` and `/_api/templates/{*template_id}` are mounted regardless of `web_ui`;
-- `/_healthz` and `/{*template_id}` are also independent of `web_ui`.
-
-The UI and metadata routes have no authentication or authorization. A server exposing project
-metadata or the Web UI must be bound to loopback or protected by a trusted external boundary:
+The UI and metadata routes have no authentication or authorization (`HTTP-050`, `HTTP-051`). A
+server exposing project metadata or the Web UI must be bound to loopback or protected by a trusted
+external boundary:
 
 ```bash
 typrest serve --hostname 127.0.0.1
 ```
-
-## Route Contract
-
-### Embedded Static Routes
-
-| Method | Route | Behavior |
-|---|---|---|
-| `GET` | `/` | Permanent redirect to `/_webui/` |
-| `GET` | `/_webui` | Permanent redirect to `/_webui/` |
-| `GET` | `/_webui/` | Embedded `index.html` |
-| `GET` | `/_webui/*` | Exact embedded asset or `404` |
-
-The index uses `Cache-Control: no-cache`. Fingerprinted assets use
-`Cache-Control: public, max-age=31536000, immutable`. Text assets include UTF-8 content types.
-Unknown paths return `404`; there is no single-page-application fallback.
-
-### `GET /_api/templates`
-
-Returns prepared registry entries in template-ID order:
-
-```json
-{
-  "templates": [
-    { "id": "financial/invoice", "hasSchema": true },
-    { "id": "welcome", "hasSchema": false }
-  ]
-}
-```
-
-An empty registry returns `{"templates":[]}`. The handler reads only `TemplateRegistry`; it does
-not scan the filesystem or call `TemplateLoader`.
-
-### `GET /_api/templates/{*template_id}`
-
-Returns the canonical parsed schema:
-
-```json
-{
-  "id": "financial/invoice",
-  "schema": {
-    "schemaVersion": "v1",
-    "request": {
-      "body": {
-        "type": "object",
-        "required": false,
-        "properties": {
-          "name": { "type": "string", "required": true }
-        }
-      }
-    }
-  }
-}
-```
-
-A schema-less template returns `{"id":"welcome","schema":null}`. An invalid ID returns `400`
-with `invalid_template_id`; a valid missing ID returns `404` with `template_not_found`.
-
-These routes are internal to the bundled UI and are not a versioned integration API, even though
-they are currently always mounted.
 
 ## Navigation and Workspace
 
@@ -187,7 +120,7 @@ server-side rendering, frontend router, or Svelte-specific component library. Vi
 `/_webui/` as its base path.
 
 Production output is committed under `webui/dist` and embedded in debug and release server builds.
-Rust and Docker builds do not invoke Node. Frontend source changes require `npm run check`,
+Cargo builds do not invoke Node. Frontend source changes require `npm run check`,
 `npm test`, and `npm run build`, with the new `dist` included.
 
 ## Non-goals
@@ -198,12 +131,11 @@ server-side rendering, a frontend router, or an alternative rendering engine.
 
 ## Acceptance Criteria
 
-- Static UI routes return `404` by default and are mounted only with `web_ui = true`.
-- Metadata routes remain available and read exclusively from the prepared registry.
 - Object schemas support Form and Raw JSON workflows; other roots remain renderable as raw JSON.
 - Invalid JSON and colliding custom keys are blocked before rendering.
-- Every preview and download originates from the UI's `POST /{*template_id}` request. The API also
-  supports bodyless `GET /{*template_id}` rendering.
+- Every preview and download originates from the UI's `POST /{*template_id}` request.
 - Replaced and abandoned Blob URLs are revoked.
-- Embedded files use the specified content types and cache policy.
 - Structured validation, compilation, warning, and PDF response contracts remain unchanged.
+
+Route availability, embedded content types, and cache policy are acceptance criteria of the
+[HTTP API specification](http-api.md). Frontend behavior is covered by the tests under `webui/`.

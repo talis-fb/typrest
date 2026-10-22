@@ -1,6 +1,7 @@
 # Logging and process output
 
-> Status: Current contract for stdout, pretty logs, and JSON Lines.
+- **Status:** Current
+- **Scope:** Process streams, pretty logs, JSON Lines, filtering, and color.
 
 ## Stream contract
 

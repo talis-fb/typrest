@@ -1,7 +1,8 @@
 # Typrest Roadmap
 
 This file summarizes delivered capabilities, active follow-up work, and intentionally deferred
-scope. It is a status document, not an API specification. Current contracts live under `docs/`.
+scope. It is a status document, not an API specification. Current contracts live under [`docs/specs/`](docs/specs/README.md); scope and rationale live in the
+[product vision](docs/product/vision.md).
 
 ## MVP Goal
 
@@ -72,7 +73,10 @@ documentation cleanup does not modify non-Markdown files.
 - [x] Create a concise vendor-neutral `AGENTS.md`
 - [x] Add a documentation index and current architecture guide
 - [x] Align specifications and examples with implemented CLI, routes, schemas, and compiler layout
+- [x] Adopt a documentation standard: specifications with requirement IDs, architecture, development
+  guides, a pruned ADR set, and implementation plans (see [`docs/README.md`](docs/README.md))
 - [ ] Keep specifications and examples synchronized in every future behavior change
+- [ ] Decide whether to run `scripts/check-doc-links.py` in CI
 
 ## Deferred: Store Mode
 
@@ -85,8 +89,12 @@ additional operational model:
 - [ ] Implement filesystem and remote Store backends
 - [ ] Add Store-aware CLI commands and tagged render routes
 
+In filesystem mode, templates are deployment artifacts with no tags or independent release
+workflow. Store mode becomes relevant only when real usage requires independent template
+deployment.
+
 Literal, versioned `@preview` Typst Universe imports are implemented with preparation-time download
 and a project-local cache. Authentication, SDKs, S3, garbage collection, compilation caches, other
 package namespaces, custom registries, and package lockfiles remain out of scope until separately
-designed and accepted in an ADR under
+designed and, where the choice is costly to reverse, recorded in an ADR under
 [`docs/adr/`](docs/adr/README.md).

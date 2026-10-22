@@ -2,13 +2,12 @@
 
 - **Date:** 2026-08
 - **Status:** Accepted
-- **Supersedes:** [ADR-0006](0006-restrict-template-names-to-safe-ascii.md)
-- **Supersedes in part:** [ADR-0009](0009-gate-static-web-ui-routes.md)
 
 ## Context
 
-Flat template names force every filesystem template into one directory level and expose renders
-through an extra `/render` prefix. A folder-derived convention makes route ownership visible in the
+Template names were previously a single flat ASCII segment (letters, digits, `-`, `_`) rendered
+under `/render`. Flat names force every filesystem template into one directory level and expose
+renders through an extra `/render` prefix. A folder-derived convention makes route ownership visible in the
 project tree and gives templates familiar application-style paths. The convention must preserve
 self-contained compiler bundles, reserve room for internal HTTP endpoints, and avoid overlapping
 filesystem template roots before Store mode is designed.

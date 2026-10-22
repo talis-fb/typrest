@@ -1,6 +1,6 @@
-# Startup Template Compilation
+# Template Lifecycle: Startup, Registry, and Watch Mode
 
-> Status: Current architecture. The implementation is centered on `TemplateRegistry`.
+- **Status:** Current. The implementation is centered on `TemplateRegistry`.
 
 ## Purpose
 
@@ -35,14 +35,8 @@ warnings are reported with their full diagnostic context but do not fail startup
 
 ## Deterministic Warmup Payloads
 
-Schema sample generation uses this precedence:
-
-1. explicit `default`, including `null`;
-2. first enum value;
-3. type seed: `""`, `0`, `false`, recursively generated object, `[]`, or `null`;
-4. `null` for an untyped field.
-
-Known object properties are included recursively. Arrays warm with an empty array. The warmup
+Schema sample generation follows the precedence in [Schema v1](../specs/schema-v1.md)
+(`SCHEMA-100`); a schema-less template warms with `{}`. The warmup
 payload catches syntax, import, font, export, and common data-access failures, but payload-dependent
 branches can still fail at render time.
 
@@ -104,5 +98,5 @@ Tests cover registry-backed rendering without loader access, validation before c
 deterministic sample payloads, real Typst warmup, aggregate startup failures, prepared metadata,
 successful replacement, and last-known-good behavior after a failed reload.
 
-See [Architecture](architecture.md), [Diagnostics](diagnostics.md), and [Testing](testing.md).
-The stream and formatting contract is defined in [Logging and process output](logging.md).
+See [Architecture](overview.md), [Diagnostics](../specs/diagnostics.md), and [Testing](../development/testing.md).
+The stream and formatting contract is defined in [Logging and process output](../specs/logging.md).

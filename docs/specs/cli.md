@@ -1,16 +1,17 @@
 # CLI Specification
 
-> Status: Current. The implementation lives in `crates/typrest/src/commands/`.
+- **Status:** Current. The implementation lives in `crates/typrest/src/commands/`.
+- **Scope:** The `typrest` command line: project discovery, `init`, `check`, `serve`, and global
+  options.
 
 ## Purpose
 
-The Typrest CLI manages filesystem-mode projects. It has three responsibilities:
+The Typrest CLI manages filesystem-mode projects. It creates a project with `typrest init`, validates
+all templates with `typrest check`, and starts the HTTP server with `typrest serve`.
 
-- create a project with `typrest init`;
-- validate all templates with `typrest check`;
-- start the HTTP server with `typrest serve`.
+## Requirements
 
-## Command Summary
+### Command summary
 
 ```text
 typrest [--log-format <pretty|json>] [--color <auto|always|never>] <command>
@@ -20,9 +21,13 @@ typrest check
 typrest serve [--port <port>] [--hostname <ipv4>] [--watch]
 ```
 
-Global options may appear before or after the subcommand.
+- **CLI-001:** The CLI must provide the commands `init`, `check`, and `serve` and no others.
+- **CLI-002:** Global options may appear before or after the subcommand.
+- **CLI-003:** The process must exit successfully only when the selected command completes
+  successfully.
+- **CLI-004:** CLI errors must be emitted as structured tracing events, not ad hoc panic text.
 
-## Project Model and Discovery
+### Project model and discovery
 
 A Typrest project contains a `typrest.toml` at its root and a templates directory selected by
 `templates_root`:
@@ -41,98 +46,72 @@ project/
       brand.typ
 ```
 
-`check` and `serve` walk upward from the current working directory and use the nearest ancestor
-containing `typrest.toml`. They resolve `templates_root` relative to that project root. See the
-[`typrest.toml` specification](typrest-toml-spec.md) for path and validation rules.
+- **CLI-010:** `check` and `serve` must walk upward from the current working directory and use the
+  nearest ancestor containing `typrest.toml`. A missing file must fail the command.
+- **CLI-011:** `templates_root` must be resolved relative to that project root. Path and validation
+  rules are in the [`typrest.toml` specification](typrest-toml.md).
+- **CLI-012:** Template discovery follows the [template layout](templates.md).
 
-Template discovery walks directories recursively. A non-root directory containing `main.typ`
-defines the slash-separated template ID and stops discovery beneath it. Directories beginning with
-`_` are skipped during discovery; invalid visible route segments and `templates/main.typ` fail the
-project check. Descendant files remain part of a selected template bundle.
-
-## `typrest init`
-
-### Syntax
+### `typrest init`
 
 ```text
 typrest init [path]
 ```
 
-With no path, the current directory is the target. A relative path resolves from the current
-directory; an absolute path is used directly.
+- **CLI-020:** With no path, the current directory must be the target. A relative path must resolve
+  from the current directory; an absolute path must be used directly.
+- **CLI-021:** The command must create `typrest.toml` (see `CONFIG-040`) and a `templates/hello-world`
+  template containing `main.typ` and `schema.yml`:
 
-The command creates:
+  ```text
+  typrest.toml
+  templates/
+    hello-world/
+      main.typ
+      schema.yml
+  ```
 
-```text
-typrest.toml
-templates/
-  hello-world/
-    main.typ
-    schema.yml
-```
+- **CLI-022:** The generated `main.typ` must be:
 
-Generated `typrest.toml`:
+  ```typst
+  #let data = json(bytes(sys.inputs.data))
 
-```toml
-schema_version = "v1"
-templates_root = "templates"
-web_ui = true
-```
+  = Hello #data.name
+  ```
 
-Generated template:
+- **CLI-023:** The generated `schema.yml` must be:
 
-```typst
-#let data = json(bytes(sys.inputs.data))
+  ```yaml
+  schemaVersion: v1
+  request:
+    body:
+      type: object
+      properties:
+        name:
+          type: string
+          default: World
+  ```
 
-= Hello #data.name
-```
+- **CLI-024:** The command must fail without overwriting when the target exists as a
+  non-directory, when `typrest.toml` already exists in the target, or when `templates/` already
+  exists in the target.
 
-Generated schema:
+### `typrest check`
 
-```yaml
-schemaVersion: v1
-request:
-  body:
-    type: object
-    properties:
-      name:
-        type: string
-        default: World
-```
+- **CLI-030:** After project discovery, `check` must list, load, prepare, warm-compile, and
+  PDF-export every template using the same registry build as server startup.
+- **CLI-031:** Failures must be collected and reported in deterministic template-ID order.
+- **CLI-032:** Literal, fully versioned `@preview` imports must be downloaded when absent from the
+  project-local `.typrest/packages` cache. Package resolution failures must make the check fail.
+  See [Template layout](templates.md) (`TEMPLATE-060` to `TEMPLATE-064`).
+- **CLI-033:** Warnings must be displayed and must return exit status `0`. Configuration, load,
+  schema, compilation, or export failure must return exit status `1`.
+- **CLI-034:** `check` must write timestamped lifecycle events to stdout: each template reports when
+  compilation starts and completes, and a successful check reports `templates ready: <count>`.
+  Missing packages report installation start and completion. Package cache hits use `DEBUG` and are
+  hidden by the default filter. Warnings and errors also use stdout.
 
-The command fails without overwriting when:
-
-- the target exists as a non-directory;
-- `typrest.toml` already exists in the target;
-- `templates/` already exists in the target.
-
-## `typrest check`
-
-```text
-typrest check
-```
-
-After project discovery, `check` lists, loads, prepares, warm-compiles, and PDF-exports every
-template using the same registry build as server startup. Failures are collected and reported in
-deterministic template-ID order.
-
-Literal, fully versioned `@preview` imports are downloaded when absent from the project-local
-`.typrest/packages` cache. Package resolution failures make the check fail. Generated `.typrest/`
-content should not be committed.
-
-Warnings are displayed and return exit status `0`. Configuration, load, schema, compilation, or
-export failure returns exit status `1`.
-
-While checking, the command writes timestamped lifecycle events to stdout: each template reports
-when compilation starts and completes, and a successful check reports `templates ready: <count>`.
-Missing packages report installation start and completion. Package cache hits use `DEBUG` and are
-hidden by the default filter. Warnings and errors also use stdout.
-
-## `typrest serve`
-
-```text
-typrest serve [--port <port>] [--hostname <ipv4>] [--watch]
-```
+### `typrest serve`
 
 | Option | Default | Behavior |
 |---|---|---|
@@ -140,18 +119,17 @@ typrest serve [--port <port>] [--hostname <ipv4>] [--watch]
 | `--hostname <ipv4>` | `0.0.0.0` | IPv4 bind address; hostnames and IPv6 are not accepted |
 | `--watch` | disabled | Reload changed templates while keeping last known good entries |
 
-`serve` builds and warm-compiles the registry before binding its socket. It fails before listening
-when project configuration is missing or invalid, the templates root is invalid, or any startup
-template fails.
+- **CLI-040:** `serve` must build and warm-compile the registry before binding its socket.
+- **CLI-041:** `serve` must fail before listening when project configuration is missing or invalid,
+  the templates root is invalid, or any startup template fails.
+- **CLI-042:** Startup must use the same package, template-compilation, warning, error, and
+  ready-count events as `check`, followed by an ordinary `server.starting` tracing event. Every
+  process event uses stdout.
+- **CLI-043:** With `--watch`, a successful full rebuild must log a new ready count, and a
+  single-template reload must log that template's lifecycle and reload outcome.
+  Watch behavior is defined in [Template lifecycle](../architecture/template-lifecycle.md).
 
-Startup uses the same package, template-compilation, warning, error, and ready-count events as
-`check`, followed by an ordinary `server.starting` tracing event. Every process event uses stdout.
-A successful full watch rebuild logs a new ready count, while a single-template reload logs that
-template's lifecycle and reload outcome.
-
-Watch behavior is defined in [Startup Template Compilation](startup-template-compilation.md).
-
-## Diagnostic Options
+### Diagnostic options
 
 | Option | Default | Behavior |
 |---|---|---|
@@ -159,16 +137,14 @@ Watch behavior is defined in [Startup Template Compilation](startup-template-com
 | `--color auto\|always\|never` | `auto` | ANSI policy for pretty output |
 | `RUST_LOG` | `typrest=info` | Tracing event filtering |
 
-JSON output never contains ANSI codes. See [Compiler diagnostics](diagnostics.md) and
-[Logging and process output](logging.md).
-The CLI does not currently expose `--verbose`; lifecycle output is centrally classified so routine
-cache hits and other verbose details can be enabled by that future option without changing package
-or compilation behavior.
+- **CLI-050:** JSON output must never contain ANSI codes.
+- **CLI-051:** The CLI does not currently expose `--verbose`. Lifecycle output is classified
+  centrally so verbose details can be enabled by that future option without changing package or
+  compilation behavior.
 
-## Failure Contract
+See [Compiler diagnostics](diagnostics.md) and [Logging and process output](logging.md).
 
-CLI errors are emitted as structured tracing events rather than ad hoc panic text. The process exits
-successfully only when the selected command completes successfully.
+## Non-goals
 
 Store commands, publishing, remote registries, and environment-variable configuration overrides
 are not part of this specification.

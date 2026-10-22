@@ -1,6 +1,6 @@
 # Testing Guide
 
-> Status: Current development workflow. CI configuration remains authoritative for required jobs.
+- **Status:** Current. `.github/workflows/ci.yml` is authoritative for required CI jobs; it runs the Rust checks only.
 
 ## Standard Validation
 
@@ -52,8 +52,9 @@ source changes must include the rebuilt output; never edit it by hand.
 Normal core and handler tests should not invoke real Typst unless integration is the behavior under
 test. Filesystem tests use temporary directories and must not depend on global machine state.
 Package tests use mocked downloads or temporary cached fixtures and must not require live Universe
-access. Architecture tests reject `typst`, `typst-pdf`, and `typst-assets` imports outside the
-compiler ACL. `typst-kit` and `typst-syntax` are used by the application package resolver.
+access. No automated test currently rejects `typst`, `typst-pdf`, and `typst-assets` imports outside the
+compiler ACL; check with
+`rg -n '\btypst(_pdf|_assets)?::' crates --glob '!crates/typrest-core/src/compiler/**'`. `typst-kit` and `typst-syntax` are used by the application package resolver.
 
 ## Snapshot Policy
 
@@ -97,7 +98,7 @@ pdftotext hello-world.pdf -
 ```
 
 The current Docker files use removed CLI syntax and are not a valid manual test path. Their
-migration is tracked in [`ROADMAP.md`](../ROADMAP.md).
+migration is tracked in [`ROADMAP.md`](../../ROADMAP.md).
 
 ## Documentation Validation
 

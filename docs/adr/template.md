@@ -3,9 +3,9 @@
 - **Date:** YYYY-MM
 - **Status:** Proposed
 
-<!-- Status: Proposed, Accepted, Superseded, or Rejected. When superseded, add
-     "- **Superseded by:** [ADR-NNNN](NNNN-title.md)" and, in the new record,
-     "- **Supersedes:** [ADR-MMMM](MMMM-title.md)". -->
+<!-- Status: Proposed, Accepted, Superseded, or Rejected. When superseded, add a
+     "Superseded by" line linking the new record and, in the new record, a "Supersedes"
+     line linking the old one. -->
 
 ## Context
 
