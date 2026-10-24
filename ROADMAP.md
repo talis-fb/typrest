@@ -76,7 +76,7 @@ documentation cleanup does not modify non-Markdown files.
 - [x] Adopt a documentation standard: specifications with requirement IDs, architecture, development
   guides, a pruned ADR set, and implementation plans (see [`docs/README.md`](docs/README.md))
 - [ ] Keep specifications and examples synchronized in every future behavior change
-- [ ] Decide whether to run `scripts/check-doc-links.py` in CI
+- [x] Run `scripts/check-doc-links.py` in CI, together with the Web UI build and `webui/dist` drift check
 
 ## Deferred: Store Mode
 

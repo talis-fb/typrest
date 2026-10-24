@@ -20,3 +20,32 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Run tests
         run: cargo test --workspace
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Markdown links and anchors
+        run: python3 scripts/check-doc-links.py
+
+  webui:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: webui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: webui/package-lock.json
+      - run: npm ci
+      - name: Type-check
+        run: npm run check
+      - name: Test
+        run: npm test
+      - name: Build
+        run: npm run build
+      - name: Verify committed dist is up to date
+        run: git diff --exit-code -- dist && test -z "$(git status --porcelain -- dist)"
