@@ -1,6 +1,6 @@
 # Plan: Short Title
 
-- **Status:** Draft | In progress
+- **Status:** Draft
 - **Owner:** Name or role
 
 ## Objective

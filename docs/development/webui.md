@@ -1,6 +1,8 @@
 # Web UI Usage and Development Guide
 
-- **Status:** Current. Normative behavior lives in the [Web UI specification](../specs/webui.md).
+- **Status:** Current
+- **Scope:** Developer workflow for the Web UI. Normative behavior lives in the
+  [Web UI specification](../specs/webui.md).
 
 ## Enable the Web UI
 

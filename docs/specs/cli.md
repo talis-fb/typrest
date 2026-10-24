@@ -1,8 +1,8 @@
 # CLI Specification
 
-- **Status:** Current. The implementation lives in `crates/typrest/src/commands/`.
+- **Status:** Current
 - **Scope:** The `typrest` command line: project discovery, `init`, `check`, `serve`, and global
-  options.
+  options, implemented in `crates/typrest/src/commands/`.
 
 ## Purpose
 

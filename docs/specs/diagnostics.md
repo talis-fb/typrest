@@ -1,8 +1,9 @@
 # Compiler diagnostics
 
-- **Status:** Current. Covers CLI and HTTP compilation failures. Stream routing is defined in
+- **Status:** Current
+- **Scope:** The owned diagnostic model and its pretty and JSON representations for CLI and HTTP
+  compilation failures. Stream routing is defined in
   [Logging and process output](logging.md).
-- **Scope:** The owned diagnostic model and its pretty and JSON representations.
 
 ## Diagnostic Model
 

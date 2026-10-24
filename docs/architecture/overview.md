@@ -1,6 +1,8 @@
 # Typrest Architecture
 
-- **Status:** Current. Code and tests are the executable source of truth.
+- **Status:** Current
+- **Scope:** System boundary, domain vocabulary, and invariants. Code and tests are the
+  executable source of truth.
 
 ## System Boundary
 

@@ -1,7 +1,8 @@
 # Schema Specification (`schema.yml`) Version 1
 
-- **Status:** Current. Normative for the implemented v1 parser and validator in `typrest-core`.
-- **Scope:** The payload schema format, validation semantics, and the startup sample payload.
+- **Status:** Current
+- **Scope:** The payload schema format, validation semantics, and the startup sample payload,
+  implemented by the v1 parser and validator in `typrest-core`.
 
 ## Purpose
 

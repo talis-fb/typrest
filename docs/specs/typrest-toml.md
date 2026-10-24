@@ -1,7 +1,8 @@
 # `typrest.toml` Specification
 
-- **Status:** Current. The parser lives in `crates/typrest/src/config.rs`.
-- **Scope:** The project configuration file of a filesystem-mode Typrest project.
+- **Status:** Current
+- **Scope:** The project configuration file of a filesystem-mode Typrest project, parsed in
+  `crates/typrest/src/config.rs`.
 
 ## Purpose
 

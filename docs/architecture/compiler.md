@@ -1,6 +1,7 @@
 # Typst Integration Reference
 
-- **Status:** Current. Implementation reference for the private compiler anti-corruption layer.
+- **Status:** Current
+- **Scope:** Implementation reference for the private compiler anti-corruption layer.
 
 ## Boundary
 

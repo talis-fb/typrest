@@ -1,6 +1,7 @@
 # Template Lifecycle: Startup, Registry, and Watch Mode
 
-- **Status:** Current. The implementation is centered on `TemplateRegistry`.
+- **Status:** Current
+- **Scope:** Startup, registry, and watch-mode lifecycle, centered on `TemplateRegistry`.
 
 ## Purpose
 

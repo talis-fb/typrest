@@ -86,8 +86,9 @@ Do not use uppercase RFC 2119 keywords.
 ## Document conventions
 
 - Use one H1 per file and sentence-case headings below it.
-- Begin every document under `docs/` (except indexes) with a list of `- **Status:**` and, where
-  useful, `- **Scope:**`. Status values for non-ADR documents are `Current` or `Draft`.
+- Begin every document under `docs/` with a list of `- **Status:**` and, where useful,
+  `- **Scope:**`. Status is exactly one value: `Current` or `Draft` for non-ADR documents (a plan is
+  `Draft` until deleted); put any explanation in Scope. Index files named `README.md` are exempt.
 - Use relative links, with descriptive text. Link to a heading anchor when pointing at a section.
 - Label fenced code blocks with a language or `text`.
 - Keep examples executable and consistent with the requirements they illustrate. Verify CLI syntax

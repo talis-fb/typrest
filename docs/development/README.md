@@ -1,6 +1,6 @@
 # Development Guides
 
-Guides explain how to work on Typrest. They contain no requirements and no requirement IDs.
+Guides explain how to work on Typrest. They define no requirements or requirement IDs, but may cite IDs defined in specifications.
 
 - [Testing guide](testing.md): validation commands, test placement, and snapshot policy.
 - [Web UI development guide](webui.md): enabling the UI, the Vite workflow, and troubleshooting.

@@ -1,6 +1,8 @@
 # Testing Guide
 
-- **Status:** Current. `.github/workflows/ci.yml` is authoritative for required CI jobs; it runs the Rust checks only.
+- **Status:** Current
+- **Scope:** Validation commands, test placement, and snapshot policy.
+  `.github/workflows/ci.yml` is authoritative for required CI jobs.
 
 ## Standard Validation
 
