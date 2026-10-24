@@ -59,29 +59,32 @@ work is done.
 
 ## Requirement IDs
 
-Externally observable contracts carry requirement IDs: the CLI (`CLI`), `typrest.toml` (`CONFIG`),
-template layout (`TEMPLATE`), schema v1 (`SCHEMA`), and the HTTP API (`HTTP`). Architecture
-documents, guides, logging, diagnostics, and the Web UI specification have none.
+Every specification under [`specs/`](specs/README.md) carries requirement IDs. Architecture
+documents, guides, ADRs, and plans define none, though they may cite them.
 
-- Format: `NAMESPACE-NNN`, zero-padded, unique within the namespace. Group related requirements
-  with gaps in numbering (`SCHEMA-010`, `SCHEMA-020`) so related ones can be added later.
-- Write one requirement per list item: `- **CLI-014:** The command must ... .`
+- Format: `REQ-<DOMAIN>-<NNN>`, with a zero-padded number unique within the domain. Domains are
+  `CLI`, `CFG` (`typrest.toml`), `TPL` (template layout), `SCH` (schema v1), `HTTP`, `DIAG`, `LOG`,
+  and `WEB`. A new specification adds its own domain to the [specification index](specs/README.md).
+- Group related requirements with gaps in numbering (`REQ-SCH-010`, `REQ-SCH-020`) so related ones
+  can be added later.
+- Write one requirement per list item: `- **REQ-CLI-014:** The command MUST ... .`
+- Give IDs only to normative requirements, not to explanatory paragraphs or implementation details.
 - IDs are stable. Never renumber or reuse one. To remove a requirement, keep its ID in place marked
-  `CLI-014: (removed)`. There is no separate registry.
+  `REQ-CLI-014: (removed)`. There is no separate registry.
 - Changing a requirement's meaning keeps its ID. If the new meaning is a different requirement,
   remove the old ID and add a new one.
 - Refer to a requirement by ID, not by quoting it.
 
 ## Normative language
 
-Use lowercase `must`, `must not`, `should`, and `may`. Write requirements in the present tense for
-implemented behavior.
+Use uppercase `MUST`, `MUST NOT`, `SHOULD`, `SHOULD NOT`, and `MAY` in requirements only. Write
+requirements in the present tense for implemented behavior.
 
-- `must` and `must not` are mandatory.
-- `should` is a strong default with a justified exception.
-- `may` is optional.
+- `MUST` and `MUST NOT` are a mandatory requirement or prohibition.
+- `SHOULD` and `SHOULD NOT` are a strong recommendation with justified exceptions.
+- `MAY` is explicitly permitted behavior.
 
-Do not use uppercase RFC 2119 keywords.
+Outside requirements, write ordinary lowercase prose.
 
 ## Document conventions
 

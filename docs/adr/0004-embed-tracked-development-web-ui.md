@@ -36,4 +36,4 @@ prepared-registry metadata routes under `/_api/templates` remain mounted indepen
 - Disabling `web_ui` does not disable metadata exposure. Metadata handlers read only
   `TemplateRegistry`, and the routes are internal and unversioned.
 - Deployments requiring confidentiality must protect the server with network controls. The
-  requirement is stated in the [HTTP API specification](../specs/http-api.md) (`HTTP-051`).
+  requirement is stated in the [HTTP API specification](../specs/http-api.md) (`REQ-HTTP-051`).

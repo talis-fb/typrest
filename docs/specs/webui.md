@@ -1,9 +1,10 @@
-# Web UI Specification
+# Web UI specification
 
 - **Status:** Current
-- **Scope:** The bundled development UI. Its routes, caching, and metadata endpoints are defined in the [HTTP API specification](http-api.md).
+- **Scope:** The bundled development UI. Its routes, caching, and metadata endpoints are defined in
+  the [HTTP API specification](http-api.md).
 
-## Purpose and Scope
+## Purpose
 
 The Web UI is a developer convenience for filesystem mode. It lets a developer inspect prepared
 templates, compose a payload, render through the existing HTTP endpoint, preview the PDF, and
@@ -12,47 +13,46 @@ download the latest result.
 It is not a production administration surface, template editor, authentication boundary, or
 replacement for the rendering API.
 
-## Configuration and Security
+## Requirements
 
-Enable the embedded static UI with `web_ui = true` in `typrest.toml`
-([`CONFIG-030`, `CONFIG-031`](typrest-toml.md)). It defaults to false. The UI routes, redirects, and
-caching are `HTTP-002` and `HTTP-060` to `HTTP-064`; the metadata routes it reads are `HTTP-030` to
-`HTTP-034`.
+### Configuration and security
 
-The UI and metadata routes have no authentication or authorization (`HTTP-050`, `HTTP-051`). A
-server exposing project metadata or the Web UI must be bound to loopback or protected by a trusted
-external boundary:
+- **REQ-WEB-010:** The embedded static UI MUST be enabled with `web_ui = true` in `typrest.toml` and
+  MUST default to disabled ([`REQ-CFG-030`, `REQ-CFG-031`](typrest-toml.md)). The UI routes,
+  redirects, and caching are `REQ-HTTP-002` and `REQ-HTTP-060` to `REQ-HTTP-064`; the metadata
+  routes it reads are `REQ-HTTP-030` to `REQ-HTTP-034`.
+- **REQ-WEB-011:** The UI and metadata routes have no authentication or authorization
+  (`REQ-HTTP-050`, `REQ-HTTP-051`), so a server exposing project metadata or the Web UI MUST be
+  bound to loopback or protected by a trusted external boundary:
 
-```bash
-typrest serve --hostname 127.0.0.1
-```
+  ```bash
+  typrest serve --hostname 127.0.0.1
+  ```
 
-## Navigation and Workspace
+### Navigation and workspace
 
-Opening `/_webui/` represents loading, API failure with retry, an empty registry, or selectable
-template cards. Selecting a template stores its ID in the query string:
+- **REQ-WEB-020:** Opening `/_webui/` MUST represent loading, API failure with retry, an empty
+  registry, or selectable template cards.
+- **REQ-WEB-021:** Selecting a template MUST store its ID in the query string, such as
+  `/_webui/?template=financial%2Finvoice`.
+- **REQ-WEB-022:** Direct navigation and browser history MUST restore the selection.
+- **REQ-WEB-023:** Changing or leaving a template MUST clear the previous render error, preview, and
+  Blob URL.
+- **REQ-WEB-024:** The workspace MUST place an editor and render action beside a preview and download
+  panel on wide screens and stack them on narrow screens.
+- **REQ-WEB-025:** Rendering MUST occur only after the render button or `Ctrl+Enter`/`Cmd+Enter`;
+  opening a template or editing a value MUST NOT render automatically.
 
-```text
-/_webui/?template=financial%2Finvoice
-```
+### Payload editor: mode availability
 
-Direct navigation and browser history restore selection. Changing or leaving a template clears the
-previous render error, preview, and Blob URL.
+- **REQ-WEB-030:** Form mode MUST be available only for a schema whose request body has
+  `type: object`.
+- **REQ-WEB-031:** Raw JSON mode MUST always be available.
+- **REQ-WEB-032:** Schema-less, primitive, array, null, and untyped roots MUST use Raw JSON by
+  default.
+- **REQ-WEB-033:** Without an object-derived initial value, Raw JSON MUST start with `{}`.
 
-The workspace uses an editor and render action beside a preview/download panel on wide screens and
-stacks them on narrow screens. Rendering occurs only after the button or `Ctrl+Enter`/`Cmd+Enter`;
-opening a template or editing a value does not render automatically.
-
-## Payload Editor
-
-### Mode Availability
-
-- Form mode is available only for a schema whose request body has `type: object`.
-- Raw JSON mode is always available.
-- Schema-less, primitive, array, null, and untyped roots use Raw JSON by default.
-- Without an object-derived initial value, Raw JSON starts with `{}`.
-
-### Form Controls
+### Payload editor: form controls
 
 | Schema rule | Control |
 |---|---|
@@ -65,71 +65,82 @@ opening a template or editing a value does not render automatically.
 | `type: array` | JSON textarea requiring an array |
 | no `type` | JSON textarea accepting any JSON value |
 
-Optional properties have an inclusion control; required properties are always included. Initial
-values use explicit default, then first enum member, then the type seed for required fields.
-Optional fields without a default or enum start omitted.
+- **REQ-WEB-040:** Each schema field MUST be rendered with the control in the table above.
+- **REQ-WEB-041:** Optional properties MUST have an inclusion control; required properties MUST
+  always be included.
+- **REQ-WEB-042:** Initial values MUST use the explicit default, then the first enum member, then the
+  type seed for required fields. Optional fields without a default or enum MUST start omitted.
 
-### Custom Top-level Fields
+### Payload editor: custom top-level fields
 
-Form mode permits top-level custom fields whose values are entered as JSON. Before switching modes
-or rendering, the client rejects an empty trimmed key, a key colliding with a schema property, a
-duplicate custom key, or invalid JSON. Custom fields affect only the test payload.
+- **REQ-WEB-050:** Form mode MUST permit top-level custom fields whose values are entered as JSON.
+- **REQ-WEB-051:** Before switching modes or rendering, the client MUST reject an empty trimmed key, a
+  key colliding with a schema property, a duplicate custom key, or invalid JSON.
+- **REQ-WEB-052:** Custom fields MUST affect only the test payload.
 
-### Mode Conversion
+### Payload editor: mode conversion
 
-Form to Raw JSON composes schema and custom fields, blocks invalid editors, and pretty-prints one
-object. Raw JSON to Form requires a valid object, maps declared keys to schema controls, maps unknown
-top-level keys to custom fields, and hydrates missing required/defaulted/enum-backed fields.
+- **REQ-WEB-060:** Form to Raw JSON MUST compose schema and custom fields, block invalid editors, and
+  pretty-print one object.
+- **REQ-WEB-061:** Raw JSON to Form MUST require a valid object, map declared keys to schema controls,
+  map unknown top-level keys to custom fields, and hydrate missing required, defaulted, or
+  enum-backed fields.
+- **REQ-WEB-062:** An impossible conversion MUST leave the current draft and mode visible with a clear
+  error.
+- **REQ-WEB-063:** Raw JSON MUST parse in the browser before rendering, and the parsed value,
+  including a primitive or array, MUST be sent unchanged to the render endpoint.
 
-An impossible conversion leaves the current draft and mode visible with a clear error.
+### Rendering and Blob lifecycle
 
-Raw JSON must parse in the browser before rendering. The parsed value—including a primitive or
-array—is sent unchanged to the render endpoint.
+- **REQ-WEB-070:** The UI's PDF-producing request MUST be a `POST /{*template_id}` with
+  `Content-Type: application/json`.
+- **REQ-WEB-071:** On success, the client MUST read a PDF Blob, create a Blob URL, revoke the previous
+  URL, and display the new URL in a titled iframe.
+- **REQ-WEB-072:** The client MUST offer an ID-derived download filename such as
+  `financial--invoice.pdf`, and download MUST reuse the existing Blob without compiling again.
+- **REQ-WEB-073:** Blob URLs MUST also be revoked when leaving a template or destroying the
+  application.
+- **REQ-WEB-074:** Starting a render MUST abort the previous render request, and loading another
+  template MUST abort the previous metadata request.
+- **REQ-WEB-075:** A failed later render MAY leave the latest successful preview visible.
 
-## Rendering and Blob Lifecycle
+### Error and accessibility contract
 
-The bundled UI's PDF-producing request is:
+- **REQ-WEB-080:** The UI MUST distinguish metadata failures, invalid client JSON, schema violations,
+  compiler or export diagnostics, non-JSON HTTP failures, and network failures.
+- **REQ-WEB-081:** The UI MUST NOT add source text or physical paths beyond the safe HTTP contract.
+- **REQ-WEB-082:** Every input and action MUST have an accessible label or name.
+- **REQ-WEB-083:** Template selection, tabs, inclusion controls, rendering, and download MUST be
+  keyboard-operable.
+- **REQ-WEB-084:** Tabs MUST expose correct roles and state, errors MUST use alert or live semantics,
+  focus MUST remain visible, and the PDF iframe MUST have an informative title.
+
+### Frontend and assets
+
+- **REQ-WEB-090:** The client MUST be Vite, Svelte, and TypeScript with Tailwind CSS and DaisyUI
+  classes, with no server-side rendering, frontend router, or Svelte-specific component library.
+- **REQ-WEB-091:** Vite MUST use `/_webui/` as its base path.
+- **REQ-WEB-092:** Production output MUST be committed under `webui/dist` and embedded in debug and
+  release server builds. Cargo builds MUST NOT invoke Node.
+- **REQ-WEB-093:** Frontend source changes MUST pass `npm run check`, `npm test`, and
+  `npm run build`, with the new `dist` included.
+
+## Examples
+
+Selected template in the query string:
+
+```text
+/_webui/?template=financial%2Finvoice
+```
+
+Render request made by the UI:
 
 ```http
 POST /financial/invoice
 Content-Type: application/json
 ```
 
-On success, the client reads a PDF Blob, creates a Blob URL, revokes the previous URL, displays the
-new URL in a titled iframe, and offers an ID-derived filename such as
-`financial--invoice.pdf` for download. Download reuses the existing Blob and does not compile
-again. Blob URLs are also revoked when leaving a template or destroying the application.
-
-Starting a render aborts the previous render request. Loading another template aborts the previous
-metadata request. A failed later render may leave the latest successful preview visible.
-
-## Error and Accessibility Contract
-
-The UI distinguishes metadata failures, invalid client JSON, schema violations, compiler/export
-diagnostics, non-JSON HTTP failures, and network failures. It never adds source text or physical
-paths beyond the safe HTTP contract.
-
-Every input and action has an accessible label or name. Template selection, tabs, inclusion
-controls, rendering, and download are keyboard-operable. Tabs expose correct roles and state,
-errors use alert/live semantics, focus remains visible, and the PDF iframe has an informative title.
-
-## Frontend and Assets
-
-The client is Vite, Svelte, and TypeScript with Tailwind CSS and DaisyUI classes. It has no
-server-side rendering, frontend router, or Svelte-specific component library. Vite uses
-`/_webui/` as its base path.
-
-Production output is committed under `webui/dist` and embedded in debug and release server builds.
-Cargo builds do not invoke Node. Frontend source changes require `npm run check`,
-`npm test`, and `npm run build`, with the new `dist` included.
-
-## Non-goals
-
-The UI does not provide authentication, production administration, Store mode, publishing,
-template mutation, source editing, automatic rendering, live filesystem updates, SSE, WebSockets,
-server-side rendering, a frontend router, or an alternative rendering engine.
-
-## Acceptance Criteria
+Acceptance criteria:
 
 - Object schemas support Form and Raw JSON workflows; other roots remain renderable as raw JSON.
 - Invalid JSON and colliding custom keys are blocked before rendering.
@@ -139,3 +150,16 @@ server-side rendering, a frontend router, or an alternative rendering engine.
 
 Route availability, embedded content types, and cache policy are acceptance criteria of the
 [HTTP API specification](http-api.md). Frontend behavior is covered by the tests under `webui/`.
+
+## Non-goals
+
+The UI does not provide authentication, production administration, Store mode, publishing,
+template mutation, source editing, automatic rendering, live filesystem updates, SSE, WebSockets,
+server-side rendering, a frontend router, or an alternative rendering engine.
+
+## Related documents
+
+- [HTTP API specification](http-api.md)
+- [`typrest.toml` specification](typrest-toml.md)
+- [Web UI development guide](../development/webui.md)
+- [ADR-0004](../adr/0004-embed-tracked-development-web-ui.md): why the UI is embedded and tracked.

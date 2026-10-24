@@ -1,4 +1,4 @@
-# Schema Specification (`schema.yml`) Version 1
+# Schema v1 specification (`schema.yml`)
 
 - **Status:** Current
 - **Scope:** The payload schema format, validation semantics, and the startup sample payload,
@@ -14,19 +14,19 @@ Typrest accepts any valid JSON value and injects it directly through `sys.inputs
 ### File rules
 
 File discovery and conflicts are defined in [Template layout](templates.md)
-(`TEMPLATE-030` to `TEMPLATE-032`).
+(`REQ-TPL-030` to `REQ-TPL-032`).
 
-- **SCHEMA-001:** `schema.yml` is canonical and must use YAML syntax. Legacy `schema.json` must be
+- **REQ-SCH-001:** `schema.yml` is canonical and MUST use YAML syntax. Legacy `schema.json` MUST be
   accepted with JSON syntax.
-- **SCHEMA-002:** The schema file must be optional.
-- **SCHEMA-003:** YAML input must contain exactly one document and may contain comments.
-- **SCHEMA-004:** Duplicate mapping keys must be invalid.
-- **SCHEMA-005:** Only `true` and `false` must use YAML boolean semantics; values such as `on` and
+- **REQ-SCH-002:** The schema file MUST be optional.
+- **REQ-SCH-003:** YAML input MUST contain exactly one document and MAY contain comments.
+- **REQ-SCH-004:** Duplicate mapping keys MUST be invalid.
+- **REQ-SCH-005:** Only `true` and `false` MUST use YAML boolean semantics; values such as `on` and
   `off` remain strings.
 
 ### Document shape
 
-When a schema file is present, it must contain:
+When a schema file is present, it MUST contain:
 
 ```yaml
 schemaVersion: v1
@@ -46,13 +46,13 @@ schema.yml
     body: SchemaField, required
 ```
 
-- **SCHEMA-010:** `schemaVersion` must be present and exactly `"v1"`. A missing or unsupported
-  version must be a `SchemaVersionError`.
-- **SCHEMA-011:** `request` and `request.body` must be present. Version v1 defines request-body
+- **REQ-SCH-010:** `schemaVersion` MUST be present and exactly `"v1"`. A missing or unsupported
+  version MUST be a `SchemaVersionError`.
+- **REQ-SCH-011:** `request` and `request.body` MUST be present. Version v1 defines request-body
   validation only.
-- **SCHEMA-012:** Other syntax, type, or structural failures must be `SchemaError` values detected
+- **REQ-SCH-012:** Other syntax, type, or structural failures MUST be `SchemaError` values detected
   while loading the template.
-- **SCHEMA-013:** Unknown keys at the root, under `request`, and inside fields are currently
+- **REQ-SCH-013:** Unknown keys at the root, under `request`, and inside fields MUST be
   ignored without a warning.
 
 ### `SchemaField`
@@ -68,18 +68,18 @@ Every location that accepts a schema field uses the same recursive shape:
 | `enum` | array of JSON values | absent | Values must have one JSON type |
 | `default` | any JSON value | absent | Must match `type` when `type` is present |
 
-- **SCHEMA-020:** All field keys must be optional.
-- **SCHEMA-021:** An empty field (`{}`) must accept any existing value.
+- **REQ-SCH-020:** All field keys MUST be optional.
+- **REQ-SCH-021:** An empty field (`{}`) MUST accept any existing value.
 
 ### Required and missing values
 
-- **SCHEMA-030:** `required` must check existence, not truthiness or nullability.
-- **SCHEMA-031:** A missing property with `required: true` must produce `required field missing`.
-- **SCHEMA-032:** A missing optional property must be omitted unless it has a default.
-- **SCHEMA-033:** An explicit `null` exists and must continue through type and enum validation.
-- **SCHEMA-034:** Required checking must happen before default application, so a required property
+- **REQ-SCH-030:** `required` MUST check existence, not truthiness or nullability.
+- **REQ-SCH-031:** A missing property with `required: true` MUST produce `required field missing`.
+- **REQ-SCH-032:** A missing optional property MUST be omitted unless it has a default.
+- **REQ-SCH-033:** An explicit `null` exists and MUST continue through type and enum validation.
+- **REQ-SCH-034:** Required checking MUST happen before default application, so a required property
   is still required when a default is also declared.
-- **SCHEMA-035:** `required` is meaningful only for properties nested under an object schema. The
+- **REQ-SCH-035:** `required` is meaningful only for properties nested under an object schema. The
   request body is always present once the HTTP handler has parsed it.
 
 ### Types
@@ -93,9 +93,9 @@ Every location that accepts a schema field uses the same recursive shape:
 | `array` | array |
 | `null` | `null` |
 
-- **SCHEMA-040:** An invalid `type` value must be a load-time schema error.
-- **SCHEMA-041:** Only one type may be declared. Type arrays and union types must not be supported.
-- **SCHEMA-042:** Without `type`, no type check must occur, although `enum` and `default` rules
+- **REQ-SCH-040:** An invalid `type` value MUST be a load-time schema error.
+- **REQ-SCH-041:** Only one type MAY be declared. Type arrays and union types MUST NOT be supported.
+- **REQ-SCH-042:** Without `type`, no type check MUST occur, although `enum` and `default` rules
   still apply.
 
 ### Objects and properties
@@ -113,11 +113,11 @@ properties:
         required: true
 ```
 
-- **SCHEMA-050:** `properties` must validate declared members recursively.
-- **SCHEMA-051:** `properties` is valid only with `type: object`. Using it with another type, or
-  without `type`, must be a load-time schema error.
-- **SCHEMA-052:** Undeclared payload properties must be retained and must not cause failures.
-- **SCHEMA-053:** Declared properties must be processed in name order.
+- **REQ-SCH-050:** `properties` MUST validate declared members recursively.
+- **REQ-SCH-051:** `properties` is valid only with `type: object`. Using it with another type, or
+  without `type`, MUST be a load-time schema error.
+- **REQ-SCH-052:** Undeclared payload properties MUST be retained and MUST NOT cause failures.
+- **REQ-SCH-053:** Declared properties MUST be processed in name order.
 
 ### Arrays and items
 
@@ -131,10 +131,10 @@ items:
       required: true
 ```
 
-- **SCHEMA-060:** `items` must apply one recursive field definition to every array element.
-- **SCHEMA-061:** `items` is valid only with `type: array`. Using it with another type, or without
-  `type`, must be a load-time schema error.
-- **SCHEMA-062:** An empty array must be valid.
+- **REQ-SCH-060:** `items` MUST apply one recursive field definition to every array element.
+- **REQ-SCH-061:** `items` is valid only with `type: array`. Using it with another type, or without
+  `type`, MUST be a load-time schema error.
+- **REQ-SCH-062:** An empty array MUST be valid.
 
 ### Enums
 
@@ -143,10 +143,10 @@ type: string
 enum: [BRL, USD]
 ```
 
-- **SCHEMA-070:** `enum` must restrict an existing value by exact JSON equality.
-- **SCHEMA-071:** All enum members must have the same JSON type, and when `type` is present every
-  member must match it. Violations must be load-time schema errors.
-- **SCHEMA-072:** An empty enum is structurally valid; no existing value can satisfy it.
+- **REQ-SCH-070:** `enum` MUST restrict an existing value by exact JSON equality.
+- **REQ-SCH-071:** All enum members MUST have the same JSON type, and when `type` is present every
+  member MUST match it. Violations MUST be load-time schema errors.
+- **REQ-SCH-072:** An empty enum is structurally valid; no existing value can satisfy it.
 
 ### Defaults
 
@@ -160,47 +160,52 @@ properties:
 
 Input `{}` becomes `{"displayName":"anonymous"}` before compilation.
 
-- **SCHEMA-080:** A default must supply a property that is missing and optional.
-- **SCHEMA-081:** A default must never replace an explicit `null`.
-- **SCHEMA-082:** When `type` is present, the default must match it; otherwise the schema must fail
-  to load. When `type` is absent, a default may be any JSON value.
-- **SCHEMA-083:** After insertion, normal type, enum, object, and array validation must continue.
+- **REQ-SCH-080:** A default MUST supply a property that is missing and optional.
+- **REQ-SCH-081:** A default MUST never replace an explicit `null`.
+- **REQ-SCH-082:** When `type` is present, the default MUST match it; otherwise the schema MUST fail
+  to load. When `type` is absent, a default MAY be any JSON value.
+- **REQ-SCH-083:** After insertion, normal type, enum, object, and array validation MUST continue.
 
 ### Validation order
 
-- **SCHEMA-090:** Every field must be processed in this order: (1) check existence and `required`;
+- **REQ-SCH-090:** Every field MUST be processed in this order: (1) check existence and `required`;
   (2) apply `default` to a missing optional value; (3) validate `type`; (4) validate `enum`;
   (5) validate object `properties`; (6) validate array `items`.
-- **SCHEMA-091:** If type or enum validation fails for a value, nested validation for that value
-  must stop. Independent properties and array items must continue, so a response may contain
+- **REQ-SCH-091:** If type or enum validation fails for a value, nested validation for that value
+  MUST stop. Independent properties and array items MUST continue, so a response MAY contain
   multiple violations.
-- **SCHEMA-092:** Violation paths must use JSON root notation, such as `$.customer.name` and
+- **REQ-SCH-092:** Violation paths MUST use JSON root notation, such as `$.customer.name` and
   `$.items[0].amount`.
 
 ### Startup sample payload
 
-- **SCHEMA-100:** Startup warmup must derive a deterministic value from each field with this
+- **REQ-SCH-100:** Startup warmup MUST derive a deterministic value from each field with this
   precedence: (1) explicit `default`, including `null`; (2) first `enum` member; (3) the type seed:
   `""` for `string`, `0` for `number`, `false` for `boolean`, a recursively generated object,
   `[]` for `array`, or `null`; (4) `null` for an untyped field.
-- **SCHEMA-101:** Known object properties must be included recursively, and arrays must warm with an
+- **REQ-SCH-101:** Known object properties MUST be included recursively, and arrays MUST warm with an
   empty array.
-- **SCHEMA-102:** The generated value must be validated before warmup compilation.
-- **SCHEMA-103:** A schema-less template must warm with `{}`.
+- **REQ-SCH-102:** The generated value MUST be validated before warmup compilation.
+- **REQ-SCH-103:** A schema-less template MUST warm with `{}`.
 
 See [Template lifecycle](../architecture/template-lifecycle.md) for how warmup is used.
 
 ### Load-time consistency errors
 
-- **SCHEMA-110:** The following must be rejected while loading and never during request
+- **REQ-SCH-110:** The following MUST be rejected while loading and never during request
   validation: invalid YAML or JSON syntax; missing or unsupported `schemaVersion`; missing or
   incorrectly shaped `request.body`; an invalid `type`; `properties` without `type: object`;
   `items` without `type: array`; a typed default with the wrong type; mixed enum member types; an
   enum member incompatible with the declared type.
 
+## Examples
+
+The schema in [Document shape](#document-shape) is a complete minimal example. It agrees with
+`REQ-SCH-010` and `REQ-SCH-011`.
+
 ## Non-goals
 
-Union types (see `SCHEMA-041`) and validation of anything other than the request body.
+Union types (see `REQ-SCH-041`) and validation of anything other than the request body.
 
 ## Related documents
 

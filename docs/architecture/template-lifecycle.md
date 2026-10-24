@@ -37,7 +37,7 @@ warnings are reported with their full diagnostic context but do not fail startup
 ## Deterministic Warmup Payloads
 
 Schema sample generation follows the precedence in [Schema v1](../specs/schema-v1.md)
-(`SCHEMA-100`); a schema-less template warms with `{}`. The warmup
+(`REQ-SCH-100`); a schema-less template warms with `{}`. The warmup
 payload catches syntax, import, font, export, and common data-access failures, but payload-dependent
 branches can still fail at render time.
 

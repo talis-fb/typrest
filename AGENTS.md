@@ -44,7 +44,9 @@ check [`ROADMAP.md`](ROADMAP.md) for scope.
 - When code, tests, and prose disagree, treat the code and tests as truth, then update the affected
   documentation in the same change.
 - Do not silently choose between conflicting accepted decisions. Propose a superseding ADR.
-- Cite requirement IDs (`HTTP-020`, `SCHEMA-090`) instead of quoting requirements.
+- Cite requirement IDs (`REQ-HTTP-020`, `REQ-SCH-090`) instead of quoting requirements.
+- Every specification follows [`docs/specs/template.md`](docs/specs/template.md) and uses
+  `REQ-<DOMAIN>-<NNN>` IDs with uppercase `MUST`/`SHOULD`/`MAY`.
 
 ## Documentation Updates
 

@@ -1,26 +1,16 @@
-# Logging and process output
+# Logging and process output specification
 
 - **Status:** Current
 - **Scope:** Process streams, pretty logs, JSON Lines, filtering, and color.
 
-## Stream contract
+## Purpose
 
-Typrest writes all application output to stdout. Stderr remains unused during normal operation,
-including successful commands, warnings, configuration failures, compiler failures, server bind
-failures, and watch reloads. This gives operators one ordered stream for an entire process lifetime.
+Operators get one ordered stream for an entire process lifetime. Ordinary application code emits
+`tracing` events where work occurs: commands log startup and registry progress, package resolution
+logs cache and installation activity, watch mode logs reload outcomes, and HTTP code logs server and
+render outcomes.
 
-Ordinary application code emits `tracing` events where work occurs. Commands log startup and
-registry progress, package resolution logs cache and installation activity, watch mode logs reload
-outcomes, and HTTP code logs server and render outcomes. Pretty and JSON modes receive the same
-operational event set with the same levels and structured metadata.
-
-The sole direct-output exception is annotated pre-build compiler diagnostics. They use
-`codespan_reporting` to retain source excerpts, carets, locations, hints, traces, and color while
-writing directly to stdout.
-
-## Implementation ownership
-
-Logging is intentionally split into two focused modules:
+Logging is split into two focused modules:
 
 - `logging/subscriber.rs` owns `RUST_LOG`, stdout selection, timestamps, levels, formatting, and
   tracing color behavior;
@@ -31,10 +21,54 @@ Logging is intentionally split into two focused modules:
 `AppState` stores the selected `LogFormat` only so request handlers can choose pretty or JSON
 compiler-diagnostic emission.
 
-## Pretty output
+## Requirements
 
-Pretty tracing records contain a UTC timestamp, level, and self-contained message. Structured
-fields and tracing targets are not appended. A one-template server startup resembles:
+### Stream contract
+
+- **REQ-LOG-010:** Typrest MUST write all application output to stdout.
+- **REQ-LOG-011:** Typrest MUST NOT use stderr during normal operation, including successful
+  commands, warnings, configuration failures, compiler failures, server bind failures, and watch
+  reloads.
+- **REQ-LOG-012:** Pretty and JSON modes MUST receive the same operational event set with the same
+  levels and structured metadata.
+- **REQ-LOG-013:** Annotated pre-build compiler diagnostics MUST be the only direct-output
+  exception. They MUST use `codespan_reporting` to retain source excerpts, carets, locations, hints,
+  traces, and color while writing directly to stdout.
+
+### Pretty output
+
+- **REQ-LOG-020:** Pretty tracing records MUST contain a UTC timestamp, level, and self-contained
+  message, and MUST NOT append structured fields or tracing targets.
+- **REQ-LOG-021:** Pre-build compiler warnings and errors MUST interrupt the tracing sequence with
+  annotated diagnostics on the same stdout stream.
+- **REQ-LOG-022:** Runtime diagnostics MUST use tracing and MUST NOT include source excerpts.
+
+### JSON Lines
+
+- **REQ-LOG-030:** JSON mode MUST write one valid JSON object per stdout line.
+- **REQ-LOG-031:** Records MUST retain event names and safe structured metadata, including
+  contexts, template and package IDs, statuses, counts, timings, sizes, and operational paths.
+- **REQ-LOG-032:** Compiler JSON events MUST be `compiler.diagnostic`, `compiler.hint`, and
+  `compiler.trace`, and a `report_id` MUST correlate related records.
+- **REQ-LOG-033:** JSON output MUST NOT contain source excerpts, request payloads, PDF bytes, ANSI
+  codes, or physical compiler source paths.
+
+### Filtering and color
+
+- **REQ-LOG-040:** `RUST_LOG` MUST filter every tracing record and MUST default to `typrest=info`.
+- **REQ-LOG-041:** Package cache hits MUST use `DEBUG`, so they are hidden by default and visible
+  with `RUST_LOG=typrest=debug`.
+- **REQ-LOG-042:** Pretty pre-build compiler diagnostics MUST bypass tracing and therefore
+  `RUST_LOG`; even `RUST_LOG=off` MUST NOT hide them.
+- **REQ-LOG-043:** JSON compiler diagnostics and runtime pretty diagnostics MUST use tracing and
+  remain filterable.
+- **REQ-LOG-044:** `--color auto` MUST detect whether stdout is a terminal. `--color always` and
+  `--color never` MUST apply to pretty tracing and annotated diagnostics.
+- **REQ-LOG-045:** JSON output MUST NOT contain ANSI codes.
+
+## Examples
+
+A one-template server startup in pretty mode:
 
 ```text
 2026-08-21T12:48:40.350891Z  INFO compiling template `invoice`
@@ -45,32 +79,19 @@ fields and tracing targets are not appended. A one-template server startup resem
 2026-08-21T12:48:40.352471Z  INFO typrest server listening on 0.0.0.0:8080
 ```
 
-Pre-build compiler warnings and errors interrupt that tracing sequence with annotated diagnostics
-on the same stdout stream. Runtime diagnostics use tracing and do not include source excerpts.
-
-## JSON Lines
-
-JSON mode writes one valid JSON object per stdout line. Records retain event names and safe
-structured metadata, including contexts, template and package IDs, statuses, counts, timings,
-sizes, and operational paths. For example:
+JSON Lines records:
 
 ```json
 {"timestamp":"2026-08-21T12:48:40.350891Z","level":"INFO","message":"compiling template `invoice`","event":"template.compilation.started","context":"startup","template":"invoice","status":"started","target":"typrest::commands::serve"}
 {"timestamp":"2026-08-21T12:48:40.351410Z","level":"INFO","message":"templates ready: 1","event":"templates.ready","context":"startup","template_count":1,"status":"ok","target":"typrest::commands::serve"}
 ```
 
-Compiler JSON events are `compiler.diagnostic`, `compiler.hint`, and `compiler.trace`. A
-`report_id` correlates related records. JSON omits source excerpts, request payloads, PDF bytes,
-ANSI codes, and physical compiler source paths.
+## Non-goals
 
-## Filtering and color
+Log shipping, rotation, file output, and metrics.
 
-`RUST_LOG` filters every tracing record and defaults to `typrest=info`. Package cache hits use
-`DEBUG`, so they are hidden by default and visible with `RUST_LOG=typrest=debug`.
+## Related documents
 
-Pretty pre-build compiler diagnostics bypass tracing and therefore bypass `RUST_LOG`; even
-`RUST_LOG=off` does not hide them. JSON compiler diagnostics and runtime pretty diagnostics use
-tracing and remain filterable.
-
-`--color auto` detects whether stdout is a terminal. `--color always` and `--color never` apply to
-pretty tracing and annotated diagnostics. JSON never contains ANSI codes.
+- [Compiler diagnostics](diagnostics.md)
+- [CLI specification](cli.md)
+- [ADR-0008](../adr/0008-use-one-stdout-tracing-stream.md): why one stdout tracing stream.

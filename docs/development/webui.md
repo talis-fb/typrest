@@ -22,7 +22,7 @@ typrest serve --hostname 127.0.0.1
 
 Open `http://127.0.0.1:8080/_webui`. The UI has no authentication. The metadata endpoints are
 mounted even when the static UI is disabled, so protect the server itself from untrusted
-networks (`HTTP-051` in the [HTTP API specification](../specs/http-api.md)).
+networks (`REQ-HTTP-051` in the [HTTP API specification](../specs/http-api.md)).
 
 ## Use the Workspace
 
@@ -153,8 +153,8 @@ GET /_api/templates
 GET /_api/templates/{*template_id}
 ```
 
-Both routes are defined in the [HTTP API specification](../specs/http-api.md) (`HTTP-030` to
-`HTTP-034`). They are an internal, unversioned interface for the bundled frontend.
+Both routes are defined in the [HTTP API specification](../specs/http-api.md) (`REQ-HTTP-030` to
+`REQ-HTTP-034`). They are an internal, unversioned interface for the bundled frontend.
 
 ## Troubleshooting
 
