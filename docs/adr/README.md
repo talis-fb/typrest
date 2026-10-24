@@ -36,11 +36,9 @@ ADRs to log routine changes.
 
 ADRs are append-only. Clarify wording when necessary, but do not delete or rewrite an accepted
 decision. Change or reverse it with a new ADR, then mark the earlier record **Superseded** and link
-both records. Numbers are permanent: never renumber or reuse one. Gaps are expected.
-
-The set below was pruned once, before the first release, to remove records that restated the
-product premise or described intermediate prototype decisions. Git history is the archive for the
-deleted records.
+both records. Numbers are permanent: never renumber or reuse one. The set was renumbered once,
+before the first release, when prototype-era records were removed; numbers are immutable from the
+first release on. Git history is the archive for removed records.
 
 ## Decision index
 
@@ -59,7 +57,7 @@ deleted records.
 
 1. Get human approval for the proposal.
 2. Copy [`template.md`](template.md) to the next unused four-digit number, such as
-   `0015-short-decision-title.md`, with status **Proposed**.
+   `0009-short-decision-title.md`, with status **Proposed**.
 3. Describe the context, decision, alternatives, and consequences.
 4. Add the record to the index above.
 5. When the decision is approved, set the status to **Accepted**. When replacing an earlier decision,
