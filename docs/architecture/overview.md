@@ -131,7 +131,7 @@ with the compiler.
 The routes, request and response contracts, and error envelope are defined in the
 [HTTP API specification](../specs/http-api.md). Handlers read exclusively from `TemplateRegistry`
 through `RenderService`; they never receive a loader or package repository
-([ADR-0012](../adr/0012-consolidate-application-packages.md)).
+([ADR-0007](../adr/0007-consolidate-application-packages.md)).
 
 ## Architectural Invariants
 

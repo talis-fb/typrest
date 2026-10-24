@@ -1,4 +1,4 @@
-# ADR-0004: Resolve `_shared/` During Loading
+# ADR-0001: Resolve `_shared/` During Loading
 
 - **Date:** 2025-11
 - **Status:** Accepted

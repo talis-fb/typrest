@@ -107,9 +107,9 @@ namespaces, custom registries, and package lockfiles.
 
 ## Related documents
 
-- [ADR-0004](../adr/0004-resolve-shared-during-loading.md): why `_shared/` is resolved by the loader.
-- [ADR-0005](../adr/0005-inject-request-data-through-sys-inputs.md): why data is passed as an input.
-- [ADR-0010](../adr/0010-derive-template-ids-from-folder-routes.md): why IDs come from folders.
-- [ADR-0011](../adr/0011-resolve-preview-packages-during-preparation.md): why packages resolve
+- [ADR-0001](../adr/0001-resolve-shared-during-loading.md): why `_shared/` is resolved by the loader.
+- [ADR-0002](../adr/0002-inject-request-data-through-sys-inputs.md): why data is passed as an input.
+- [ADR-0005](../adr/0005-derive-template-ids-from-folder-routes.md): why IDs come from folders.
+- [ADR-0006](../adr/0006-resolve-preview-packages-during-preparation.md): why packages resolve
   during preparation.
 - [Compiler architecture](../architecture/compiler.md).

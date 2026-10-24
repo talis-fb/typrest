@@ -1,4 +1,4 @@
-# ADR-0011: Resolve Preview Packages During Preparation
+# ADR-0006: Resolve Preview Packages During Preparation
 
 - **Date:** 2026-08
 - **Status:** Accepted

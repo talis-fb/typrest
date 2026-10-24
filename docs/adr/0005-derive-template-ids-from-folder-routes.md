@@ -1,4 +1,4 @@
-# ADR-0010: Derive Template IDs and Direct Routes from Folders
+# ADR-0005: Derive Template IDs and Direct Routes from Folders
 
 - **Date:** 2026-08
 - **Status:** Accepted
@@ -28,7 +28,7 @@ Render templates directly with `POST /{*template_id}`. Keep health and metadata 
 and `/_api`; move the optional Web UI to `/_webui`. When enabled, `GET /` redirects to `/_webui/`.
 Metadata identifies templates with `id` and uses a catch-all detail route.
 
-Keep root `templates/_shared/` resolution in the filesystem loader under ADR-0004. Global shared
+Keep root `templates/_shared/` resolution in the filesystem loader under ADR-0001. Global shared
 files are inserted after local files and retain the existing same-path precedence. Route-topology
 and shared changes build and atomically swap a complete candidate registry in watch mode.
 

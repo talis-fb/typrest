@@ -1,4 +1,4 @@
-# ADR-0014: Use one stdout tracing stream
+# ADR-0008: Use one stdout tracing stream
 
 - **Date:** 2026-08
 - **Status:** Accepted

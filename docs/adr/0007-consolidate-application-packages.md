@@ -1,4 +1,4 @@
-# ADR-0012: Consolidate Application Packages Around the Core Boundary
+# ADR-0007: Consolidate Application Packages Around the Core Boundary
 
 - **Date:** 2026-08
 - **Status:** Accepted

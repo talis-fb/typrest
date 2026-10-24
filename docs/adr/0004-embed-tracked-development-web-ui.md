@@ -1,4 +1,4 @@
-# ADR-0008: Embed the Tracked Development Web UI
+# ADR-0004: Embed the Tracked Development Web UI
 
 - **Date:** 2026-07
 - **Status:** Accepted

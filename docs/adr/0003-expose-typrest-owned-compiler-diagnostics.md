@@ -1,4 +1,4 @@
-# ADR-0007: Expose Typrest-owned Compiler Diagnostics
+# ADR-0003: Expose Typrest-owned Compiler Diagnostics
 
 - **Date:** 2026-07
 - **Status:** Accepted

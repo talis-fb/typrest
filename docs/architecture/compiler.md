@@ -6,7 +6,7 @@
 
 Typrest links Typst as a library, so one application binary renders PDFs with no separate Typst
 executable. See the [product vision](../product/vision.md) for why. The integration complexity is
-isolated behind this anti-corruption layer, and [ADR-0007](../adr/0007-expose-typrest-owned-compiler-diagnostics.md)
+isolated behind this anti-corruption layer, and [ADR-0003](../adr/0003-expose-typrest-owned-compiler-diagnostics.md)
 explains why diagnostics cross it as Typrest-owned values.
 
 The Typst compiler API can change between releases. Imports of `typst`, `typst-pdf`, and

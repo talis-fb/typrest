@@ -173,5 +173,5 @@ Authentication, versioned metadata APIs, template mutation, publishing, and tagg
 
 - [Compiler diagnostics](diagnostics.md) for the diagnostic model behind `compilation_failed`.
 - [Template layout](templates.md) for template IDs.
-- [ADR-0008](../adr/0008-embed-tracked-development-web-ui.md) for why metadata routes are always
+- [ADR-0004](../adr/0004-embed-tracked-development-web-ui.md) for why metadata routes are always
   mounted.

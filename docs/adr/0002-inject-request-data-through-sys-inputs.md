@@ -1,4 +1,4 @@
-# ADR-0005: Inject Request Data Through `sys.inputs`
+# ADR-0002: Inject Request Data Through `sys.inputs`
 
 - **Date:** 2025-11
 - **Status:** Accepted
