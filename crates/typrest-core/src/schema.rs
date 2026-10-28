@@ -321,10 +321,8 @@ fn validate_value(
                 violations,
             );
 
-            if !object.contains_key(name)
-                && let Some(defaulted) = validated
-            {
-                object.insert(name.clone(), defaulted);
+            if let Some(validated) = validated {
+                object.insert(name.clone(), validated);
             }
         }
     }
@@ -541,6 +539,33 @@ request:
         let validated = validate_with_defaults(&schema, &json!({ "nickname": null })).unwrap();
 
         assert_eq!(validated, json!({ "name": "anonymous", "nickname": null }));
+    }
+
+    #[test]
+    fn applies_defaults_inside_array_items() {
+        let schema = parse(json!({
+            "schemaVersion": "v1",
+            "request": {
+                "body": {
+                    "type": "object",
+                    "properties": {
+                        "list": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "a": { "type": "string", "default": "x" }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }));
+
+        let validated = validate_with_defaults(&schema, &json!({ "list": [{}] })).unwrap();
+
+        assert_eq!(validated, json!({ "list": [{ "a": "x" }] }));
     }
 
     #[test]

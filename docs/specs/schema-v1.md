@@ -160,7 +160,8 @@ properties:
 
 Input `{}` becomes `{"displayName":"anonymous"}` before compilation.
 
-- **REQ-SCH-080:** A default MUST supply a property that is missing and optional.
+- **REQ-SCH-080:** A default MUST supply a property that is missing and optional. This MUST apply at any depth,
+  including properties of objects inside array items.
 - **REQ-SCH-081:** A default MUST never replace an explicit `null`.
 - **REQ-SCH-082:** When `type` is present, the default MUST match it; otherwise the schema MUST fail
   to load. When `type` is absent, a default MAY be any JSON value.
