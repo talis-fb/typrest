@@ -1,0 +1,130 @@
+schemaVersion: v1
+request:
+  body:
+    type: object
+    properties:
+      number:
+        type: string
+        required: true
+      issue_date:
+        type: string
+        required: true
+      due_date:
+        type: string
+        required: true
+      status:
+        type: string
+        enum: [draft, sent, paid, overdue]
+        default: sent
+      currency:
+        type: string
+        enum: [USD, EUR, BRL]
+        default: USD
+      purchase_order:
+        type: string
+        default: ""
+      seller:
+        type: object
+        required: true
+        properties:
+          name:
+            type: string
+            required: true
+          tagline:
+            type: string
+            default: ""
+          address:
+            type: array
+            required: true
+            items:
+              type: string
+          email:
+            type: string
+            required: true
+          website:
+            type: string
+            default: ""
+          tax_id:
+            type: string
+            default: ""
+      customer:
+        type: object
+        required: true
+        properties:
+          name:
+            type: string
+            required: true
+          contact:
+            type: string
+            default: ""
+          address:
+            type: array
+            required: true
+            items:
+              type: string
+          email:
+            type: string
+            required: true
+          tax_id:
+            type: string
+            default: ""
+      items:
+        type: array
+        required: true
+        items:
+          type: object
+          properties:
+            name:
+              type: string
+              required: true
+            description:
+              type: string
+              default: ""
+            quantity:
+              type: number
+              required: true
+            unit:
+              type: string
+              default: ""
+            unit_price:
+              type: number
+              required: true
+            discount_percent:
+              type: number
+              default: 0
+            tax_rate:
+              type: number
+              default: 0
+      discount:
+        type: object
+        properties:
+          label:
+            type: string
+            default: Discount
+          percent:
+            type: number
+            default: 0
+      payment:
+        type: object
+        properties:
+          terms:
+            type: string
+            default: ""
+          method:
+            type: string
+            default: ""
+          details:
+            type: array
+            default: []
+            items:
+              type: object
+              properties:
+                label:
+                  type: string
+                  required: true
+                value:
+                  type: string
+                  required: true
+      notes:
+        type: string
+        default: ""

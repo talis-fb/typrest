@@ -1,0 +1,88 @@
+{
+  "number": "INV-2026-0142",
+  "issue_date": "2026-10-01",
+  "due_date": "2026-10-31",
+  "status": "sent",
+  "currency": "USD",
+  "purchase_order": "PO-88213",
+  "seller": {
+    "name": "Northwind Studio",
+    "tagline": "Design & engineering for product teams",
+    "address": ["27 Harbor Street, Suite 4", "Portland, OR 97209", "United States"],
+    "email": "billing@northwind.example",
+    "website": "northwind.example",
+    "tax_id": "EIN 12-3456789"
+  },
+  "customer": {
+    "name": "Lumen Robotics, Inc.",
+    "contact": "Attn: Priya Raman, Accounts Payable",
+    "address": ["500 Innovation Way", "Austin, TX 78701", "United States"],
+    "email": "ap@lumen-robotics.example",
+    "tax_id": "EIN 98-7654321"
+  },
+  "items": [
+    {
+      "name": "Product discovery workshop",
+      "description": "Two-day on-site workshop with stakeholder interviews and a prioritised roadmap.",
+      "quantity": 16,
+      "unit": "h",
+      "unit_price": 150,
+      "tax_rate": 8.25
+    },
+    {
+      "name": "UX design sprint",
+      "description": "Wireframes, clickable prototype and usability testing with five participants.",
+      "quantity": 60,
+      "unit": "h",
+      "unit_price": 135,
+      "discount_percent": 10,
+      "tax_rate": 8.25
+    },
+    {
+      "name": "Frontend implementation",
+      "description": "Component library, accessibility review and responsive layouts.",
+      "quantity": 120,
+      "unit": "h",
+      "unit_price": 125,
+      "tax_rate": 8.25
+    },
+    {
+      "name": "Cloud hosting setup",
+      "description": "Staging and production environments with CI/CD pipelines.",
+      "quantity": 1,
+      "unit": "fixed",
+      "unit_price": 2400,
+      "tax_rate": 8.25
+    },
+    {
+      "name": "Brand style guide (PDF)",
+      "quantity": 1,
+      "unit": "fixed",
+      "unit_price": 950
+    },
+    {
+      "name": "Priority support retainer",
+      "description": "October 2026, 4 hour response time.",
+      "quantity": 1,
+      "unit": "month",
+      "unit_price": 600,
+      "tax_rate": 8.25
+    }
+  ],
+  "discount": {
+    "label": "Loyalty discount",
+    "percent": 5
+  },
+  "payment": {
+    "terms": "Net 30",
+    "method": "Bank transfer (ACH or wire)",
+    "details": [
+      { "label": "Account name", "value": "Northwind Studio LLC" },
+      { "label": "Bank", "value": "First Cascade Bank" },
+      { "label": "Routing", "value": "123456789" },
+      { "label": "Account", "value": "000123456789" },
+      { "label": "Reference", "value": "INV-2026-0142" }
+    ]
+  },
+  "notes": "Thank you for your business. Late payments are subject to a 1.5% monthly fee. Please include the invoice number in your transfer reference."
+}
