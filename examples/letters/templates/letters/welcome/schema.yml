@@ -1,0 +1,63 @@
+schemaVersion: v1
+request:
+  body:
+    type: object
+    properties:
+      # sender and recipient are written out in full in every schema (no $ref in Schema v1).
+      sender:
+        type: object
+        required: true
+        properties:
+          name:
+            type: string
+            required: true
+          address:
+            type: array
+            default: []
+            items:
+              type: string
+          email:
+            type: string
+            default: ""
+      date:
+        type: string
+        required: true
+      recipient:
+        type: object
+        required: true
+        properties:
+          name:
+            type: string
+            required: true
+          address:
+            type: array
+            default: []
+            items:
+              type: string
+          email:
+            type: string
+            default: ""
+      first_name:
+        type: string
+        required: true
+      product:
+        type: string
+        required: true
+      intro:
+        type: string
+        default: "We are delighted to have you on board."
+      next_steps:
+        type: array
+        default: []
+        items:
+          type: object
+          properties:
+            title:
+              type: string
+              required: true
+            detail:
+              type: string
+              default: ""
+      team_name:
+        type: string
+        default: "The Customer Team"

@@ -1,0 +1,19 @@
+{
+  "title": "Quarterly review",
+  "status": "review",
+  "priority": 3,
+  "rating": 4.5,
+  "published": true,
+  "tags": ["finance", "q3"],
+  "extra": {"anything": ["goes", 1, null]},
+  "author": {
+    "name": "Ada Example",
+    "address": {"city": "Lisbon"}
+  },
+  "lines": [
+    {"sku": "A-100", "qty": 3},
+    {"sku": "B-200"}
+  ],
+  "matrix": [[1, 2], [3, 4.5]],
+  "undeclared": "kept as is"
+}

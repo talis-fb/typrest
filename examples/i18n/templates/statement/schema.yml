@@ -1,0 +1,59 @@
+schemaVersion: v1
+request:
+  body:
+    type: object
+    properties:
+      # Adding a locale = one entry here + one entry in templates/_shared/i18n.typ.
+      locale:
+        type: string
+        enum: [en, pt-BR, es, de]
+        default: en
+      currency:
+        type: string
+        enum: [USD, EUR, BRL, GBP]
+        default: USD
+      bank:
+        type: string
+        default: Harborview Bank
+      statement_date:
+        type: string
+        default: ""
+      period_start:
+        type: string
+        default: ""
+      period_end:
+        type: string
+        default: ""
+      account:
+        type: object
+        required: true
+        properties:
+          holder:
+            type: string
+            required: true
+          number:
+            type: string
+            required: true
+          address:
+            type: array
+            default: []
+            items:
+              type: string
+          opening_balance:
+            type: number
+            default: 0
+      transactions:
+        type: array
+        required: true
+        items:
+          type: object
+          properties:
+            date:
+              type: string
+              required: true
+            description:
+              type: string
+              required: true
+            amount:
+              type: number
+              required: true

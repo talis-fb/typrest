@@ -1,0 +1,12 @@
+{
+  "sender": {"name": "Northwind Utilities Ltd.", "address": ["12 Harbour Road", "Brightport BP1 4XY"], "email": "hello@northwind.example.com"},
+  "recipient": {"name": "Priya Sandoval", "address": ["5 Orchard Close", "Brightport BP3 7LD"]},
+  "date": "28 October 2026",
+  "first_name": "Priya",
+  "product": "Northwind Home",
+  "next_steps": [
+    {"title": "Activate your meter", "detail": "Send us your first reading using the card in your welcome pack."},
+    {"title": "Choose a payment day", "detail": "Pick any day of the month for your direct debit."},
+    {"title": "Go paperless"}
+  ]
+}

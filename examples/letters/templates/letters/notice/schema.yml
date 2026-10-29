@@ -1,0 +1,60 @@
+schemaVersion: v1
+request:
+  body:
+    type: object
+    properties:
+      # sender and recipient are written out in full in every schema (no $ref in Schema v1).
+      sender:
+        type: object
+        required: true
+        properties:
+          name:
+            type: string
+            required: true
+          address:
+            type: array
+            default: []
+            items:
+              type: string
+          email:
+            type: string
+            default: ""
+      date:
+        type: string
+        required: true
+      recipient:
+        type: object
+        required: true
+        properties:
+          name:
+            type: string
+            required: true
+          address:
+            type: array
+            default: []
+            items:
+              type: string
+          email:
+            type: string
+            default: ""
+      level:
+        type: string
+        enum: [info, warning]
+        default: info
+      headline:
+        type: string
+        required: true
+      message:
+        type: string
+        required: true
+      effective_date:
+        type: string
+        default: ""
+      actions:
+        type: array
+        default: []
+        items:
+          type: string
+      contact_note:
+        type: string
+        default: ""

@@ -25,8 +25,7 @@ not implemented. Proposals in these areas require an explicit scope decision bef
 | `crates/typrest` | CLI, project loading, package resolution, watch mode, HTTP, and diagnostics |
 | `webui` | Optional Svelte development UI and committed production assets |
 | `docs` | Product vision, specifications, architecture, development guides, ADRs, and plans |
-| `examples/templates` | Example templates, schemas, and payloads |
-| `examples/invoice` | Complete example project with an invoice template |
+| `examples` | Complete example projects; list new ones only in [`examples/README.md`](examples/README.md) |
 
 Start with the [documentation index](docs/README.md). Read the relevant document before
 changing behavior:

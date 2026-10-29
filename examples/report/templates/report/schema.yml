@@ -1,0 +1,58 @@
+schemaVersion: v1
+request:
+  body:
+    type: object
+    properties:
+      title:
+        type: string
+        required: true
+      subtitle:
+        type: string
+        default: ""
+      author:
+        type: string
+        required: true
+      date:
+        type: string
+        required: true
+      summary:
+        type: string
+        required: true
+      show_toc:
+        type: boolean
+        default: true
+      sections:
+        type: array
+        required: true
+        items:
+          type: object
+          properties:
+            heading:
+              type: string
+              required: true
+            body:
+              type: string
+              required: true
+            bullets:
+              type: array
+              default: []
+              items:
+                type: string
+            table:
+              type: object
+              properties:
+                caption:
+                  type: string
+                  default: ""
+                columns:
+                  type: array
+                  required: true
+                  items:
+                    type: string
+                rows:
+                  type: array
+                  required: true
+                  items:
+                    type: array
+                    items:
+                      type: string

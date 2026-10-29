@@ -1,0 +1,59 @@
+schemaVersion: v1
+request:
+  body:
+    type: object
+    properties:
+      # sender and recipient are written out in full in every schema (no $ref in Schema v1).
+      sender:
+        type: object
+        required: true
+        properties:
+          name:
+            type: string
+            required: true
+          address:
+            type: array
+            default: []
+            items:
+              type: string
+          email:
+            type: string
+            default: ""
+      date:
+        type: string
+        required: true
+      recipient:
+        type: object
+        required: true
+        properties:
+          name:
+            type: string
+            required: true
+          address:
+            type: array
+            default: []
+            items:
+              type: string
+          email:
+            type: string
+            default: ""
+      reference:
+        type: string
+        default: ""
+      subject:
+        type: string
+        required: true
+      salutation:
+        type: string
+        default: "Dear Sir or Madam,"
+      paragraphs:
+        type: array
+        required: true
+        items:
+          type: string
+      closing:
+        type: string
+        default: "Yours faithfully,"
+      signatory:
+        type: string
+        required: true

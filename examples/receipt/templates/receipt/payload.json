@@ -1,0 +1,17 @@
+{
+  "store": {
+    "name": "Corner Bean Cafe",
+    "address": ["12 Maple Street", "Springfield"],
+    "phone": "555-0142"
+  },
+  "items": [
+    { "name": "Espresso", "quantity": 2, "unit_price": 3.5 },
+    { "name": "Oat latte", "quantity": 1, "unit_price": 5.25, "note": "Extra hot" },
+    { "name": "Almond croissant", "quantity": 3, "unit_price": 4.1 },
+    { "name": "Whole bean coffee 1kg", "quantity": 1, "unit_price": 1234.5, "note": "Gift wrapped" }
+  ],
+  "payment_method": "pix",
+  "tax_rate": 10,
+  "tip": 2.5,
+  "footer": "See you tomorrow!"
+}

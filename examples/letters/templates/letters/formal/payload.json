@@ -1,0 +1,13 @@
+{
+  "sender": {"name": "Northwind Utilities Ltd.", "address": ["12 Harbour Road", "Brightport BP1 4XY"], "email": "hello@northwind.example.com"},
+  "recipient": {"name": "Ms. A. Fernwood", "address": ["Fernwood Holdings", "88 Mill Lane", "Brightport BP2 9QT"]},
+  "date": "28 October 2026",
+  "reference": "NW-2026-0417",
+  "subject": "Confirmation of revised service agreement",
+  "paragraphs": [
+    "Thank you for your letter of 14 October. We are pleased to confirm that the revised service agreement for your premises at 88 Mill Lane has been approved and takes effect on 1 December 2026.",
+    "The agreement extends the term by twenty-four months and keeps the current rate schedule unchanged for the first twelve months. A signed copy is enclosed for your records.",
+    "Should you have any questions, please quote the reference above when contacting our accounts team."
+  ],
+  "signatory": "J. Marlowe, Head of Accounts"
+}

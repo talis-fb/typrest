@@ -1,0 +1,14 @@
+{
+  "event": {
+    "name": "Northlight Jazz Night",
+    "date": "2026-11-14 20:00",
+    "venue": "Harbor Hall, Pier 7"
+  },
+  "holder": {
+    "name": "Alex Sample",
+    "seat": "Row C, Seat 12"
+  },
+  "ticket_id": "NJN-004217",
+  "qr_payload": "https://tickets.example.com/validate/NJN-004217",
+  "price": 45.5
+}

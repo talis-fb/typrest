@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <g fill="none" stroke="#7a5c12" stroke-width="2">
+    <circle cx="100" cy="100" r="92" fill="#e9c75d"/>
+    <circle cx="100" cy="100" r="84"/>
+    <circle cx="100" cy="100" r="60"/>
+  </g>
+  <g fill="#7a5c12">
+    <!-- 16-point star ring -->
+    <path id="p" d="M100 22 L104 40 L96 40 Z"/>
+    <use href="#p" transform="rotate(22.5 100 100)"/><use href="#p" transform="rotate(45 100 100)"/>
+    <use href="#p" transform="rotate(67.5 100 100)"/><use href="#p" transform="rotate(90 100 100)"/>
+    <use href="#p" transform="rotate(112.5 100 100)"/><use href="#p" transform="rotate(135 100 100)"/>
+    <use href="#p" transform="rotate(157.5 100 100)"/><use href="#p" transform="rotate(180 100 100)"/>
+    <use href="#p" transform="rotate(202.5 100 100)"/><use href="#p" transform="rotate(225 100 100)"/>
+    <use href="#p" transform="rotate(247.5 100 100)"/><use href="#p" transform="rotate(270 100 100)"/>
+    <use href="#p" transform="rotate(292.5 100 100)"/><use href="#p" transform="rotate(315 100 100)"/>
+    <use href="#p" transform="rotate(337.5 100 100)"/>
+    <!-- central star -->
+    <path d="M100 66 L108 92 L134 92 L113 108 L121 134 L100 118 L79 134 L87 108 L66 92 L92 92 Z"/>
+  </g>
+</svg>

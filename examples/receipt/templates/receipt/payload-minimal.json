@@ -1,0 +1,4 @@
+{
+  "store": { "name": "Corner Bean Cafe", "address": ["12 Maple Street"] },
+  "items": [{ "name": "Espresso", "quantity": 1, "unit_price": 3.5 }]
+}

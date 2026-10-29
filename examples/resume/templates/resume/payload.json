@@ -1,0 +1,50 @@
+{
+  "basics": {
+    "name": "Marina Okafor",
+    "headline": "Senior Software Engineer",
+    "email": "marina.okafor@example.com",
+    "location": "Lisbon, Portugal",
+    "links": [
+      { "label": "Portfolio", "url": "https://example.com/marina" },
+      { "label": "Code", "url": "https://example.com/marina/code" }
+    ]
+  },
+  "summary": "Backend engineer with ten years of experience building reliable data pipelines and developer tooling. Enjoys mentoring, clear documentation and small, well-tested services.",
+  "experience": [
+    {
+      "company": "Brightwave Labs",
+      "role": "Senior Software Engineer",
+      "start": "2021",
+      "highlights": [
+        "Led a team of five that rebuilt the ingestion pipeline, cutting end-to-end latency by 60%.",
+        "Introduced contract testing across twelve services, reducing production incidents by a third.",
+        "Mentored four engineers to promotion."
+      ]
+    },
+    {
+      "company": "Northfield Systems",
+      "role": "Software Engineer",
+      "start": "2017",
+      "end": "2021",
+      "highlights": [
+        "Designed a billing API handling two million requests per day.",
+        "Migrated the build system to reproducible containers."
+      ]
+    },
+    {
+      "company": "Paperplane Studio",
+      "role": "Junior Developer",
+      "start": "2014",
+      "end": "2017"
+    }
+  ],
+  "education": [
+    { "school": "University of Exampleton", "degree": "BSc Computer Science", "year": "2014" }
+  ],
+  "skills": [
+    { "group": "Languages", "items": ["Rust", "Go", "TypeScript", "SQL"] },
+    { "group": "Platforms", "items": ["Kubernetes", "PostgreSQL", "Kafka", "AWS"] },
+    { "group": "Practices", "items": ["Code review", "Mentoring", "Technical writing"] }
+  ],
+  "accent": "blue"
+}

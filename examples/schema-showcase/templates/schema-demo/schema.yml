@@ -1,0 +1,100 @@
+# Schema v1 showcase. Every feature of the format appears at least once.
+# Spec: docs/specs/schema-v1.md
+schemaVersion: v1            # REQ-SCH-010: must be exactly "v1"
+request:                     # REQ-SCH-011: request.body is required
+  body:
+    type: object             # one of: string number boolean object array null (REQ-SCH-040/041)
+    properties:              # only valid with type: object (REQ-SCH-051)
+      # Validation order per field (REQ-SCH-090):
+      # existence/required -> default -> type -> enum -> properties -> items.
+      # Fields are processed in name order (REQ-SCH-053).
+
+      # --- string, required --------------------------------------------------
+      title:
+        type: string
+        required: true       # checked for existence only, before defaults (REQ-SCH-030/034)
+
+      # --- string enum with default ------------------------------------------
+      status:
+        type: string
+        enum: [draft, review, final]   # exact JSON equality (REQ-SCH-070)
+        default: draft
+
+      # --- number enum with default ------------------------------------------
+      priority:
+        type: number
+        enum: [1, 2, 3]
+        default: 2
+
+      # --- number and boolean with defaults ----------------------------------
+      rating:
+        type: number
+        default: 0
+      published:
+        type: boolean
+        default: false
+
+      # --- type: null, default null ------------------------------------------
+      archived_at:
+        type: null
+        default: null        # a default is a value; null is allowed (REQ-SCH-082)
+
+      # --- untyped field: no type check at all (REQ-SCH-042) ------------------
+      extra: {}              # an empty field accepts any existing value (REQ-SCH-021)
+      note:
+        default: null        # untyped with a default; any JSON value would do
+
+      # --- array of strings, default [] --------------------------------------
+      tags:
+        type: array
+        default: []
+        items:
+          type: string
+
+      # --- nested object with required and defaults at depth -----------------
+      author:
+        type: object
+        required: true
+        properties:
+          name:
+            type: string
+            required: true
+          email:
+            type: string
+            default: ""
+          address:
+            type: object
+            default: {}      # empty object, then nested defaults are applied (REQ-SCH-083)
+            properties:
+              city:
+                type: string
+                default: Unknown
+              country:
+                type: string
+                default: BR
+
+      # --- array of objects (defaults apply inside items, REQ-SCH-080) --------
+      lines:
+        type: array
+        default: []
+        items:
+          type: object
+          properties:
+            sku:
+              type: string
+              required: true
+            qty:
+              type: number
+              default: 1
+
+      # --- array of arrays ---------------------------------------------------
+      matrix:
+        type: array
+        default: []
+        items:
+          type: array
+          items:
+            type: number
+
+# Keys not declared here are kept untouched and never fail validation (REQ-SCH-052).
+# Unknown keys inside a field definition are ignored too (REQ-SCH-013).

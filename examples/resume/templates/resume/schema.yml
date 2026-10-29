@@ -1,0 +1,92 @@
+schemaVersion: v1
+request:
+  body:
+    type: object
+    properties:
+      basics:
+        type: object
+        required: true
+        properties:
+          name:
+            type: string
+            required: true
+          headline:
+            type: string
+            required: true
+          email:
+            type: string
+            required: true
+          location:
+            type: string
+            default: ""
+          links:
+            type: array
+            default: []
+            items:
+              type: object
+              properties:
+                label:
+                  type: string
+                  required: true
+                url:
+                  type: string
+                  required: true
+      summary:
+        type: string
+        default: ""
+      experience:
+        type: array
+        default: []
+        items:
+          type: object
+          properties:
+            company:
+              type: string
+              required: true
+            role:
+              type: string
+              required: true
+            start:
+              type: string
+              required: true
+            end:
+              type: string
+              default: Present
+            highlights:
+              type: array
+              default: []
+              items:
+                type: string
+      education:
+        type: array
+        default: []
+        items:
+          type: object
+          properties:
+            school:
+              type: string
+              required: true
+            degree:
+              type: string
+              required: true
+            year:
+              type: string
+              default: ""
+      skills:
+        type: array
+        default: []
+        items:
+          type: object
+          properties:
+            group:
+              type: string
+              required: true
+            items:
+              type: array
+              default: []
+              items:
+                type: string
+      accent:
+        type: string
+        enum: [blue, green, slate]
+        default: blue

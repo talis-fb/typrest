@@ -1,0 +1,53 @@
+schemaVersion: v1
+request:
+  body:
+    type: object
+    properties:
+      store:
+        type: object
+        required: true
+        properties:
+          name:
+            type: string
+            required: true
+          address:
+            type: array
+            required: true
+            items:
+              type: string
+          phone:
+            type: string
+            default: ""
+      items:
+        type: array
+        required: true
+        items:
+          type: object
+          properties:
+            name:
+              type: string
+              required: true
+            quantity:
+              type: number
+              required: true
+            unit_price:
+              type: number
+              required: true
+            # Defaults apply inside every array item.
+            note:
+              type: string
+              default: ""
+      payment_method:
+        type: string
+        enum: [cash, card, pix, transfer]
+        default: card
+      # Share of the tax-inclusive subtotal that is tax (prices already include it).
+      tax_rate:
+        type: number
+        default: 10
+      tip:
+        type: number
+        default: 0
+      footer:
+        type: string
+        default: "Thank you!"

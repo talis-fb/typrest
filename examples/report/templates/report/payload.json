@@ -1,0 +1,350 @@
+{
+  "title": "Quarterly Business Review",
+  "subtitle": "Acme Logistics Cooperative, fiscal year 2026",
+  "author": "Strategy Office",
+  "date": "2026-10-15",
+  "summary": "The quarter closed ahead of plan on delivery speed and customer satisfaction, with revenue growing steadily and costs held flat. This report reviews operations, finance, customers and people, and lists the main risks for the next period.",
+  "show_toc": true,
+  "sections": [
+    {
+      "heading": "Introduction",
+      "body": "This paragraph summarizes the period in plain terms. Teams delivered steady progress against the plan, with most milestones landing within the expected window and a few shifting by one or two weeks because of dependency changes.  This paragraph summarizes the period in plain terms. Teams delivered steady progress against the plan, with most milestones landing within the expected window and a few shifting by one or two weeks because of dependency changes.  This paragraph summarizes the period in plain terms. Teams delivered steady progress against the plan, with most milestones landing within the expected window and a few shifting by one or two weeks because of dependency changes. \n\nThe sections that follow cover operations, finance, customers, people and risks.",
+      "bullets": [
+        "Scope: all regional offices",
+        "Period: fiscal year 2026, quarter 3",
+        "Audience: leadership and board"
+      ]
+    },
+    {
+      "heading": "Operations",
+      "body": "This paragraph summarizes the period in plain terms. Teams delivered steady progress against the plan, with most milestones landing within the expected window and a few shifting by one or two weeks because of dependency changes.  This paragraph summarizes the period in plain terms. Teams delivered steady progress against the plan, with most milestones landing within the expected window and a few shifting by one or two weeks because of dependency changes.  This paragraph summarizes the period in plain terms. Teams delivered steady progress against the plan, with most milestones landing within the expected window and a few shifting by one or two weeks because of dependency changes.  This paragraph summarizes the period in plain terms. Teams delivered steady progress against the plan, with most milestones landing within the expected window and a few shifting by one or two weeks because of dependency changes. ",
+      "bullets": [
+        "Order fulfilment time fell from 4.1 to 3.2 days",
+        "Warehouse automation phase two completed",
+        "Supplier consolidation reduced vendors by 18%"
+      ],
+      "table": {
+        "caption": "Operational indicators by region",
+        "columns": [
+          "Region",
+          "Orders",
+          "Avg. days",
+          "On-time rate"
+        ],
+        "rows": [
+          [
+            "North",
+            "12,400",
+            "3.0",
+            "96%"
+          ],
+          [
+            "South",
+            "9,850",
+            "3.4",
+            "94%"
+          ],
+          [
+            "East",
+            "14,120",
+            "3.1",
+            "95%"
+          ],
+          [
+            "West",
+            "8,300",
+            "3.6",
+            "92%"
+          ]
+        ]
+      }
+    },
+    {
+      "heading": "Financial results",
+      "body": "This paragraph summarizes the period in plain terms. Teams delivered steady progress against the plan, with most milestones landing within the expected window and a few shifting by one or two weeks because of dependency changes.  This paragraph summarizes the period in plain terms. Teams delivered steady progress against the plan, with most milestones landing within the expected window and a few shifting by one or two weeks because of dependency changes.  This paragraph summarizes the period in plain terms. Teams delivered steady progress against the plan, with most milestones landing within the expected window and a few shifting by one or two weeks because of dependency changes.  This paragraph summarizes the period in plain terms. Teams delivered steady progress against the plan, with most milestones landing within the expected window and a few shifting by one or two weeks because of dependency changes. ",
+      "table": {
+        "caption": "Quarterly financial summary (thousands)",
+        "columns": [
+          "Line",
+          "Q1",
+          "Q2",
+          "Q3",
+          "Change"
+        ],
+        "rows": [
+          [
+            "Line item 1",
+            "107",
+            "118",
+            "129",
+            "+3%"
+          ],
+          [
+            "Line item 2",
+            "114",
+            "126",
+            "138",
+            "+4%"
+          ],
+          [
+            "Line item 3",
+            "121",
+            "134",
+            "147",
+            "+5%"
+          ],
+          [
+            "Line item 4",
+            "128",
+            "142",
+            "156",
+            "+6%"
+          ],
+          [
+            "Line item 5",
+            "135",
+            "150",
+            "165",
+            "+7%"
+          ],
+          [
+            "Line item 6",
+            "142",
+            "158",
+            "174",
+            "+8%"
+          ],
+          [
+            "Line item 7",
+            "149",
+            "166",
+            "183",
+            "+9%"
+          ],
+          [
+            "Line item 8",
+            "156",
+            "174",
+            "192",
+            "+10%"
+          ],
+          [
+            "Line item 9",
+            "163",
+            "182",
+            "201",
+            "+11%"
+          ],
+          [
+            "Line item 10",
+            "170",
+            "190",
+            "210",
+            "+12%"
+          ],
+          [
+            "Line item 11",
+            "177",
+            "198",
+            "219",
+            "+13%"
+          ],
+          [
+            "Line item 12",
+            "184",
+            "206",
+            "228",
+            "+14%"
+          ],
+          [
+            "Line item 13",
+            "191",
+            "214",
+            "237",
+            "+15%"
+          ],
+          [
+            "Line item 14",
+            "198",
+            "222",
+            "246",
+            "+16%"
+          ],
+          [
+            "Line item 15",
+            "205",
+            "230",
+            "255",
+            "+17%"
+          ],
+          [
+            "Line item 16",
+            "212",
+            "238",
+            "264",
+            "+18%"
+          ],
+          [
+            "Line item 17",
+            "219",
+            "246",
+            "273",
+            "+19%"
+          ],
+          [
+            "Line item 18",
+            "226",
+            "254",
+            "282",
+            "+20%"
+          ],
+          [
+            "Line item 19",
+            "233",
+            "262",
+            "291",
+            "+21%"
+          ],
+          [
+            "Line item 20",
+            "240",
+            "270",
+            "300",
+            "+22%"
+          ],
+          [
+            "Line item 21",
+            "247",
+            "278",
+            "309",
+            "+23%"
+          ],
+          [
+            "Line item 22",
+            "254",
+            "286",
+            "318",
+            "+24%"
+          ],
+          [
+            "Line item 23",
+            "261",
+            "294",
+            "327",
+            "+25%"
+          ],
+          [
+            "Line item 24",
+            "268",
+            "302",
+            "336",
+            "+26%"
+          ],
+          [
+            "Line item 25",
+            "275",
+            "310",
+            "345",
+            "+27%"
+          ],
+          [
+            "Line item 26",
+            "282",
+            "318",
+            "354",
+            "+28%"
+          ],
+          [
+            "Line item 27",
+            "289",
+            "326",
+            "363",
+            "+29%"
+          ],
+          [
+            "Line item 28",
+            "296",
+            "334",
+            "372",
+            "+30%"
+          ],
+          [
+            "Line item 29",
+            "303",
+            "342",
+            "381",
+            "+31%"
+          ],
+          [
+            "Line item 30",
+            "310",
+            "350",
+            "390",
+            "+32%"
+          ]
+        ]
+      }
+    },
+    {
+      "heading": "Customers",
+      "body": "This paragraph summarizes the period in plain terms. Teams delivered steady progress against the plan, with most milestones landing within the expected window and a few shifting by one or two weeks because of dependency changes.  This paragraph summarizes the period in plain terms. Teams delivered steady progress against the plan, with most milestones landing within the expected window and a few shifting by one or two weeks because of dependency changes.  This paragraph summarizes the period in plain terms. Teams delivered steady progress against the plan, with most milestones landing within the expected window and a few shifting by one or two weeks because of dependency changes.  This paragraph summarizes the period in plain terms. Teams delivered steady progress against the plan, with most milestones landing within the expected window and a few shifting by one or two weeks because of dependency changes.  This paragraph summarizes the period in plain terms. Teams delivered steady progress against the plan, with most milestones landing within the expected window and a few shifting by one or two weeks because of dependency changes. ",
+      "bullets": [
+        "Net promoter score reached 54",
+        "Churn decreased to 2.1% monthly",
+        "Support first-response time under 2 hours"
+      ]
+    },
+    {
+      "heading": "People and culture",
+      "body": "This paragraph summarizes the period in plain terms. Teams delivered steady progress against the plan, with most milestones landing within the expected window and a few shifting by one or two weeks because of dependency changes.  This paragraph summarizes the period in plain terms. Teams delivered steady progress against the plan, with most milestones landing within the expected window and a few shifting by one or two weeks because of dependency changes.  This paragraph summarizes the period in plain terms. Teams delivered steady progress against the plan, with most milestones landing within the expected window and a few shifting by one or two weeks because of dependency changes.  This paragraph summarizes the period in plain terms. Teams delivered steady progress against the plan, with most milestones landing within the expected window and a few shifting by one or two weeks because of dependency changes.  This paragraph summarizes the period in plain terms. Teams delivered steady progress against the plan, with most milestones landing within the expected window and a few shifting by one or two weeks because of dependency changes. ",
+      "table": {
+        "columns": [
+          "Team",
+          "Headcount",
+          "Hires",
+          "Attrition"
+        ],
+        "rows": [
+          [
+            "Engineering",
+            "84",
+            "9",
+            "3"
+          ],
+          [
+            "Operations",
+            "120",
+            "14",
+            "6"
+          ],
+          [
+            "Sales",
+            "46",
+            "5",
+            "2"
+          ],
+          [
+            "Support",
+            "38",
+            "4",
+            "1"
+          ]
+        ]
+      }
+    },
+    {
+      "heading": "Risks and mitigations",
+      "body": "This paragraph summarizes the period in plain terms. Teams delivered steady progress against the plan, with most milestones landing within the expected window and a few shifting by one or two weeks because of dependency changes.  This paragraph summarizes the period in plain terms. Teams delivered steady progress against the plan, with most milestones landing within the expected window and a few shifting by one or two weeks because of dependency changes.  This paragraph summarizes the period in plain terms. Teams delivered steady progress against the plan, with most milestones landing within the expected window and a few shifting by one or two weeks because of dependency changes.  This paragraph summarizes the period in plain terms. Teams delivered steady progress against the plan, with most milestones landing within the expected window and a few shifting by one or two weeks because of dependency changes. ",
+      "bullets": [
+        "Supply volatility: dual sourcing for key components",
+        "Currency exposure: hedging policy reviewed quarterly",
+        "Key-person dependency: documented runbooks and cross-training",
+        "Regulatory change: compliance working group formed"
+      ]
+    },
+    {
+      "heading": "Outlook",
+      "body": "This paragraph summarizes the period in plain terms. Teams delivered steady progress against the plan, with most milestones landing within the expected window and a few shifting by one or two weeks because of dependency changes.  This paragraph summarizes the period in plain terms. Teams delivered steady progress against the plan, with most milestones landing within the expected window and a few shifting by one or two weeks because of dependency changes.  This paragraph summarizes the period in plain terms. Teams delivered steady progress against the plan, with most milestones landing within the expected window and a few shifting by one or two weeks because of dependency changes.  This paragraph summarizes the period in plain terms. Teams delivered steady progress against the plan, with most milestones landing within the expected window and a few shifting by one or two weeks because of dependency changes.  This paragraph summarizes the period in plain terms. Teams delivered steady progress against the plan, with most milestones landing within the expected window and a few shifting by one or two weeks because of dependency changes. "
+    }
+  ]
+}

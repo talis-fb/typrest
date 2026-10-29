@@ -1,0 +1,12 @@
+schemaVersion: v1
+request:
+  body:
+    type: object
+    properties:
+      name:
+        type: string
+        required: true
+      greeting:
+        type: string
+        enum: [Hello, Hi, Welcome]
+        default: Hello

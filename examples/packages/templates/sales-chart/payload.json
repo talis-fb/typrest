@@ -1,0 +1,12 @@
+{
+  "title": "Regional Sales",
+  "period": "Q3 2026",
+  "unit": "k USD",
+  "series": [
+    { "label": "North", "value": 128.5 },
+    { "label": "South", "value": 94 },
+    { "label": "East", "value": 151.2 },
+    { "label": "West", "value": 76.8 },
+    { "label": "Online", "value": 203 }
+  ]
+}

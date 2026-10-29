@@ -1,0 +1,11 @@
+{
+  "sender": {"name": "Northwind Utilities Ltd.", "address": ["12 Harbour Road", "Brightport BP1 4XY"], "email": "hello@northwind.example.com"},
+  "recipient": {"name": "The Residents of Harbour Court", "address": ["Harbour Court", "Brightport BP1 5AA"]},
+  "date": "28 October 2026",
+  "level": "warning",
+  "headline": "Planned water supply interruption",
+  "message": "To complete essential maintenance on the main supply pipe, water will be switched off for the whole of Harbour Court. We expect normal supply to resume by early evening and apologise for the inconvenience.",
+  "effective_date": "Tuesday 10 November 2026, 09:00 to 17:00",
+  "actions": ["Store enough drinking water for the day.", "Turn off washing machines and dishwashers before 09:00.", "Run taps briefly once supply resumes to clear the pipes."],
+  "contact_note": "Questions? Call our helpline on 0000 000 000 or write to hello@northwind.example.com."
+}

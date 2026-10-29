@@ -1,0 +1,31 @@
+schemaVersion: v1
+request:
+  body:
+    type: object
+    properties:
+      recipient:
+        type: string
+        required: true
+      course:
+        type: string
+        required: true
+      date:
+        type: string
+        required: true
+      issuer:
+        type: object
+        required: true
+        properties:
+          name:
+            type: string
+            required: true
+          title:
+            type: string
+            default: ""
+      style:
+        type: string
+        enum: [classic, modern]
+        default: classic
+      certificate_id:
+        type: string
+        required: true

@@ -1,0 +1,39 @@
+schemaVersion: v1
+request:
+  body:
+    type: object
+    properties:
+      event:
+        type: object
+        required: true
+        properties:
+          name:
+            type: string
+            required: true
+          date:
+            type: string
+            required: true
+          venue:
+            type: string
+            required: true
+      holder:
+        type: object
+        required: true
+        properties:
+          name:
+            type: string
+            required: true
+          # Omit this field for "no assigned seat". An explicit null is rejected.
+          seat:
+            type: string
+            default: ""
+      ticket_id:
+        type: string
+        required: true
+      qr_payload:
+        type: string
+        required: true
+      # 0 renders as "Free".
+      price:
+        type: number
+        default: 0

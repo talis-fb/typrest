@@ -15,8 +15,8 @@ prepared, and warm-compiled into an in-memory registry before the server listens
 - `crates/typrest`: the application package, with private modules for CLI commands, project
   loading, package resolution, watch mode, HTTP, and diagnostics;
 - `webui`: optional Svelte development UI and committed production assets;
-- `examples/templates`: example Typst templates and payloads;
-- `examples/invoice`: a complete example project (`typrest.toml`, shared module, invoice template).
+- `examples`: complete example projects, each with its own `typrest.toml`; the index is
+  [`examples/README.md`](examples/README.md), the only file to update when adding one.
 
 ## Documentation Navigation
 
