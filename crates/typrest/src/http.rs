@@ -1015,15 +1015,14 @@ Hello #data.name
     }
 
     #[tokio::test]
-    async fn repository_examples_load_and_render_invoice_over_http() {
-        let examples_dir = examples_templates_dir();
-        let loader = FilesystemLoader::new(&examples_dir);
+    async fn invoice_example_project_renders_over_http() {
+        let templates_dir = example_templates_dir("invoice");
+        let loader = FilesystemLoader::new(&templates_dir);
         let names = loader.list().await.unwrap();
 
         assert!(names.iter().any(|name| name.as_str() == "invoice"));
-        assert!(names.iter().any(|name| name.as_str() == "welcome"));
         loader
-            .load(&TemplateId::new("welcome").unwrap())
+            .load(&TemplateId::new("invoice").unwrap())
             .await
             .unwrap();
 
@@ -1041,7 +1040,7 @@ Hello #data.name
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
-        let payload = fs::read(examples_dir.join("invoice/payload.json")).unwrap();
+        let payload = fs::read(templates_dir.join("invoice/payload.json")).unwrap();
         let response = post_json(address, "/invoice", &payload).await;
 
         server.abort();
@@ -1057,9 +1056,11 @@ Hello #data.name
         fs::write(path, contents).unwrap();
     }
 
-    fn examples_templates_dir() -> std::path::PathBuf {
+    fn example_templates_dir(project: &str) -> std::path::PathBuf {
         std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../examples/templates")
+            .join("../../examples")
+            .join(project)
+            .join("templates")
             .canonicalize()
             .unwrap()
     }

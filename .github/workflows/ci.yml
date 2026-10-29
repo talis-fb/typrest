@@ -28,6 +28,13 @@ jobs:
       - name: Check Markdown links and anchors
         run: python3 scripts/check-doc-links.py
 
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and check the container image
+        run: scripts/check-container.sh
+
   webui:
     runs-on: ubuntu-latest
     defaults:

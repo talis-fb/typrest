@@ -72,8 +72,8 @@ cd /tmp/typrest-contributor
 ```
 
 The repository root is not itself a Typrest project because it intentionally has no
-`typrest.toml`. The current Docker files are being migrated and are not a supported development
-entry point yet.
+`typrest.toml`. Container changes are checked with `scripts/check-container.sh`; see the
+[testing guide](docs/development/testing.md#container-check).
 
 For Web UI development, install the locked dependencies:
 

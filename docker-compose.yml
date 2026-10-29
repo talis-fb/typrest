@@ -1,8 +1,16 @@
+# Serves examples/invoice with watch mode on http://127.0.0.1:8080.
+#
+# The project is bind-mounted read-write because Typrest writes its package cache to
+# /project/.typrest. The container runs as uid/gid 1000 by default; if your checkout is owned by a
+# different user, run: TYPREST_UID="$(id -u)" TYPREST_GID="$(id -g)" docker compose up
+#
+# The port is bound to loopback because the Web UI is unauthenticated.
 services:
   typrest:
     build: .
+    user: "${TYPREST_UID:-1000}:${TYPREST_GID:-1000}"
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     volumes:
-      - ./examples/templates:/app/templates:ro
-    command: ["typrest", "serve", "/app/templates", "8080", "--watch"]
+      - ./examples/invoice:/project
+    command: ["typrest", "serve", "--watch"]

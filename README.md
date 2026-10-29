@@ -45,9 +45,39 @@ curl http://127.0.0.1:8080/_healthz
 curl http://127.0.0.1:8080/_api/templates
 ```
 
-The repository's `Dockerfile` and `docker-compose.yml` still use an obsolete positional `serve`
-syntax and do not provide the required `typrest.toml`. Docker quickstart support is tracked as open
-work in [`ROADMAP.md`](ROADMAP.md).
+## Quickstart with Docker
+
+Prerequisites: Docker (or Podman) and `curl`. The image builds Typrest from source and serves the
+bundled [`examples/minimal`](examples/minimal/README.md) project from `/project`:
+
+```bash
+docker build -t typrest .
+docker run --rm -p 127.0.0.1:8080:8080 typrest
+```
+
+In another terminal, render the `hello` template:
+
+```bash
+curl -X POST \
+  http://127.0.0.1:8080/hello \
+  -H 'Content-Type: application/json' \
+  --data @examples/minimal/templates/hello/payload.json \
+  --output hello.pdf
+```
+
+To serve your own project, mount the directory containing `typrest.toml` over `/project`:
+
+```bash
+docker run --rm -p 127.0.0.1:8080:8080 -v "$PWD:/project" typrest
+```
+
+The mount must be writable: Typrest downloads `@preview` packages into `/project/.typrest`. The
+container runs as uid/gid 1000; add `--user "$(id -u):$(id -g)"` if your files belong to another
+user.
+
+`docker compose up` serves [`examples/invoice`](examples/invoice/README.md) with `--watch`, so
+template edits on the host reload without restarting the container. Both commands publish the port
+on the loopback interface only, because the development Web UI is unauthenticated.
 
 ## Project and Template Layout
 

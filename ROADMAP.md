@@ -56,17 +56,14 @@ rendered over HTTP with payload validation and structured diagnostics.
 - [x] Raw JSON editing, PDF preview, and download
 - [x] Client validation, request cancellation, Blob cleanup, and accessibility checks
 
+### Container Image
+
+- [x] Container image serving the bundled `examples/minimal` project through `typrest.toml` discovery
+- [x] `Dockerfile` and `docker-compose.yml` use project-config-driven `typrest serve`
+- [x] Docker and Compose quickstart in `README.md`
+- [x] Container check (`scripts/check-container.sh`) run by the CI `container` job
+
 ## Active Follow-up Work
-
-### Docker Project Configuration Migration
-
-- [ ] Add a valid `typrest.toml` to the container example or generate an equivalent project layout
-- [ ] Replace obsolete positional `serve` arguments in `Dockerfile` and `docker-compose.yml`
-- [ ] Restore a tested Docker/Compose quickstart before advertising it in `README.md`
-- [ ] Add CI or a repeatable manual check for the container entrypoint
-
-The current Docker files predate project discovery and do not start with the implemented CLI. This
-documentation cleanup does not modify non-Markdown files.
 
 ### Documentation Maintenance
 

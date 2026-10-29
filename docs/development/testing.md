@@ -99,8 +99,20 @@ pdffonts hello-world.pdf
 pdftotext hello-world.pdf -
 ```
 
-The current Docker files use removed CLI syntax and are not a valid manual test path. Their
-migration is tracked in [`ROADMAP.md`](../../ROADMAP.md).
+## Container Check
+
+`scripts/check-container.sh` builds the container image and checks it over HTTP: health, a `200` PDF
+render and a `422` validation error against the bundled `examples/minimal` project, then a PDF
+render with a copy of `examples/invoice` mounted at `/project`. It requires a container engine and
+network access, so it is separate from `cargo test`:
+
+```bash
+scripts/check-container.sh
+CONTAINER_ENGINE=podman scripts/check-container.sh
+```
+
+`CHECK_PORT` selects the host port (default: a free port) and `CHECK_TIMEOUT` the health wait in
+seconds (default `60`). CI runs the script as the `container` job.
 
 ## Documentation Validation
 
