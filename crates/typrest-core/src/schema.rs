@@ -214,11 +214,19 @@ pub enum SchemaError {
     #[error("invalid schema JSON: {0}")]
     Json(#[from] serde_json::Error),
 
+    /// Boxed because `serde_saphyr::Error` is large enough to push every error that
+    /// embeds `LoaderError` past clippy's `result_large_err` threshold.
     #[error("invalid schema YAML: {0}")]
-    Yaml(#[from] serde_saphyr::Error),
+    Yaml(#[source] Box<serde_saphyr::Error>),
 
     #[error("invalid schema at {path}: {message}")]
     InvalidStructure { path: String, message: String },
+}
+
+impl From<serde_saphyr::Error> for SchemaError {
+    fn from(error: serde_saphyr::Error) -> Self {
+        Self::Yaml(Box::new(error))
+    }
 }
 
 pub fn validate(schema: &Schema, payload: &Value) -> Result<(), Vec<ValidationError>> {
