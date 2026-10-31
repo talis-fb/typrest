@@ -139,6 +139,8 @@ with the compiler.
 - `ExecutionError::Saturated` becomes `RenderError::Overloaded` (`503`), and `ExecutionError::Aborted`
   (a panic during compilation) becomes `RenderError::ExecutionFailed` (`500`). Neither is a template
   error and neither carries diagnostics.
+- A request body over `max_body_bytes` is rejected by the HTTP layer with `413` before it is parsed.
+  It is not a render error and never reaches the render executor.
 - HTTP handlers convert render failures into structured JSON and never expose physical paths or
   source excerpts.
 

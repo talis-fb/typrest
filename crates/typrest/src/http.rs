@@ -84,12 +84,20 @@ mod tests {
     }
 
     fn app(loader: Arc<MemoryLoader>, result: Result<Document, CompilationError>) -> axum::Router {
+        app_with_config(loader, result, &ServerConfig::new(0))
+    }
+
+    fn app_with_config(
+        loader: Arc<MemoryLoader>,
+        result: Result<Document, CompilationError>,
+        config: &ServerConfig,
+    ) -> axum::Router {
         let compiler = Arc::new(MockCompiler { result });
         let registry = registry_from_loader(loader.as_ref());
         let render_service = RenderService::new(registry.clone(), compiler, executor());
         router(
             AppState::new(registry, render_service, LogFormat::Pretty),
-            &ServerConfig::new(0),
+            config,
         )
     }
 
@@ -860,6 +868,104 @@ mod tests {
                     .body(Body::empty())
                     .unwrap(),
             )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            response_body(response).await["error"],
+            json!("invalid_json")
+        );
+    }
+
+    fn render_with_body(template: &str, content_type: Option<&str>, body: &str) -> Request<Body> {
+        let mut builder = Request::builder().method(Method::POST).uri(template);
+        if let Some(content_type) = content_type {
+            builder = builder.header("content-type", content_type);
+        }
+        builder.body(Body::from(body.to_owned())).unwrap()
+    }
+
+    #[tokio::test]
+    async fn oversized_body_returns_413_json_envelope_without_parsing() {
+        let app = app_with_config(
+            memory_loader(vec![("invoice", template(schema(json!({}))))]),
+            Ok(Document::new(Bytes::from_static(b"%PDF-1.4 mock"))),
+            &ServerConfig::new(0).with_max_body_bytes(16),
+        );
+
+        for body in [
+            r#"{"name":"Ada Lovelace"}"#,
+            "{ not json at all, far beyond the limit",
+        ] {
+            let response = app
+                .clone()
+                .oneshot(render_with_body("/invoice", Some("application/json"), body))
+                .await
+                .unwrap();
+
+            assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE, "{body}");
+            assert_eq!(
+                response_body(response).await["error"],
+                json!("payload_too_large")
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn body_exactly_at_limit_is_accepted() {
+        let app = app_with_config(
+            memory_loader(vec![("invoice", template(schema(json!({}))))]),
+            Ok(Document::new(Bytes::from_static(b"%PDF-1.4 mock"))),
+            &ServerConfig::new(0).with_max_body_bytes(2),
+        );
+
+        let response = app
+            .oneshot(render_with_body("/invoice", Some("application/json"), "{}"))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn invalid_template_id_wins_over_payload_too_large() {
+        let app = app_with_config(
+            memory_loader(vec![("invoice", template(schema(json!({}))))]),
+            Ok(Document::new(Bytes::from_static(b"%PDF-1.4 mock"))),
+            &ServerConfig::new(0).with_max_body_bytes(4),
+        );
+
+        let response = app
+            .oneshot(render_with_body(
+                "/_private/invoice",
+                Some("application/json"),
+                r#"{"name":"Ada"}"#,
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            response_body(response).await["error"],
+            json!("invalid_template_id")
+        );
+    }
+
+    #[tokio::test]
+    async fn content_type_error_wins_over_payload_too_large() {
+        let app = app_with_config(
+            memory_loader(vec![("invoice", template(schema(json!({}))))]),
+            Ok(Document::new(Bytes::from_static(b"%PDF-1.4 mock"))),
+            &ServerConfig::new(0).with_max_body_bytes(4),
+        );
+
+        let response = app
+            .oneshot(render_with_body(
+                "/invoice",
+                Some("text/plain"),
+                r#"{"name":"Ada"}"#,
+            ))
             .await
             .unwrap();
 

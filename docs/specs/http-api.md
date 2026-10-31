@@ -68,6 +68,7 @@ Clients render PDFs with plain HTTP. Handlers read only the prepared registry; s
   |---|---|---|
   | Invalid template ID | `400` | `invalid_template_id` |
   | Request body is not valid JSON | `400` | `invalid_json` |
+  | Request body exceeds `max_body_bytes` | `413` | `payload_too_large` |
   | No prepared template with that ID | `404` | `template_not_found` |
   | Payload violates the schema | `422` | `schema_validation_failed` |
   | Request-time compilation or PDF export failure | `500` | `compilation_failed` |
@@ -107,6 +108,30 @@ limits are set by `[server]` in [`typrest.toml`](typrest-toml.md#server).
 - **REQ-HTTP-076:** A request that starts rendering before a watch-mode registry swap MUST complete
   with the prepared template it looked up. Requests that look up the template after the swap MUST
   use the new entry.
+
+### Request body
+
+<a id="request-body"></a>
+
+The maximum body size is `max_body_bytes` in [`typrest.toml`](typrest-toml.md#server). It defaults
+to `2097152` bytes.
+
+- **REQ-HTTP-077:** A request whose body exceeds `max_body_bytes` MUST fail with `413` and error code
+  `payload_too_large`. The body MUST NOT be parsed. A body of exactly `max_body_bytes` bytes MUST be
+  accepted.
+- **REQ-HTTP-078:** A render request that fails more than one check MUST report the first failure in
+  this order: `invalid_template_id` (`REQ-HTTP-023`), the content-type `invalid_json` check
+  (`REQ-HTTP-021`), `payload_too_large` (`REQ-HTTP-077`), a body-read failure, JSON-parse
+  `invalid_json` (`REQ-HTTP-022`), and then render errors. A body-read failure other than the size
+  limit, such as a client that disconnects mid-body, MUST return `400` with `invalid_json` and the
+  message `failed to read request body`.
+
+```http
+HTTP/1.1 413 Payload Too Large
+content-type: application/json
+
+{"error":"payload_too_large","message":"Request body exceeds the configured maximum size"}
+```
 
 ### Security
 

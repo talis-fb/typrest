@@ -63,6 +63,7 @@ rendered over HTTP with payload validation and structured diagnostics.
 - [x] Panics during compilation become `500 render_execution_failed` and the server keeps serving
 - [x] Startup, `check`, and watch warmups share the executor with `Background` admission
 - [x] `[server]` table in `typrest.toml` with `max_concurrent_renders` and `max_queued_renders`
+- [x] Configurable request body limit `[server].max_body_bytes` (default 2 MiB) with `413 payload_too_large`
 
 ### Container Image
 

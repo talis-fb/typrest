@@ -12,6 +12,8 @@ use crate::render_executor::{
 
 pub const CONFIG_FILE: &str = "typrest.toml";
 pub const PROJECT_DATA_DIR: &str = ".typrest";
+pub const DEFAULT_MAX_BODY_BYTES: usize = 2 * 1024 * 1024;
+pub const MAX_BODY_BYTES_LIMIT: usize = 1024 * 1024 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectConfig {
@@ -20,6 +22,7 @@ pub struct ProjectConfig {
     pub package_cache_dir: PathBuf,
     pub web_ui: bool,
     pub render_limits: RenderLimits,
+    pub max_body_bytes: usize,
 }
 
 #[derive(Debug, Deserialize)]
@@ -36,6 +39,7 @@ struct RawProjectConfig {
 struct RawServerConfig {
     max_concurrent_renders: Option<i64>,
     max_queued_renders: Option<i64>,
+    max_body_bytes: Option<i64>,
 }
 
 pub fn load_config() -> Option<ProjectConfig> {
@@ -70,6 +74,7 @@ pub fn load_project_config(project_root: &Path) -> std::io::Result<ProjectConfig
 
     let config = parse_project_config(&content)?;
     let render_limits = resolve_render_limits(&config.server)?;
+    let max_body_bytes = resolve_max_body_bytes(&config.server)?;
     let templates_root = resolve_templates_root(project_root, &config.templates_root)?;
 
     if !templates_root.exists() {
@@ -98,6 +103,7 @@ pub fn load_project_config(project_root: &Path) -> std::io::Result<ProjectConfig
         package_cache_dir: project_root.join(PROJECT_DATA_DIR).join("packages"),
         web_ui: config.web_ui,
         render_limits,
+        max_body_bytes,
     })
 }
 
@@ -157,6 +163,13 @@ fn resolve_render_limits(server: &RawServerConfig) -> std::io::Result<RenderLimi
     ))
 }
 
+fn resolve_max_body_bytes(server: &RawServerConfig) -> std::io::Result<usize> {
+    match server.max_body_bytes {
+        Some(value) => bounded_setting("max_body_bytes", value, 1, MAX_BODY_BYTES_LIMIT),
+        None => Ok(DEFAULT_MAX_BODY_BYTES),
+    }
+}
+
 fn bounded_setting(name: &str, value: i64, min: usize, max: usize) -> std::io::Result<usize> {
     usize::try_from(value)
         .ok()
@@ -212,7 +225,10 @@ fn invalid_config<T>(message: String) -> std::io::Result<T> {
 
 #[cfg(test)]
 mod tests {
-    use super::{PROJECT_DATA_DIR, find_project_root, load_project_config, parse_project_config};
+    use super::{
+        DEFAULT_MAX_BODY_BYTES, MAX_BODY_BYTES_LIMIT, PROJECT_DATA_DIR, find_project_root,
+        load_project_config, parse_project_config,
+    };
     use crate::render_executor::{RenderLimits, default_max_concurrent_renders};
 
     #[test]
@@ -489,5 +505,57 @@ mod tests {
         let config = load_with_server_table("[server]\nunknown = true\n").unwrap();
 
         assert_eq!(config.render_limits, RenderLimits::default());
+    }
+
+    #[test]
+    fn max_body_bytes_defaults_when_omitted() {
+        let config = load_with_server_table("").unwrap();
+
+        assert_eq!(config.max_body_bytes, DEFAULT_MAX_BODY_BYTES);
+        assert_eq!(config.max_body_bytes, 2_097_152);
+    }
+
+    #[test]
+    fn max_body_bytes_honors_explicit_value() {
+        let config = load_with_server_table("[server]\nmax_body_bytes = 4096\n").unwrap();
+
+        assert_eq!(config.max_body_bytes, 4096);
+    }
+
+    #[test]
+    fn max_body_bytes_accepts_bounds() {
+        let config = load_with_server_table("[server]\nmax_body_bytes = 1\n").unwrap();
+        assert_eq!(config.max_body_bytes, 1);
+
+        let config = load_with_server_table(&format!(
+            "[server]\nmax_body_bytes = {MAX_BODY_BYTES_LIMIT}\n"
+        ))
+        .unwrap();
+        assert_eq!(config.max_body_bytes, MAX_BODY_BYTES_LIMIT);
+    }
+
+    #[test]
+    fn max_body_bytes_rejects_out_of_range_values() {
+        for server in [
+            "[server]\nmax_body_bytes = 0\n".to_owned(),
+            "[server]\nmax_body_bytes = -1\n".to_owned(),
+            format!("[server]\nmax_body_bytes = {}\n", MAX_BODY_BYTES_LIMIT + 1),
+        ] {
+            let error = load_with_server_table(&server).unwrap_err();
+
+            assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput, "{server}");
+        }
+    }
+
+    #[test]
+    fn max_body_bytes_rejects_wrong_types() {
+        for server in [
+            "[server]\nmax_body_bytes = \"2048\"\n",
+            "[server]\nmax_body_bytes = 1.5\n",
+        ] {
+            let error = load_with_server_table(server).unwrap_err();
+
+            assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput, "{server}");
+        }
     }
 }

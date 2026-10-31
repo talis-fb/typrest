@@ -158,7 +158,9 @@ See the [CLI specification](docs/specs/cli.md) for exact behavior.
 | `GET` | `/_api/templates` | List prepared templates |
 | `GET` | `/_api/templates/{*template_id}` | Template ID and parsed schema |
 
-`POST` requires `Content-Type: application/json`. Errors use a structured JSON envelope:
+`POST` requires `Content-Type: application/json`. Request bodies are limited to
+`[server].max_body_bytes` (default 2 MiB); larger bodies return `413 payload_too_large`. Errors use a
+structured JSON envelope:
 
 ```json
 {
