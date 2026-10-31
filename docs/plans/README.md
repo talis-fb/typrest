@@ -40,7 +40,8 @@ starts with, or contains, an approval gate for any ADR or scope change it propos
   `REQ-HTTP-070` and `REQ-CFG-050` ranges. The plan implemented first claims the next free IDs in
   the specification; later plans renumber to the next free IDs at that time. Never reuse an ID.
 - Configuration placement (`typrest.toml` versus `serve` flags) is decided across plans, not per
-  plan; resolve it before the first plan that adds configuration is implemented.
+  plan; resolve it before the first plan that adds configuration is implemented. Settled: request
+  and render limits live in `[server]` in `typrest.toml`, and `serve` gains no flags for them.
 - Overload status (`503` versus `429`) and its error code are shared by the concurrency limiter and
   async jobs; settle them once. The concurrency limiter is delivered with `503` and
   `render_capacity_exceeded` (see [HTTP API](../specs/http-api.md#render-capacity)).

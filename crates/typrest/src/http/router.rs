@@ -1,4 +1,5 @@
 use axum::Router;
+use axum::extract::DefaultBodyLimit;
 use axum::routing::get;
 
 use crate::http::config::ServerConfig;
@@ -31,5 +32,7 @@ pub fn router(state: AppState, config: &ServerConfig) -> Router {
             .route("/_webui/{*path}", get(webui::webui_not_found))
     };
 
-    router.with_state(state)
+    router
+        .layer(DefaultBodyLimit::max(config.max_body_bytes))
+        .with_state(state)
 }
