@@ -717,7 +717,7 @@ These sibling plans are being written in parallel; links may not resolve until t
 
 | Plan | This plan needs | This plan provides |
 |---|---|---|
-| [Blocking render execution](blocking-render-execution.md) | A render call that returns a `Document` after the compile work leaves the blocking pool, so the compile concurrency permit is released before the write starts | Writes are async I/O (filesystem work on `spawn_blocking`, S3 on the async runtime) and must not hold a compile permit |
+| [Blocking render execution](../specs/http-api.md#render-capacity) | A render call that returns a `Document` after the compile work leaves the blocking pool, so the compile concurrency permit is released before the write starts | Writes are async I/O (filesystem work on `spawn_blocking`, S3 on the async runtime) and must not hold a compile permit |
 | [Operational limits](operational-limits.md) | Agreement on how the global request timeout relates to `write_timeout_seconds`, on the timeout error code (this plan proposes `output_timeout`), and on any concurrency limit for in-flight writes | Per-destination write timeout; write latency is a separate stage from compile latency |
 | [Render metrics](render-metrics.md) | The metrics recorder interface and naming conventions | Proposed series: `typrest_output_writes_total{output,kind,outcome}`, `typrest_output_write_duration_seconds{output,kind}`, `typrest_output_bytes_total{output,kind}`; no keys, names, or URLs as labels |
 | [Render result cache](render-result-cache.md) | A cache that sits before delivery and yields a `Document` | Destinations are not a cache (D10); `{sha256}` keys are available if deterministic output is confirmed |

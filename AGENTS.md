@@ -87,6 +87,9 @@ check [`ROADMAP.md`](ROADMAP.md) for scope.
 - Use typed `thiserror` errors in production code. Do not add `unwrap()` or `expect()` outside tests
   unless an invariant is locally proven and the existing compiler boundary already permits it.
 - Keep `typrest-core` free of HTTP dependencies and direct filesystem access.
+- Request compilation goes through `RenderExecutor`. `PdfCompiler::compile_prepared` is synchronous
+  and CPU-bound, so never call it on an async runtime worker. Validate before admission; `400`,
+  `404`, and `422` must never take a render slot.
 
 Template identity, discovery, `_shared/`, and schema file rules are in the
 [template layout specification](docs/specs/templates.md); routes are in the

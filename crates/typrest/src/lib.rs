@@ -5,6 +5,7 @@ mod http;
 mod loader;
 mod logging;
 mod package;
+mod render_executor;
 
 use std::process::ExitCode;
 

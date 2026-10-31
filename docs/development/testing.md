@@ -46,7 +46,8 @@ source changes must include the rebuilt output; never edit it by hand.
 | Packages | In-memory fixtures, transitive imports, cache loading, and no request-time I/O |
 | Registry | Startup aggregation, warmup samples, prepared reuse, replacement behavior |
 | Application loading and packages | Filesystem loading, package cache/download, startup, and watch mode |
-| HTTP | Router, status/error mapping, metadata, and render responses |
+| Render executor | `BlockingRenderExecutor` in `crates/typrest/src/render_executor.rs`: admission, FIFO order, cancellation, and panic recovery, using channel-gated jobs and `#[tokio::test(flavor = "multi_thread")]` only where real parallelism is under test. Never coordinate with sleeps |
+| HTTP | Router, status/error mapping, metadata, and render responses, including health and `503` while the render slots are held by a blocking mock compiler |
 | CLI | Clap parsing, project discovery, configuration, scaffolding, check behavior |
 | Web UI | Payload composition, mode conversion, custom fields, TypeScript/Svelte checks |
 | End to end | Random local port, HTTP status/content type, and meaningful PDF content |

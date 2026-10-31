@@ -26,6 +26,8 @@ Clients render PDFs with plain HTTP. Handlers read only the prepared registry; s
 ### Health
 
 - **REQ-HTTP-010:** `GET /_healthz` MUST return status `200` with the JSON body `{"status":"ok"}`.
+- **REQ-HTTP-011:** `GET /_healthz` MUST NOT wait for render capacity. It MUST return `200` while
+  every render slot is occupied and the render queue is full.
 
 ### Rendering
 
@@ -69,6 +71,8 @@ Clients render PDFs with plain HTTP. Handlers read only the prepared registry; s
   | No prepared template with that ID | `404` | `template_not_found` |
   | Payload violates the schema | `422` | `schema_validation_failed` |
   | Request-time compilation or PDF export failure | `500` | `compilation_failed` |
+  | Request-time compilation terminated abnormally | `500` | `render_execution_failed` |
+  | Every render slot and queue position is taken | `503` | `render_capacity_exceeded` |
 
 - **REQ-HTTP-042:** `schema_validation_failed` MUST include `violations`, a list of
   `{"field":"$.path","issue":"…"}` entries.
@@ -76,6 +80,33 @@ Clients render PDFs with plain HTTP. Handlers read only the prepared registry; s
   `trace`.
 - **REQ-HTTP-044:** No error response MAY contain source text or physical filesystem paths. Diagnostic
   locations use virtual paths.
+
+### Render capacity
+
+<a id="render-capacity"></a>
+
+Request-time compilation and PDF export run on blocking threads, never on the async runtime. The
+limits are set by `[server]` in [`typrest.toml`](typrest-toml.md#server).
+
+- **REQ-HTTP-070:** The server MUST run at most `max_concurrent_renders` request compilations, each
+  including its PDF export, at the same time.
+- **REQ-HTTP-071:** A render request that finds every slot occupied MUST wait for a slot in
+  first-come, first-served order. At most `max_queued_renders` requests MAY wait at once.
+- **REQ-HTTP-072:** A render request that arrives when all slots are occupied and the queue is full
+  MUST fail immediately with `503`, error code `render_capacity_exceeded`, and `Retry-After: 1`
+  (delay-seconds form). The request MUST NOT be compiled.
+- **REQ-HTTP-073:** Template-ID parsing, JSON parsing, template lookup, and schema validation MUST
+  complete before a render waits for capacity. Responses with `400`, `404`, and `422` MUST NOT wait
+  for capacity or occupy a slot.
+- **REQ-HTTP-074:** A compilation that has started MUST keep its slot until it finishes, even when
+  the client disconnects. A request that is still waiting in the queue MUST release its queue
+  position as soon as its client disconnects.
+- **REQ-HTTP-075:** A request-time compilation that terminates abnormally MUST return `500` with
+  error code `render_execution_failed` and a fixed message. The response MUST NOT include
+  `diagnostics` or the panic payload. The server MUST continue serving other requests.
+- **REQ-HTTP-076:** A request that starts rendering before a watch-mode registry swap MUST complete
+  with the prepared template it looked up. Requests that look up the template after the swap MUST
+  use the new entry.
 
 ### Security
 
@@ -154,6 +185,15 @@ Template metadata (`GET /_api/templates/financial/invoice`); a schema-less templ
 }
 ```
 
+Render capacity exceeded (`503` with `Retry-After: 1`):
+
+```json
+{
+  "error": "render_capacity_exceeded",
+  "message": "The server is at render capacity; retry shortly"
+}
+```
+
 Template listing:
 
 ```json
@@ -173,5 +213,7 @@ Authentication, versioned metadata APIs, template mutation, publishing, and tagg
 
 - [Compiler diagnostics](diagnostics.md) for the diagnostic model behind `compilation_failed`.
 - [Template layout](templates.md) for template IDs.
+- [`typrest.toml`](typrest-toml.md#server) for the render capacity settings.
+- [Template lifecycle](../architecture/template-lifecycle.md) for the executor and admission classes.
 - [ADR-0004](../adr/0004-embed-tracked-development-web-ui.md) for why metadata routes are always
   mounted.

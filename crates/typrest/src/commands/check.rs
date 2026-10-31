@@ -6,8 +6,9 @@ use crate::args::{ColorChoice, LogFormat};
 use crate::loader::filesystem::FilesystemLoader;
 use crate::logging::compiler_diagnostics;
 use crate::package::universal_package::UniversePackageRepository;
+use crate::render_executor::BlockingRenderExecutor;
 use typrest_core::{
-    CompilationDiagnostic, TemplateId, TemplateRegistry, TemplateRegistryError,
+    CompilationDiagnostic, PdfCompiler, TemplateId, TemplateRegistry, TemplateRegistryError,
     TemplateRegistryEvent, TypstCompiler,
 };
 
@@ -23,7 +24,9 @@ pub(crate) async fn run_check(log_format: LogFormat, color: ColorChoice) -> bool
         &config.package_cache_dir,
         "check",
     ));
-    let compiler = TypstCompiler::new().with_package_repository(packages);
+    let compiler: Arc<dyn PdfCompiler> =
+        Arc::new(TypstCompiler::new().with_package_repository(packages));
+    let executor = BlockingRenderExecutor::new(config.render_limits);
     let diagnostic =
         |stage: &'static str, template: Option<&TemplateId>, value: &CompilationDiagnostic| {
             if log_format == LogFormat::Pretty {
@@ -60,7 +63,8 @@ pub(crate) async fn run_check(log_format: LogFormat, color: ColorChoice) -> bool
         ),
     };
     let registry_build_result =
-        TemplateRegistry::build_with_observer(&loader, &compiler, &registry_observer).await;
+        TemplateRegistry::build_with_observer(&loader, &compiler, &executor, &registry_observer)
+            .await;
 
     match registry_build_result {
         Ok(build) => {
@@ -139,6 +143,14 @@ pub(crate) async fn run_check(log_format: LogFormat, color: ColorChoice) -> bool
                             diagnostic("compile", Some(template), value);
                         }
                     }
+                    TemplateRegistryError::WarmupAborted { template, message } => error!(
+                        event = "compiler.diagnostic",
+                        context = "check",
+                        stage = "compile",
+                        template = %template,
+                        diagnostic_message = %message,
+                        "template `{template}`: {message}"
+                    ),
                 }
             }
             error!(

@@ -192,7 +192,7 @@ POST + Prefer: respond-async
   while queued does not change what is rendered, and the validation outcome returned to the client
   stays truthful. The cost is that a replaced bundle stays in memory until the job finishes.
 - **Shared limiter.** Workers draw from the same render concurrency limit as synchronous renders
-  (provided by `blocking-render-execution`), so asynchronous work cannot starve or exceed the
+  (provided by render execution (delivered)), so asynchronous work cannot starve or exceed the
   configured CPU budget. A configurable `jobs.max_concurrent` caps the share jobs may take.
 - **Bounded memory.** Queue capacity bounds queued payloads; `max_retained_bytes` bounds stored
   PDFs. Unfetched results are never evicted early; new submissions are rejected instead.
@@ -202,7 +202,7 @@ POST + Prefer: respond-async
   jobs (logging how many). Persisting the queue is a later phase.
 - **Sync render on client disconnect.** Unchanged in the MVP: synchronous results are not retained.
   A render that is still queued for a permit when the client disconnects SHOULD be cancelled by
-  `blocking-render-execution`; a running one cannot be interrupted. Resilience to dropped
+  render execution (delivered); a running one cannot be interrupted. Resilience to dropped
   connections is delivered by the asynchronous path plus idempotency keys.
 
 ### Domain and module layout
@@ -426,7 +426,7 @@ CPU work. A cooperative cancel hook is a future compiler-ACL change and is not p
 - **Starvation.** Jobs and sync renders share one limiter; heavy jobs can delay interactive requests.
   `jobs.max_concurrent` mitigates; fairness policy is an open question.
 - **Prerequisite churn.** The `prepare`/`execute` split and limiter integration touch code that
-  `blocking-render-execution` also changes; sequence after it to avoid conflicts.
+  render execution (delivered) also changes; sequence after it to avoid conflicts.
 - **Time and clocks.** TTL tests need an injected clock; `tokio` lacks the `time` feature today.
 - **Idempotency edge cases.** Race between duplicate submissions and cancellation or expiry must be
   tested; mismatch detection depends on a stable fingerprint.
@@ -435,7 +435,7 @@ CPU work. A cooperative cancel hook is a future compiler-ACL change and is not p
 
 This plan is written in parallel with its siblings. Links may not resolve until those files land.
 
-- [`blocking-render-execution.md`](blocking-render-execution.md) - **prerequisite.** *Needed:* a
+- [render execution (delivered)](../specs/http-api.md#render-capacity) - **prerequisite.** *Needed:* a
   shared render concurrency limiter (permit acquisition API usable from a worker task), compilation
   moved off the async executor, and cancellation of work still waiting for a permit. *Provided:* the
   `prepare`/`execute` split of `RenderService` (step 1) which that plan may also need; agree on one
@@ -483,7 +483,7 @@ documents in the same change. Run `cargo fmt --all -- --check`,
 step, and `python3 scripts/check-doc-links.py` plus `git diff --check` after documentation edits.
 
 0. **Approval gate.** Obtain the approvals under [Prerequisites](#prerequisites-scope-and-adr-approval),
-   and confirm `blocking-render-execution` is merged. Done when the owner has recorded the decisions
+   and confirm render execution (delivered) is merged. Done when the owner has recorded the decisions
    and, for each approved ADR proposal, the ADR is written by the human-approved process in
    [`docs/adr/README.md`](../adr/README.md).
 

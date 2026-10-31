@@ -49,7 +49,9 @@ enforced core dependency boundary.
 | `CompilationDiagnostic` | Typrest-owned severity, message, virtual location, hints, and trace |
 | `CompilationReport` | Ordered diagnostics for one failed compilation or export |
 | `LoaderError` | Template ID, lookup, schema, or filesystem loading failure |
-| `RenderError` | Missing template, invalid payload, or request-time compilation failure |
+| `RenderError` | Missing template, invalid payload, request-time compilation failure, render capacity exceeded, or abnormal execution failure |
+| `RenderExecutor` | Core port that runs an owned, CPU-bound compilation job off the async runtime behind an admission limit |
+| `Admission` | `Request` (bounded queue, may be rejected as saturated) or `Background` (warmup and reloads, waits and is never rejected) |
 
 ## Template Lifecycle
 
@@ -58,7 +60,7 @@ FilesystemLoader
   -> TemplateBundle
   -> PdfCompiler::prepare -> PackageRepository
   -> generated warmup payload
-  -> PdfCompiler::compile_prepared
+  -> PdfCompiler::compile_prepared (through RenderExecutor, Background admission)
   -> TemplateRegistry
   -> RenderService
   -> Document
@@ -76,12 +78,20 @@ binding the socket. A schema supplies its deterministic sample payload; a schema
 warms with `{}`.
 
 At request time, `RenderService` looks up the prepared bundle, validates and applies schema defaults
-when a schema exists, and compiles with request-specific `sys.inputs.data`. Normal requests never
-call a loader or package repository, read files, or access the network.
+when a schema exists, and hands an owned compilation job to the `RenderExecutor` with `Request`
+admission. The job compiles with request-specific `sys.inputs.data` on a blocking thread. Normal
+requests never call a loader or package repository, read files, or access the network.
+
+The application implements `RenderExecutor` as `BlockingRenderExecutor` (`crates/typrest/src/render_executor.rs`):
+Tokio `spawn_blocking` behind a FIFO semaphore of `max_concurrent_renders` slots and an admission
+counter that caps waiting requests at `max_queued_renders`. Core stays free of Tokio. Startup,
+`check`, and watch-mode warmup compiles use the same executor with `Background` admission, so
+reloads share CPU capacity with requests instead of running on runtime workers.
 
 Watch mode builds candidates without holding the registry write lock. Ordinary source changes
 replace one entry atomically. Route-topology and `_shared/` changes build a complete candidate and
-swap the registry atomically; failures leave the last known good registry active.
+swap the registry atomically; failures leave the last known good registry active. A request in
+flight keeps the `Arc` to the prepared bundle it looked up and completes against that version.
 
 Registry builds and reloads can notify an application callback. The core emits only template IDs,
 status, and warning counts; command and watch code match those events and log them directly.
@@ -103,7 +113,8 @@ pub trait PdfCompiler: Send + Sync {
         source: &TemplateSource,
     ) -> Result<PreparedTemplate, CompilationError>;
 
-    async fn compile_prepared(
+    /// Synchronous and CPU-bound; never call it on an async runtime worker.
+    fn compile_prepared(
         &self,
         template: &PreparedTemplate,
         payload: &serde_json::Value,
@@ -125,6 +136,9 @@ with the compiler.
 - `ValidationError` occurs before request compilation.
 - `CompilationError` may occur during warmup or rendering because template behavior can depend on
   the payload.
+- `ExecutionError::Saturated` becomes `RenderError::Overloaded` (`503`), and `ExecutionError::Aborted`
+  (a panic during compilation) becomes `RenderError::ExecutionFailed` (`500`). Neither is a template
+  error and neither carries diagnostics.
 - HTTP handlers convert render failures into structured JSON and never expose physical paths or
   source excerpts.
 
@@ -144,6 +158,8 @@ through `RenderService`; they never receive a loader or package repository
 - Global `_shared/` files are inserted after local source and win same-path virtual collisions.
 - Template paths remain virtual and relative throughout the compiler boundary.
 - Startup validates all discovered templates in deterministic ID order.
+- Request compilation goes through `RenderExecutor`; `compile_prepared` is synchronous and CPU-bound
+  and is never called on an async runtime worker.
 - Compiler warnings are retained and reported but do not fail otherwise successful compilation.
 - Literal, fully versioned `@preview` imports resolve during preparation and remain in memory for
   request compilation.

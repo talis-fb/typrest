@@ -21,7 +21,8 @@ request-specific.
    build reusable compiler state.
 6. Generate a deterministic payload from the schema, or use `{}` without a schema.
 7. Validate the generated payload when a schema exists.
-8. Run a real `compile_prepared()` and PDF export.
+8. Run a real `compile_prepared()` and PDF export through the `RenderExecutor` with `Background`
+   admission.
 9. Store successful `PreparedTemplateBundle` entries in `TemplateRegistry`.
 10. Report every collected failure and pass prepared registry/render state to HTTP only when all
     templates succeed.
@@ -67,8 +68,20 @@ filesystem or reparse schemas.
 3. A missing entry becomes `RenderError::TemplateNotFound`.
 4. When a schema exists, validation applies defaults and may return `ValidationError` before
    compilation.
-5. The compiler builds request-specific `sys.inputs.data` and reuses the prepared template.
-6. The handler returns PDF bytes or maps `RenderError` to structured JSON.
+5. `RenderService` builds an owned job holding the compiler, the looked-up `Arc` of the prepared
+   bundle, and the validated payload, and passes it to `RenderExecutor::execute()` with `Request`
+   admission.
+6. `BlockingRenderExecutor` rejects the request with `ExecutionError::Saturated` when every slot and
+   queue position is taken. Otherwise it waits for a slot in first-come order and runs the job on a
+   blocking thread, which builds request-specific `sys.inputs.data` and reuses the prepared
+   template.
+7. The handler returns PDF bytes or maps `RenderError` to structured JSON.
+
+Steps 1 to 4 run before admission, so `400`, `404`, and `422` responses never wait for capacity or
+occupy a slot. The slot and queue position travel into the blocking closure, so an admitted
+compilation keeps its slot until it ends even if the client disconnects, while a request still
+waiting in the queue releases its position when its future is dropped. A panic in the job releases
+the slot and surfaces as `ExecutionError::Aborted`.
 
 Normal requests never read template or package files, call `TemplateLoader::load()` or
 `PackageRepository::resolve()`, rebuild fonts, reconstruct source maps, or access the network.
@@ -84,6 +97,11 @@ after newer changes and overwrite them.
 - The candidate is built without holding the registry write lock.
 - Success swaps the affected entry or complete registry with one short write operation.
 - Failure is reported and the last known good entry or registry remains active.
+- Warmup compiles use `Background` admission: they wait for a slot behind in-flight work, are never
+  rejected, and run on blocking threads instead of runtime workers. Preparation and loading I/O
+  still run on the watch worker task.
+- A request in flight keeps the `Arc` to the prepared bundle it looked up, so it completes against
+  that version even when a swap happens meanwhile (`REQ-HTTP-076`).
 - Template compilation and actual missing-package installation progress are tracing events on
   stdout. Successful full rebuilds emit a refreshed ready count.
 

@@ -85,4 +85,10 @@ pub enum RenderError {
 
     #[error("{0}")]
     CompilationError(#[from] CompilationError),
+
+    #[error("render capacity exceeded")]
+    Overloaded,
+
+    #[error("render execution failed: {message}")]
+    ExecutionFailed { message: String },
 }

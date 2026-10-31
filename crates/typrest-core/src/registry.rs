@@ -4,8 +4,9 @@ use std::sync::{Arc, RwLock};
 use thiserror::Error;
 
 use crate::{
-    CompilationDiagnostic, CompilationError, LoaderError, PdfCompiler, TemplateId, TemplateLoader,
-    ValidationError, WithWarnings, validate_with_defaults,
+    Admission, CompilationDiagnostic, CompilationError, ExecutionError, LoaderError, PdfCompiler,
+    RenderExecutor, TemplateId, TemplateLoader, ValidationError, WithWarnings,
+    validate_with_defaults,
 };
 
 use crate::compiler::PreparedTemplateBundle;
@@ -18,14 +19,16 @@ pub struct TemplateRegistry {
 impl TemplateRegistry {
     pub async fn build(
         loader: &dyn TemplateLoader,
-        compiler: &dyn PdfCompiler,
+        compiler: &Arc<dyn PdfCompiler>,
+        executor: &dyn RenderExecutor,
     ) -> Result<WithWarnings<TemplateRegistry>, WithWarnings<TemplateRegistryBuildFailure>> {
-        Self::build_with_observer(loader, compiler, &|_| {}).await
+        Self::build_with_observer(loader, compiler, executor, &|_| {}).await
     }
 
     pub async fn build_with_observer(
         loader: &dyn TemplateLoader,
-        compiler: &dyn PdfCompiler,
+        compiler: &Arc<dyn PdfCompiler>,
+        executor: &dyn RenderExecutor,
         observer: &(dyn Fn(TemplateRegistryEvent) + Send + Sync),
     ) -> Result<WithWarnings<TemplateRegistry>, WithWarnings<TemplateRegistryBuildFailure>> {
         let names = match loader.list().await {
@@ -49,7 +52,7 @@ impl TemplateRegistry {
             observer(TemplateRegistryEvent::CompilationStarted {
                 template: name.clone(),
             });
-            match prepare_template_bundle(loader, compiler, &name).await {
+            match prepare_template_bundle(loader, compiler, executor, &name).await {
                 Ok(bundle) => {
                     let (bundle_prepared_template, bundle_warnings) = bundle.into_parts();
                     let warning_count = bundle_warnings.len();
@@ -83,24 +86,26 @@ impl TemplateRegistry {
     pub async fn reload(
         &self,
         loader: &dyn TemplateLoader,
-        compiler: &dyn PdfCompiler,
+        compiler: &Arc<dyn PdfCompiler>,
+        executor: &dyn RenderExecutor,
         template_id: &TemplateId,
     ) -> Result<WithWarnings<()>, TemplateRegistryError> {
-        self.reload_with_observer(loader, compiler, template_id, &|_| {})
+        self.reload_with_observer(loader, compiler, executor, template_id, &|_| {})
             .await
     }
 
     pub async fn reload_with_observer(
         &self,
         loader: &dyn TemplateLoader,
-        compiler: &dyn PdfCompiler,
+        compiler: &Arc<dyn PdfCompiler>,
+        executor: &dyn RenderExecutor,
         template_id: &TemplateId,
         observer: &(dyn Fn(TemplateRegistryEvent) + Send + Sync),
     ) -> Result<WithWarnings<()>, TemplateRegistryError> {
         observer(TemplateRegistryEvent::CompilationStarted {
             template: template_id.clone(),
         });
-        let bundle = match prepare_template_bundle(loader, compiler, template_id).await {
+        let bundle = match prepare_template_bundle(loader, compiler, executor, template_id).await {
             Ok(bundle) => bundle,
             Err(error) => {
                 observer(TemplateRegistryEvent::CompilationFailed {
@@ -150,17 +155,17 @@ impl TemplateRegistry {
             .expect("template registry lock poisoned") = entries;
     }
 
-    fn replace(&self, template_id: TemplateId, entry: PreparedTemplateBundle) {
+    fn replace(&self, template_id: TemplateId, entry: Arc<PreparedTemplateBundle>) {
         self.entries
             .write()
             .expect("template registry lock poisoned")
-            .insert(template_id, Arc::new(entry));
+            .insert(template_id, entry);
     }
 
     #[cfg(any(test, feature = "test-util"))]
     #[doc(hidden)]
     pub fn insert_for_test(&self, template_id: TemplateId, entry: PreparedTemplateBundle) {
-        self.replace(template_id, entry);
+        self.replace(template_id, Arc::new(entry));
     }
 }
 
@@ -180,9 +185,10 @@ pub enum TemplateRegistryEvent {
 
 async fn prepare_template_bundle(
     loader: &dyn TemplateLoader,
-    compiler: &dyn PdfCompiler,
+    compiler: &Arc<dyn PdfCompiler>,
+    executor: &dyn RenderExecutor,
     template_id: &TemplateId,
-) -> Result<WithWarnings<PreparedTemplateBundle>, TemplateRegistryError> {
+) -> Result<WithWarnings<Arc<PreparedTemplateBundle>>, TemplateRegistryError> {
     let bundle = loader
         .load(template_id)
         .await
@@ -210,9 +216,26 @@ async fn prepare_template_bundle(
         None => serde_json::json!({}),
     };
 
-    let document = compiler
-        .compile_prepared(&prepared, &sample)
+    let prepared_bundle = Arc::new(match bundle.schema {
+        Some(schema) => PreparedTemplateBundle::new(schema, prepared),
+        None => PreparedTemplateBundle::without_schema(prepared),
+    });
+
+    let job_compiler = Arc::clone(compiler);
+    let job_bundle = Arc::clone(&prepared_bundle);
+    let document = executor
+        .execute(
+            Admission::Background,
+            Box::new(move || job_compiler.compile_prepared(job_bundle.prepared(), &sample)),
+        )
         .await
+        .map_err(|error| TemplateRegistryError::WarmupAborted {
+            template: template_id.clone(),
+            message: match error {
+                ExecutionError::Aborted { message } => message,
+                ExecutionError::Saturated => error.to_string(),
+            },
+        })?
         .map_err(|source| TemplateRegistryError::Warmup {
             template: template_id.clone(),
             source,
@@ -227,11 +250,6 @@ async fn prepare_template_bundle(
             diagnostic
         })
         .collect();
-
-    let prepared_bundle = match bundle.schema {
-        Some(schema) => PreparedTemplateBundle::new(schema, prepared),
-        None => PreparedTemplateBundle::without_schema(prepared),
-    };
 
     Ok(WithWarnings::new(prepared_bundle, warnings))
 }
@@ -270,6 +288,12 @@ pub enum TemplateRegistryError {
         #[source]
         source: CompilationError,
     },
+
+    #[error("template '{template}' warmup compilation did not complete: {message}")]
+    WarmupAborted {
+        template: TemplateId,
+        message: String,
+    },
 }
 
 #[derive(Debug, Error)]
@@ -299,6 +323,7 @@ mod tests {
     use bytes::Bytes;
     use serde_json::json;
 
+    use crate::InlineExecutor;
     use crate::{
         CompilationDiagnostic, CompilationError, DiagnosticSeverity, Document, LoaderError,
         PdfCompiler, PreparedTemplate, RenderRequest, RenderService, Schema, TemplateBundle,
@@ -353,7 +378,7 @@ mod tests {
             Ok(PreparedTemplate::for_test())
         }
 
-        async fn compile_prepared(
+        fn compile_prepared(
             &self,
             _: &PreparedTemplate,
             _: &serde_json::Value,
@@ -375,7 +400,7 @@ mod tests {
             Ok(PreparedTemplate::for_test())
         }
 
-        async fn compile_prepared(
+        fn compile_prepared(
             &self,
             _: &PreparedTemplate,
             _: &serde_json::Value,
@@ -419,9 +444,13 @@ mod tests {
             prepares: AtomicUsize::new(0),
             compiles: AtomicUsize::new(0),
         });
-        let build =
-            futures_executor::block_on(TemplateRegistry::build(loader.as_ref(), compiler.as_ref()))
-                .unwrap();
+        let dyn_compiler: Arc<dyn PdfCompiler> = compiler.clone();
+        let build = futures_executor::block_on(TemplateRegistry::build(
+            loader.as_ref(),
+            &dyn_compiler,
+            &InlineExecutor,
+        ))
+        .unwrap();
         let registry = build.into_value();
 
         assert_eq!(loader.loads.load(Ordering::SeqCst), 1);
@@ -436,7 +465,7 @@ mod tests {
             vec!["invoice"]
         );
 
-        let service = RenderService::new(registry, compiler.clone());
+        let service = RenderService::new(registry, dyn_compiler, Arc::new(InlineExecutor));
         let document = futures_executor::block_on(service.render(RenderRequest::new(
             TemplateId::new("invoice").unwrap(),
             json!({ "name": "Ada" }),
@@ -455,15 +484,16 @@ mod tests {
             bundle: bundle(),
             loads: AtomicUsize::new(0),
         };
-        let compiler = CountingCompiler {
+        let compiler: Arc<dyn PdfCompiler> = Arc::new(CountingCompiler {
             prepares: AtomicUsize::new(0),
             compiles: AtomicUsize::new(0),
-        };
+        });
         let events = Mutex::new(Vec::new());
 
         let build = futures_executor::block_on(TemplateRegistry::build_with_observer(
             &loader,
             &compiler,
+            &InlineExecutor,
             &|event| events.lock().unwrap().push(event),
         ))
         .unwrap();
@@ -485,15 +515,16 @@ mod tests {
 
     #[test]
     fn observed_build_reports_each_failure_and_keeps_aggregating() {
-        let compiler = CountingCompiler {
+        let compiler: Arc<dyn PdfCompiler> = Arc::new(CountingCompiler {
             prepares: AtomicUsize::new(0),
             compiles: AtomicUsize::new(0),
-        };
+        });
         let events = Mutex::new(Vec::new());
 
         let error = match futures_executor::block_on(TemplateRegistry::build_with_observer(
             &FailingLoader,
             &compiler,
+            &InlineExecutor,
             &|event| events.lock().unwrap().push(event),
         )) {
             Ok(_) => panic!("both templates should fail"),
@@ -544,12 +575,17 @@ mod tests {
             bundle: invalid_bundle,
             loads: AtomicUsize::new(0),
         };
-        let compiler = CountingCompiler {
+        let compiler = Arc::new(CountingCompiler {
             prepares: AtomicUsize::new(0),
             compiles: AtomicUsize::new(0),
-        };
+        });
+        let dyn_compiler: Arc<dyn PdfCompiler> = compiler.clone();
 
-        let error = match futures_executor::block_on(TemplateRegistry::build(&loader, &compiler)) {
+        let error = match futures_executor::block_on(TemplateRegistry::build(
+            &loader,
+            &dyn_compiler,
+            &InlineExecutor,
+        )) {
             Ok(_) => panic!("invalid generated sample should fail registry build"),
             Err(error) => error,
         };
@@ -564,16 +600,19 @@ mod tests {
 
     #[test]
     fn build_aggregates_failures_in_template_order() {
-        let compiler = CountingCompiler {
+        let compiler: Arc<dyn PdfCompiler> = Arc::new(CountingCompiler {
             prepares: AtomicUsize::new(0),
             compiles: AtomicUsize::new(0),
-        };
+        });
 
-        let error =
-            match futures_executor::block_on(TemplateRegistry::build(&FailingLoader, &compiler)) {
-                Ok(_) => panic!("both templates should fail"),
-                Err(error) => error,
-            };
+        let error = match futures_executor::block_on(TemplateRegistry::build(
+            &FailingLoader,
+            &compiler,
+            &InlineExecutor,
+        )) {
+            Ok(_) => panic!("both templates should fail"),
+            Err(error) => error,
+        };
 
         assert_eq!(error.value().template_count(), 2);
         assert_eq!(error.value().failures().len(), 2);
@@ -596,8 +635,14 @@ mod tests {
             loads: AtomicUsize::new(0),
         };
 
-        let build =
-            futures_executor::block_on(TemplateRegistry::build(&loader, &WarningCompiler)).unwrap();
+        let compiler: Arc<dyn PdfCompiler> = Arc::new(WarningCompiler);
+
+        let build = futures_executor::block_on(TemplateRegistry::build(
+            &loader,
+            &compiler,
+            &InlineExecutor,
+        ))
+        .unwrap();
 
         assert_eq!(build.warnings().len(), 1);
         assert_eq!(
@@ -605,5 +650,88 @@ mod tests {
             Some(TemplateId::new("invoice").unwrap())
         );
         assert_eq!(build.warnings()[0].message, "careful");
+    }
+
+    struct RecordingExecutor {
+        admissions: Mutex<Vec<crate::Admission>>,
+    }
+
+    #[async_trait]
+    impl crate::RenderExecutor for RecordingExecutor {
+        async fn execute(
+            &self,
+            admission: crate::Admission,
+            job: crate::CompileJob,
+        ) -> Result<Result<Document, CompilationError>, crate::ExecutionError> {
+            self.admissions.lock().unwrap().push(admission);
+            Ok(job())
+        }
+    }
+
+    #[test]
+    fn warmup_compiles_use_background_admission() {
+        let loader = CountingLoader {
+            bundle: bundle(),
+            loads: AtomicUsize::new(0),
+        };
+        let compiler: Arc<dyn PdfCompiler> = Arc::new(WarningCompiler);
+        let executor = RecordingExecutor {
+            admissions: Mutex::new(Vec::new()),
+        };
+
+        let registry =
+            futures_executor::block_on(TemplateRegistry::build(&loader, &compiler, &executor))
+                .unwrap()
+                .into_value();
+        futures_executor::block_on(registry.reload(
+            &loader,
+            &compiler,
+            &executor,
+            &TemplateId::new("invoice").unwrap(),
+        ))
+        .unwrap();
+
+        assert_eq!(
+            *executor.admissions.lock().unwrap(),
+            [crate::Admission::Background, crate::Admission::Background]
+        );
+    }
+
+    struct AbortingExecutor;
+
+    #[async_trait]
+    impl crate::RenderExecutor for AbortingExecutor {
+        async fn execute(
+            &self,
+            _: crate::Admission,
+            _: crate::CompileJob,
+        ) -> Result<Result<Document, CompilationError>, crate::ExecutionError> {
+            Err(crate::ExecutionError::Aborted {
+                message: "boom".to_owned(),
+            })
+        }
+    }
+
+    #[test]
+    fn aborted_warmup_fails_the_build() {
+        let loader = CountingLoader {
+            bundle: bundle(),
+            loads: AtomicUsize::new(0),
+        };
+        let compiler: Arc<dyn PdfCompiler> = Arc::new(WarningCompiler);
+
+        let error = match futures_executor::block_on(TemplateRegistry::build(
+            &loader,
+            &compiler,
+            &AbortingExecutor,
+        )) {
+            Ok(_) => panic!("aborted warmup should fail the build"),
+            Err(error) => error,
+        };
+
+        assert!(matches!(
+            error.value().failures(),
+            [super::TemplateRegistryError::WarmupAborted { message, .. }] if message == "boom"
+        ));
     }
 }

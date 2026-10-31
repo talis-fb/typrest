@@ -15,7 +15,7 @@ Make `typrest serve` safe to run unattended behind Docker, Compose, or Kubernete
 
 The three parts are independent in value. Body limit and graceful shutdown can ship before the
 render timeout. The render timeout depends on
-[`blocking-render-execution.md`](blocking-render-execution.md).
+[render execution (delivered)](../specs/http-api.md#render-capacity).
 
 ## Current behavior
 
@@ -72,7 +72,7 @@ Contracts: [HTTP API](../specs/http-api.md), [CLI](../specs/cli.md),
   synchronous `world::compile_prepared()` (`compiler/world.rs:50-79`, `typst::compile` at line 55)
   directly inside the async function, so compilation currently blocks a tokio worker thread.
   Moving it to a blocking thread is the subject of
-  [`blocking-render-execution.md`](blocking-render-execution.md).
+  [render execution (delivered)](../specs/http-api.md#render-capacity).
 - `typrest-core` has no tokio dependency and must stay free of HTTP concerns, so any deadline
   belongs in the application package.
 - Render outcomes are logged as `render.completed` / `render.failed` with `error_kind`
@@ -222,7 +222,7 @@ The ADR would record A versus B.
 | Option | Trade-offs |
 |---|---|
 | `504 render_timeout` (**recommended**) | Conventional for deadline exceeded (gRPC `DEADLINE_EXCEEDED` maps to 504). Separates timeouts from capacity rejections, so `503` stays free for overload and shutdown. |
-| `503 render_timeout` | Implies "retry later". Retrying a deterministic slow render does not help. It also conflicts with a possible `503` capacity code from [`blocking-render-execution.md`](blocking-render-execution.md). |
+| `503 render_timeout` | Implies "retry later". Retrying a deterministic slow render does not help. It also conflicts with a possible `503` capacity code from [render execution (delivered)](../specs/http-api.md#render-capacity). |
 | `408` | Means the *client* was too slow to send the request. Semantically wrong. |
 | `500 compilation_failed` | Mixes infrastructure limits with template errors. Breaks `REQ-HTTP-043`, because there are no diagnostics. |
 
@@ -254,7 +254,7 @@ deployment configuration split, which would justify an ADR.
 
 | Option | Trade-offs |
 |---|---|
-| A. Application package, around the render call (**recommended**) | `typrest-core` stays runtime-agnostic (no tokio). Implemented in the handler or in the app-level render executor that [`blocking-render-execution.md`](blocking-render-execution.md) introduces. Async jobs can reuse the same helper. |
+| A. Application package, around the render call (**recommended**) | `typrest-core` stays runtime-agnostic (no tokio). Implemented in the handler or in the app-level render executor that [render execution (delivered)](../specs/http-api.md#render-capacity) introduces. Async jobs can reuse the same helper. |
 | B. `tower` timeout layer (tower-http `TimeoutLayer`) | Also counts body upload time, returns `408` with a non-JSON body, and needs a new dependency. Rejected. |
 | C. Inside `RenderService` in core | Adds a timer dependency to core. Rejected by the "core has no I/O or runtime coupling" rule. |
 
@@ -305,7 +305,7 @@ initializing the subscriber before the runtime is built (stdout only, `REQ-LOG-0
   and partially built document alive until they finish.
 - **Watch reload during shutdown.** A reload in progress is aborted only at an `.await` point. If
   its compile runs synchronously, shutdown waits for it unless it runs on a blocking thread too.
-  This needs confirmation once `blocking-render-execution.md` decides where watch compiles run.
+  This needs confirmation once render execution (delivered) decides where watch compiles run.
 - **PID 1 behavior.** Signal handling fixes the 10 s `docker stop` delay only if handlers are
   installed before any slow startup work. Warmup happens before binding: a `SIGTERM` during warmup
   must still terminate promptly (see open questions).
@@ -320,7 +320,7 @@ initializing the subscriber before the runtime is built (stdout only, `REQ-LOG-0
 ## Steps
 
 Steps 1–4 do not depend on any sibling plan. Step 5 requires
-[`blocking-render-execution.md`](blocking-render-execution.md) to have landed. Each step updates its
+[render execution (delivered)](../specs/http-api.md#render-capacity) to have landed. Each step updates its
 own specifications in the same commit (AGENTS.md "Documentation Updates").
 
 1. **Explicit body limit with JSON `413`.**
@@ -405,7 +405,7 @@ own specifications in the same commit (AGENTS.md "Documentation Updates").
    - Done when: `scripts/check-container.sh` passes locally with Docker or Podman, plus
      `python3 scripts/check-doc-links.py` and `git diff --check`.
 
-5. **Render timeout (requires [`blocking-render-execution.md`](blocking-render-execution.md)).**
+5. **Render timeout (requires [render execution (delivered)](../specs/http-api.md#render-capacity)).**
    - `args.rs`: `--render-timeout`, with tests. `ServerConfig` or `AppState`: carry a
      `render_timeout: Duration` with a named default constant.
    - Apply the deadline in the application package (D5): wrap the render executor call introduced
@@ -447,7 +447,7 @@ own specifications in the same commit (AGENTS.md "Documentation Updates").
 
 | Plan | Needed from it | Provided to it |
 |---|---|---|
-| [`blocking-render-execution.md`](blocking-render-execution.md) | **Prerequisite for step 5.** (a) Compilation runs on a blocking thread through an app-level executor that returns a future the handler can drop. (b) The concurrency permit is an `OwnedSemaphorePermit` **moved into the blocking closure**, not held by the awaiting future, so dropping the future (timeout or disconnect) never releases capacity early. (c) A oneshot or equivalent result channel whose closed receiver the closure can detect, to log `render.abandoned`. (d) If it adds a bounded queue with an immediate `503` rejection, its error code and its precedence relative to `render_timeout`. (e) Whether watch-mode and warmup compiles also move off the runtime threads (affects the shutdown risk). | The timeout wrapper, the `504 render_timeout` contract, the D9 runtime exit (without it, detached blocking tasks would stall process exit), and `ShutdownSignal`. |
+| [render execution (delivered)](../specs/http-api.md#render-capacity) | **Prerequisite for step 5.** (a) Compilation runs on a blocking thread through an app-level executor that returns a future the handler can drop. (b) The concurrency permit is an `OwnedSemaphorePermit` **moved into the blocking closure**, not held by the awaiting future, so dropping the future (timeout or disconnect) never releases capacity early. (c) A oneshot or equivalent result channel whose closed receiver the closure can detect, to log `render.abandoned`. (d) If it adds a bounded queue with an immediate `503` rejection, its error code and its precedence relative to `render_timeout`. (e) Whether watch-mode and warmup compiles also move off the runtime threads (affects the shutdown risk). | The timeout wrapper, the `504 render_timeout` contract, the D9 runtime exit (without it, detached blocking tasks would stall process exit), and `ShutdownSignal`. |
 | [`render-metrics.md`](render-metrics.md) | Metric names and labels, if metrics are emitted instead of or in addition to logs. | Events and counters to expose: timeouts (by phase), abandoned compilations and their duration, `413` rejections, shutdown duration and outcome. `ShutdownSignal` for a final flush. Note that `413` and other pre-render rejections are currently not logged. |
 | [`render-result-cache.md`](render-result-cache.md) | A decision on whether an abandoned compilation's successful result may populate the cache (it would make a retry fast), and confirmation that cache hits bypass the render deadline and permits. | The guarantee that timed-out results are otherwise discarded (`REQ-HTTP-074`). |
 | [`async-render-jobs.md`](async-render-jobs.md) | Job execution deadline semantics: recommended to reuse `--render-timeout` as the per-job compile deadline, with job status `failed` and code `render_timeout`. Shutdown behavior for queued and running jobs (drain, persist, or fail) within `--shutdown-timeout`. | `ShutdownSignal` (stop accepting jobs, drain workers), the timeout helper, and the D9 runtime exit. The HTTP render timeout does not apply to the `202` submission response. |

@@ -129,6 +129,9 @@ typrest init [path]
   single-template reload MUST log that template's lifecycle and reload outcome.
   Watch behavior is defined in [Template lifecycle](../architecture/template-lifecycle.md).
 
+- **REQ-CLI-044:** `serve` MUST report the effective `max_concurrent_renders` and
+  `max_queued_renders` as structured fields of the `server.starting` event.
+
 ### Diagnostic options
 
 | Option | Default | Behavior |

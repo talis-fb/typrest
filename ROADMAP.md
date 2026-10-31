@@ -56,6 +56,14 @@ rendered over HTTP with payload validation and structured diagnostics.
 - [x] Raw JSON editing, PDF preview, and download
 - [x] Client validation, request cancellation, Blob cleanup, and accessibility checks
 
+### Render Execution
+
+- [x] Request compilation and PDF export run on blocking threads, off the async runtime
+- [x] Bounded render concurrency with a FIFO queue; `503 render_capacity_exceeded` with `Retry-After`
+- [x] Panics during compilation become `500 render_execution_failed` and the server keeps serving
+- [x] Startup, `check`, and watch warmups share the executor with `Background` admission
+- [x] `[server]` table in `typrest.toml` with `max_concurrent_renders` and `max_queued_renders`
+
 ### Container Image
 
 - [x] Container image serving the bundled `examples/minimal` project through `typrest.toml` discovery
@@ -74,6 +82,14 @@ rendered over HTTP with payload validation and structured diagnostics.
   guides, a pruned ADR set, and implementation plans (see [`docs/README.md`](docs/README.md))
 - [ ] Keep specifications and examples synchronized in every future behavior change
 - [x] Run `scripts/check-doc-links.py` in CI, together with the Web UI build and `webui/dist` drift check
+
+### Render Execution Follow-ups
+
+- [ ] Trim the process-global `comemo` memoization cache (owner and policy undecided)
+- [ ] Run startup warmup of independent templates in parallel through the executor
+- [ ] Move watch-mode preparation and loader I/O off the async runtime
+- [ ] Revisit the default `max_concurrent_renders` after measuring CPU oversubscription with
+  Typst's internal rayon pool
 
 ## Deferred: Store Mode
 
