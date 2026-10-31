@@ -57,6 +57,15 @@ work is done.
   accepted decisions; supersede the earlier ADR with a new one.
 - Do not state in documentation that a test or behavior exists unless it has been verified.
 
+## README policy
+
+[`README.md`](../README.md) is the entrypoint for every user on GitHub. Change it only when a
+change is really required, and only with the maintainer's explicit approval, even when a feature
+seems to need a mention there. Propose the wording first.
+
+Feature behavior belongs in the specification it covers, linked from the README at most once.
+Do not add release notes, per-feature paragraphs, or commit-specific details to the README.
+
 ## Requirement IDs
 
 Every specification under [`specs/`](specs/README.md) carries requirement IDs. Architecture
