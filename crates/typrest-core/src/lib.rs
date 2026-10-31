@@ -3,6 +3,7 @@
 pub mod compiler;
 mod diagnostic;
 mod errors;
+mod executor;
 pub mod loader;
 mod package;
 mod registry;
@@ -19,6 +20,9 @@ pub use diagnostic::{
     DiagnosticSeverity, RelatedDiagnostic,
 };
 pub use errors::{CompilationError, RenderError, ValidationError};
+#[cfg(any(test, feature = "test-util"))]
+pub use executor::InlineExecutor;
+pub use executor::{Admission, CompileJob, ExecutionError, RenderExecutor};
 pub use loader::{LoaderError, TemplateLoader};
 pub use package::{PackageCoordinate, PackageRepository, PackageResolutionError, PackageSource};
 pub use registry::{

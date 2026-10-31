@@ -301,7 +301,7 @@ material, not ADR material.
 
 Siblings written in parallel (files may not exist yet):
 
-- [Blocking render execution](blocking-render-execution.md): adds queued/blocking-pool gauges and
+- [Blocking render execution](../specs/http-api.md#render-capacity): adds queued/blocking-pool gauges and
   queue-wait time. It should add them under `metrics/render.rs` and report queue wait through
   `RenderReport` (new optional field) so stage timings stay consistent. `typrest_renders_in_flight`
   defined here is the handler-level count; the sibling defines "queued" and "executing in pool".

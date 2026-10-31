@@ -98,6 +98,7 @@ pub async fn render_template(
                 latency_ms = elapsed_ms,
                 status = "error",
                 error_kind = render_error_kind(&error),
+                execution_error = execution_error_detail(&error),
                 "failed to render template `{template_for_log}` after {elapsed_ms} ms: {}",
                 render_error_kind(&error)
             );
@@ -118,12 +119,23 @@ fn has_json_content_type(headers: &HeaderMap) -> bool {
         })
 }
 
+/// The raw failure detail, for logs only. It may contain source text or paths, so it never reaches
+/// the response body.
+fn execution_error_detail(error: &RenderError) -> Option<&str> {
+    match error {
+        RenderError::ExecutionFailed { message } => Some(message),
+        _ => None,
+    }
+}
+
 fn render_error_kind(error: &RenderError) -> &'static str {
     match error {
         RenderError::TemplateNotFound(_) => "template_not_found",
         RenderError::ValidationError(_) => "schema_validation_failed",
         RenderError::CompilationError(CompilationError::Failed(_)) => "compilation_failed",
         RenderError::CompilationError(CompilationError::ExportFailed(_)) => "pdf_export_failed",
+        RenderError::Overloaded => "render_capacity_exceeded",
+        RenderError::ExecutionFailed { .. } => "render_execution_failed",
     }
 }
 

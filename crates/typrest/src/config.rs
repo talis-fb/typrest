@@ -5,6 +5,11 @@ use serde::Deserialize;
 
 use tracing::error;
 
+use crate::render_executor::{
+    MAX_CONCURRENT_RENDERS_LIMIT, MAX_QUEUED_RENDERS_LIMIT, RenderLimits,
+    default_max_concurrent_renders, default_max_queued_renders,
+};
+
 pub const CONFIG_FILE: &str = "typrest.toml";
 pub const PROJECT_DATA_DIR: &str = ".typrest";
 
@@ -14,6 +19,7 @@ pub struct ProjectConfig {
     pub templates_root: PathBuf,
     pub package_cache_dir: PathBuf,
     pub web_ui: bool,
+    pub render_limits: RenderLimits,
 }
 
 #[derive(Debug, Deserialize)]
@@ -22,6 +28,14 @@ struct RawProjectConfig {
     templates_root: String,
     #[serde(default)]
     web_ui: bool,
+    #[serde(default)]
+    server: RawServerConfig,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct RawServerConfig {
+    max_concurrent_renders: Option<i64>,
+    max_queued_renders: Option<i64>,
 }
 
 pub fn load_config() -> Option<ProjectConfig> {
@@ -55,6 +69,7 @@ pub fn load_project_config(project_root: &Path) -> std::io::Result<ProjectConfig
     })?;
 
     let config = parse_project_config(&content)?;
+    let render_limits = resolve_render_limits(&config.server)?;
     let templates_root = resolve_templates_root(project_root, &config.templates_root)?;
 
     if !templates_root.exists() {
@@ -82,6 +97,7 @@ pub fn load_project_config(project_root: &Path) -> std::io::Result<ProjectConfig
         templates_root,
         package_cache_dir: project_root.join(PROJECT_DATA_DIR).join("packages"),
         web_ui: config.web_ui,
+        render_limits,
     })
 }
 
@@ -118,6 +134,41 @@ fn parse_project_config(content: &str) -> std::io::Result<RawProjectConfig> {
     }
 
     Ok(config)
+}
+
+fn resolve_render_limits(server: &RawServerConfig) -> std::io::Result<RenderLimits> {
+    let max_concurrent_renders = match server.max_concurrent_renders {
+        Some(value) => bounded_setting(
+            "max_concurrent_renders",
+            value,
+            1,
+            MAX_CONCURRENT_RENDERS_LIMIT,
+        )?,
+        None => default_max_concurrent_renders(),
+    };
+    let max_queued_renders = match server.max_queued_renders {
+        Some(value) => bounded_setting("max_queued_renders", value, 0, MAX_QUEUED_RENDERS_LIMIT)?,
+        None => default_max_queued_renders(max_concurrent_renders),
+    };
+
+    Ok(RenderLimits::new(
+        max_concurrent_renders,
+        max_queued_renders,
+    ))
+}
+
+fn bounded_setting(name: &str, value: i64, min: usize, max: usize) -> std::io::Result<usize> {
+    usize::try_from(value)
+        .ok()
+        .filter(|value| (min..=max).contains(value))
+        .map_or_else(
+            || {
+                invalid_config(format!(
+                    "invalid {CONFIG_FILE}: server.{name} must be an integer from {min} to {max}"
+                ))
+            },
+            Ok,
+        )
 }
 
 fn resolve_templates_root(project_root: &Path, templates_root: &str) -> std::io::Result<PathBuf> {
@@ -162,6 +213,7 @@ fn invalid_config<T>(message: String) -> std::io::Result<T> {
 #[cfg(test)]
 mod tests {
     use super::{PROJECT_DATA_DIR, find_project_root, load_project_config, parse_project_config};
+    use crate::render_executor::{RenderLimits, default_max_concurrent_renders};
 
     #[test]
     fn load_project_config_resolves_templates_root() {
@@ -346,5 +398,96 @@ mod tests {
         let error = find_project_root(&nested).unwrap_err();
 
         assert_eq!(error.kind(), std::io::ErrorKind::NotFound);
+    }
+
+    fn load_with_server_table(server: &str) -> std::io::Result<super::ProjectConfig> {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(
+            root.path().join("typrest.toml"),
+            format!("schema_version = \"v1\"\ntemplates_root = \"templates\"\n{server}"),
+        )
+        .unwrap();
+        std::fs::create_dir(root.path().join("templates")).unwrap();
+
+        load_project_config(root.path())
+    }
+
+    #[test]
+    fn render_limits_use_defaults_when_server_table_is_absent() {
+        let config = load_with_server_table("").unwrap();
+
+        assert_eq!(config.render_limits, RenderLimits::default());
+    }
+
+    #[test]
+    fn render_limits_use_defaults_for_omitted_fields() {
+        let config = load_with_server_table("[server]\nmax_concurrent_renders = 3\n").unwrap();
+
+        assert_eq!(config.render_limits, RenderLimits::new(3, 6));
+        let config = load_with_server_table("[server]\nmax_queued_renders = 5\n").unwrap();
+        assert_eq!(
+            config.render_limits,
+            RenderLimits::new(default_max_concurrent_renders(), 5)
+        );
+    }
+
+    #[test]
+    fn render_limits_honor_explicit_values() {
+        let config = load_with_server_table(
+            "[server]\nmax_concurrent_renders = 4\nmax_queued_renders = 10\n",
+        )
+        .unwrap();
+
+        assert_eq!(config.render_limits, RenderLimits::new(4, 10));
+    }
+
+    #[test]
+    fn render_limits_accept_bounds_and_zero_queue() {
+        let config = load_with_server_table(
+            "[server]\nmax_concurrent_renders = 256\nmax_queued_renders = 0\n",
+        )
+        .unwrap();
+        assert_eq!(config.render_limits, RenderLimits::new(256, 0));
+
+        let config = load_with_server_table(
+            "[server]\nmax_concurrent_renders = 1\nmax_queued_renders = 1024\n",
+        )
+        .unwrap();
+        assert_eq!(config.render_limits, RenderLimits::new(1, 1024));
+    }
+
+    #[test]
+    fn render_limits_reject_out_of_range_values() {
+        for server in [
+            "[server]\nmax_concurrent_renders = 0\n",
+            "[server]\nmax_concurrent_renders = -1\n",
+            "[server]\nmax_concurrent_renders = 257\n",
+            "[server]\nmax_queued_renders = -1\n",
+            "[server]\nmax_queued_renders = 1025\n",
+        ] {
+            let error = load_with_server_table(server).unwrap_err();
+
+            assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput, "{server}");
+        }
+    }
+
+    #[test]
+    fn render_limits_reject_wrong_types() {
+        for server in [
+            "[server]\nmax_concurrent_renders = \"4\"\n",
+            "[server]\nmax_queued_renders = 1.5\n",
+            "server = 4\n",
+        ] {
+            let error = load_with_server_table(server).unwrap_err();
+
+            assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput, "{server}");
+        }
+    }
+
+    #[test]
+    fn render_limits_ignore_unknown_server_keys() {
+        let config = load_with_server_table("[server]\nunknown = true\n").unwrap();
+
+        assert_eq!(config.render_limits, RenderLimits::default());
     }
 }

@@ -50,7 +50,14 @@ are request-specific.
 
 `PdfCompiler::compile_prepared()` borrows that state, builds request inputs, calls
 `typst::compile`, maps warnings and errors, and exports with `typst-pdf`. It returns `Document` with
-PDF bytes and non-fatal warnings.
+PDF bytes and non-fatal warnings. The method is synchronous and CPU-bound, so callers must run it
+on a blocking thread and never on an async runtime worker. `RenderExecutor` is the only caller
+outside tests.
+
+Compilation from several threads at once is supported. `comemo` caches are process-global and
+lock-protected, and Typst parallelizes inside one compile on the global rayon pool, so
+`max_concurrent_renders` bounds concurrent compilations rather than total CPU threads. Nothing
+trims the `comemo` cache; eviction is tracked in `ROADMAP.md`.
 
 Each template has its own prepared font book. Template-local fonts are available only to that
 template, while fonts under the project-level `_shared/` directory are included in every template

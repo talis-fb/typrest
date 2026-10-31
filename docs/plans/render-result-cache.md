@@ -80,7 +80,7 @@ Canonical descriptions: [Template lifecycle](../architecture/template-lifecycle.
   (`:44`, `:141-151`), so nothing identifies "same template content".
 - **Compilation is synchronous inside an async fn.**
   [`compiler.rs:65-79`](../../crates/typrest-core/src/compiler.rs) calls `world::compile_prepared`
-  directly. The sibling plan [`blocking-render-execution.md`](blocking-render-execution.md) changes
+  directly. The sibling plan [render execution (delivered)](../specs/http-api.md#render-capacity) changes
   this.
 - **Payload serialization.** The compiler passes `serde_json::to_string(payload)` as
   `sys.inputs.data` ([`world.rs:176-181`](../../crates/typrest-core/src/compiler/world.rs)). The
@@ -154,7 +154,7 @@ Each row is a recommendation for review, not a settled product decision.
 | D5 | Time-dependent output | Record in `TemplateWorld` whether `today()` was called during the compile (atomic flag); expose `Document::uses_current_date()`. Such documents are returned and may be shared by concurrent in-flight requests, but are not retained (per-entry expiry of zero, or the fallback in step 3). | Cache with expiry at next UTC midnight (wrong across explicit offsets); require operators to exclude such templates by list only (error-prone, packages can call `today`); ignore (changes semantics). Needs a spike: confirm `comemo` revalidation re-invokes `World::today` so the flag is set even when Typst memoized the caller. |
 | D6 | Opt-in granularity | Global `[render_cache] enabled` (default `false`) plus an optional `templates` list of template IDs restricting the cache; absent means all templates. | Per-template files (new concept, not in `templates.md`); schema-level flag (the schema is the payload contract, not runtime policy); CLI flag only (all other project policy lives in `typrest.toml`, per `web_ui`). A request header is only an opt-out/refresh, never an opt-in. |
 | D7 | Storage | In-memory only, `moka::future::Cache` with a weigher (PDF bytes plus an estimate per warning plus key size), `time_to_live`, and `Expiry` for per-entry decisions. Runtime-agnostic, so `typrest-core` stays free of `tokio`. Provides single-flight through `try_get_with`. | Hand-rolled LRU plus in-flight map (more code, no admission policy; deterministic eviction for tests); `quick_cache` (smaller, weaker TTL/async story); disk or shared/remote store (see D12, out of scope). |
-| D8 | Single-flight | Use `try_get_with`: one leader compiles, others wait and share the result or the error. A dropped leader (axum drops handlers on client disconnect) must not fail followers; moka promotes another waiter. Verify with a test. | No coalescing (stampede on cold start or popular payload); detach the leader onto a spawned task so cancellation never wastes the compile (interacts with [`blocking-render-execution.md`](blocking-render-execution.md); open question). |
+| D8 | Single-flight | Use `try_get_with`: one leader compiles, others wait and share the result or the error. A dropped leader (axum drops handlers on client disconnect) must not fail followers; moka promotes another waiter. Verify with a test. | No coalescing (stampede on cold start or popular payload); detach the leader onto a spawned task so cancellation never wastes the compile (interacts with [render execution (delivered)](../specs/http-api.md#render-capacity); open question). |
 | D9 | Eviction and size | Byte-weighted budget `max_bytes`; entries over `max_entry_bytes` are not retained. Admission may decline a new entry under pressure; a "miss that was not stored" is valid. | Entry-count budget (unbounded memory with large PDFs). |
 | D10 | Warnings on hit | Store warnings with the document and return them. The handler logs warnings only on a miss (they were logged when produced) and reports `cache = hit` and `warning_count` in `render.completed`. | Replay warnings on every hit (noisy, repeats identical diagnostics); drop warnings from cached entries (loses `warning_count`). |
 | D11 | Response metadata | `X-Typrest-Cache: hit\|miss\|bypass`, emitted only when the cache is enabled for that template. | RFC 9211 `Cache-Status: typrest; hit` (standard, more verbose); `ETag` derived from the key with `If-None-Match` support (useful for `GET`, odd for `POST`; defer). No `Cache-Control` is added to PDF responses by this plan. |
@@ -258,7 +258,7 @@ HTTP and configuration specifications. Next free IDs: `REQ-HTTP-070+`, `REQ-CFG-
 
 Sibling plans are written in parallel; links may not exist yet.
 
-- [`blocking-render-execution.md`](blocking-render-execution.md). Needs: compilation runs off the
+- [render execution (delivered)](../specs/http-api.md#render-capacity). Needs: compilation runs off the
   async workers. Provided by this plan: a `get_or_render(key, compile_future)` shape where the
   compile future is the only code that runs under that plan's blocking execution; hits never enter
   it. Ordering: independent; if both land, the cache wraps the blocking call.

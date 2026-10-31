@@ -28,7 +28,6 @@ starts with, or contains, an approval gate for any ADR or scope change it propos
 
 | Plan | Subject | Needs first |
 |---|---|---|
-| [`blocking-render-execution.md`](blocking-render-execution.md) | Run compilation off the async runtime and bound render concurrency | ADR approval for step 0; step 1 is a pure refactor |
 | [`operational-limits.md`](operational-limits.md) | Body limit, graceful shutdown, render timeout | Steps 1-4 are independent; the timeout needs the plan above |
 | [`render-metrics.md`](render-metrics.md) | Prometheus metrics and a core render observer | ADR approval |
 | [`render-result-cache.md`](render-result-cache.md) | Opt-in in-memory cache of rendered PDFs | Scope change and ADR approval |
@@ -43,4 +42,5 @@ starts with, or contains, an approval gate for any ADR or scope change it propos
 - Configuration placement (`typrest.toml` versus `serve` flags) is decided across plans, not per
   plan; resolve it before the first plan that adds configuration is implemented.
 - Overload status (`503` versus `429`) and its error code are shared by the concurrency limiter and
-  async jobs; settle them once.
+  async jobs; settle them once. The concurrency limiter is delivered with `503` and
+  `render_capacity_exceeded` (see [HTTP API](../specs/http-api.md#render-capacity)).

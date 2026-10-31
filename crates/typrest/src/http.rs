@@ -36,6 +36,7 @@ mod tests {
     use std::fs;
     use std::sync::Arc;
 
+    use crate::render_executor::{BlockingRenderExecutor, RenderLimits};
     use async_trait::async_trait;
     use axum::body::Body;
     use axum::http::{Method, Request, StatusCode};
@@ -69,7 +70,7 @@ mod tests {
             Ok(PreparedTemplate::for_test())
         }
 
-        async fn compile_prepared(
+        fn compile_prepared(
             &self,
             _: &PreparedTemplate,
             _: &Value,
@@ -78,10 +79,14 @@ mod tests {
         }
     }
 
+    fn executor() -> Arc<BlockingRenderExecutor> {
+        Arc::new(BlockingRenderExecutor::new(RenderLimits::default()))
+    }
+
     fn app(loader: Arc<MemoryLoader>, result: Result<Document, CompilationError>) -> axum::Router {
         let compiler = Arc::new(MockCompiler { result });
         let registry = registry_from_loader(loader.as_ref());
-        let render_service = RenderService::new(registry.clone(), compiler);
+        let render_service = RenderService::new(registry.clone(), compiler, executor());
         router(
             AppState::new(registry, render_service, LogFormat::Pretty),
             &ServerConfig::new(0),
@@ -94,7 +99,7 @@ mod tests {
     ) -> axum::Router {
         let compiler = Arc::new(MockCompiler { result });
         let registry = registry_from_loader(loader.as_ref());
-        let render_service = RenderService::new(registry.clone(), compiler);
+        let render_service = RenderService::new(registry.clone(), compiler, executor());
         router(
             AppState::new(registry, render_service, LogFormat::Pretty),
             &ServerConfig::new(0).with_web_ui(true),
@@ -869,10 +874,12 @@ mod tests {
     async fn startup_registry_allows_templates_without_schema() {
         let missing_schema = tempdir().unwrap();
         write(&missing_schema.path().join("invoice/main.typ"), "No schema");
-        let compiler = typrest_core::TypstCompiler::new();
+        let compiler: Arc<dyn PdfCompiler> = Arc::new(typrest_core::TypstCompiler::new());
         let loader = FilesystemLoader::new(missing_schema.path());
 
-        let build = TemplateRegistry::build(&loader, &compiler).await.unwrap();
+        let build = TemplateRegistry::build(&loader, &compiler, executor().as_ref())
+            .await
+            .unwrap();
         assert_eq!(
             build.value().ids(),
             vec![TemplateId::new("invoice").unwrap()]
@@ -899,12 +906,13 @@ mod tests {
             "#let broken =",
         );
         let loader = FilesystemLoader::new(broken_typst.path());
-        let compiler = typrest_core::TypstCompiler::new();
+        let compiler: Arc<dyn PdfCompiler> = Arc::new(typrest_core::TypstCompiler::new());
 
-        let compile_error = match TemplateRegistry::build(&loader, &compiler).await {
-            Ok(_) => panic!("broken Typst should fail startup"),
-            Err(error) => error,
-        };
+        let compile_error =
+            match TemplateRegistry::build(&loader, &compiler, executor().as_ref()).await {
+                Ok(_) => panic!("broken Typst should fail startup"),
+                Err(error) => error,
+            };
         assert!(matches!(
             compile_error.value().failures(),
             [TemplateRegistryError::Warmup {
@@ -936,11 +944,12 @@ Hello #data.name
 
         let loader = Arc::new(FilesystemLoader::new(root.path()));
         let compiler: Arc<dyn PdfCompiler> = Arc::new(typrest_core::TypstCompiler::new());
-        let registry = TemplateRegistry::build(loader.as_ref(), compiler.as_ref())
+        let executor = executor();
+        let registry = TemplateRegistry::build(loader.as_ref(), &compiler, executor.as_ref())
             .await
             .unwrap()
             .into_value();
-        let render_service = RenderService::new(registry.clone(), compiler);
+        let render_service = RenderService::new(registry.clone(), compiler, executor);
         let app = router(
             AppState::new(registry, render_service, LogFormat::Pretty),
             &ServerConfig::new(0),
@@ -995,13 +1004,14 @@ Hello #data.name
 
         let loader = FilesystemLoader::new(&templates);
         let packages = Arc::new(UniversePackageRepository::new(&cache, "test"));
-        let compiler =
+        let compiler: Arc<dyn PdfCompiler> =
             Arc::new(typrest_core::TypstCompiler::new().with_package_repository(packages));
-        let registry = TemplateRegistry::build(&loader, compiler.as_ref())
+        let executor = executor();
+        let registry = TemplateRegistry::build(&loader, &compiler, executor.as_ref())
             .await
             .unwrap()
             .into_value();
-        let render_service = RenderService::new(registry, compiler);
+        let render_service = RenderService::new(registry, compiler, executor);
 
         let document = render_service
             .render(typrest_core::RenderRequest::new(
@@ -1028,11 +1038,12 @@ Hello #data.name
 
         let loader = Arc::new(loader);
         let compiler: Arc<dyn PdfCompiler> = Arc::new(typrest_core::TypstCompiler::new());
-        let registry = TemplateRegistry::build(loader.as_ref(), compiler.as_ref())
+        let executor = executor();
+        let registry = TemplateRegistry::build(loader.as_ref(), &compiler, executor.as_ref())
             .await
             .unwrap()
             .into_value();
-        let render_service = RenderService::new(registry.clone(), compiler);
+        let render_service = RenderService::new(registry.clone(), compiler, executor);
         let app = router(
             AppState::new(registry, render_service, LogFormat::Pretty),
             &ServerConfig::new(0),
@@ -1049,6 +1060,209 @@ Hello #data.name
         assert!(response.starts_with("HTTP/1.1 200 OK"));
         assert!(response.contains("content-type: application/pdf"));
         assert!(response.contains("%PDF"));
+    }
+
+    /// Blocks inside `compile_prepared` until released, so tests can hold a render slot.
+    struct GatedCompiler {
+        started: std::sync::mpsc::Sender<()>,
+        release: std::sync::Mutex<std::sync::mpsc::Receiver<()>>,
+    }
+
+    #[async_trait]
+    impl PdfCompiler for GatedCompiler {
+        async fn prepare(&self, _: &TemplateSource) -> Result<PreparedTemplate, CompilationError> {
+            Ok(PreparedTemplate::for_test())
+        }
+
+        fn compile_prepared(
+            &self,
+            _: &PreparedTemplate,
+            _: &Value,
+        ) -> Result<Document, CompilationError> {
+            self.started.send(()).unwrap();
+            let _ = self.release.lock().unwrap().recv();
+            Ok(Document::new(Bytes::from_static(b"%PDF-1.4 mock")))
+        }
+    }
+
+    struct PanicOnceCompiler {
+        panicked: std::sync::atomic::AtomicBool,
+    }
+
+    #[async_trait]
+    impl PdfCompiler for PanicOnceCompiler {
+        async fn prepare(&self, _: &TemplateSource) -> Result<PreparedTemplate, CompilationError> {
+            Ok(PreparedTemplate::for_test())
+        }
+
+        fn compile_prepared(
+            &self,
+            _: &PreparedTemplate,
+            _: &Value,
+        ) -> Result<Document, CompilationError> {
+            if !self
+                .panicked
+                .swap(true, std::sync::atomic::Ordering::SeqCst)
+            {
+                panic!("secret template source /srv/templates/invoice/main.typ");
+            }
+            Ok(Document::new(Bytes::from_static(b"%PDF-1.4 mock")))
+        }
+    }
+
+    fn app_with(compiler: Arc<dyn PdfCompiler>, limits: RenderLimits) -> axum::Router {
+        let loader = memory_loader(vec![("invoice", template(schema(json!({}))))]);
+        let registry = registry_from_loader(loader.as_ref());
+        let render_service = RenderService::new(
+            registry.clone(),
+            compiler,
+            Arc::new(BlockingRenderExecutor::new(limits)),
+        );
+        router(
+            AppState::new(registry, render_service, LogFormat::Pretty),
+            &ServerConfig::new(0),
+        )
+    }
+
+    fn render_request() -> Request<Body> {
+        Request::builder()
+            .method(Method::POST)
+            .uri("/invoice")
+            .header("content-type", "application/json")
+            .body(Body::from("{}"))
+            .unwrap()
+    }
+
+    fn health_request() -> Request<Body> {
+        Request::builder()
+            .uri("/_healthz")
+            .body(Body::empty())
+            .unwrap()
+    }
+
+    async fn wait_for_start(
+        started: std::sync::mpsc::Receiver<()>,
+    ) -> std::sync::mpsc::Receiver<()> {
+        tokio::task::spawn_blocking(move || {
+            started.recv().unwrap();
+            started
+        })
+        .await
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn healthz_responds_while_a_render_is_running() {
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let app = app_with(
+            Arc::new(GatedCompiler {
+                started: started_tx,
+                release: std::sync::Mutex::new(release_rx),
+            }),
+            RenderLimits::new(1, 0),
+        );
+        let render = tokio::spawn(app.clone().oneshot(render_request()));
+        let _started = wait_for_start(started_rx).await;
+
+        let health = app.clone().oneshot(health_request()).await.unwrap();
+
+        assert_eq!(health.status(), StatusCode::OK);
+        release_tx.send(()).unwrap();
+        assert_eq!(render.await.unwrap().unwrap().status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn saturated_server_returns_503_with_retry_after_and_keeps_health_ok() {
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let app = app_with(
+            Arc::new(GatedCompiler {
+                started: started_tx,
+                release: std::sync::Mutex::new(release_rx),
+            }),
+            RenderLimits::new(1, 0),
+        );
+        let render = tokio::spawn(app.clone().oneshot(render_request()));
+        let _started = wait_for_start(started_rx).await;
+
+        let rejected = app.clone().oneshot(render_request()).await.unwrap();
+        let health = app.clone().oneshot(health_request()).await.unwrap();
+
+        assert_eq!(rejected.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(rejected.headers()["retry-after"], "1");
+        assert_eq!(
+            response_body(rejected).await["error"],
+            json!("render_capacity_exceeded")
+        );
+        assert_eq!(health.status(), StatusCode::OK);
+        release_tx.send(()).unwrap();
+        assert_eq!(render.await.unwrap().unwrap().status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn invalid_requests_do_not_wait_for_capacity_when_saturated() {
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let app = app_with(
+            Arc::new(GatedCompiler {
+                started: started_tx,
+                release: std::sync::Mutex::new(release_rx),
+            }),
+            RenderLimits::new(1, 0),
+        );
+        let render = tokio::spawn(app.clone().oneshot(render_request()));
+        let _started = wait_for_start(started_rx).await;
+
+        let missing = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/missing")
+                    .header("content-type", "application/json")
+                    .body(Body::from("{}"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let malformed = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/invoice")
+                    .header("content-type", "application/json")
+                    .body(Body::from("{"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+        assert_eq!(malformed.status(), StatusCode::BAD_REQUEST);
+        release_tx.send(()).unwrap();
+        render.await.unwrap().unwrap();
+    }
+
+    #[tokio::test]
+    async fn panicking_compilation_returns_500_and_the_server_keeps_serving() {
+        let app = app_with(
+            Arc::new(PanicOnceCompiler {
+                panicked: std::sync::atomic::AtomicBool::new(false),
+            }),
+            RenderLimits::new(1, 0),
+        );
+
+        let failed = app.clone().oneshot(render_request()).await.unwrap();
+
+        assert_eq!(failed.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let body = response_body(failed).await;
+        assert_eq!(body["error"], json!("render_execution_failed"));
+        assert!(body.get("diagnostics").is_none());
+        assert!(!body.to_string().contains("secret template source"));
+        let recovered = app.clone().oneshot(render_request()).await.unwrap();
+        assert_eq!(recovered.status(), StatusCode::OK);
     }
 
     fn write(path: &std::path::Path, contents: &str) {

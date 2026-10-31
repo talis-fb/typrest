@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use tracing::{error, info};
 use typrest_core::{
-    CompilationDiagnostic, PdfCompiler, RenderService, TemplateId, TemplateRegistry,
-    TemplateRegistryError, TemplateRegistryEvent, TypstCompiler,
+    CompilationDiagnostic, PdfCompiler, RenderExecutor, RenderService, TemplateId,
+    TemplateRegistry, TemplateRegistryError, TemplateRegistryEvent, TypstCompiler,
 };
 
 use crate::args::{ColorChoice, LogFormat};
@@ -13,6 +13,7 @@ use crate::loader::filesystem::FilesystemLoader;
 use crate::loader::watch::start_template_watcher;
 use crate::logging::compiler_diagnostics;
 use crate::package::universal_package::UniversePackageRepository;
+use crate::render_executor::BlockingRenderExecutor;
 
 use crate::config::load_config;
 
@@ -33,6 +34,7 @@ pub(crate) async fn run_serve(
     ));
     let compiler: Arc<dyn PdfCompiler> =
         Arc::new(TypstCompiler::new().with_package_repository(packages.clone()));
+    let executor = Arc::new(BlockingRenderExecutor::new(config.render_limits));
     let diagnostic =
         |stage: &'static str, template: Option<&TemplateId>, value: &CompilationDiagnostic| {
             if log_format == LogFormat::Pretty {
@@ -71,7 +73,8 @@ pub(crate) async fn run_serve(
     };
     let registry_build = match TemplateRegistry::build_with_observer(
         loader.as_ref(),
-        compiler.as_ref(),
+        &compiler,
+        executor.as_ref(),
         &registry_observer,
     )
     .await
@@ -126,6 +129,14 @@ pub(crate) async fn run_serve(
                             diagnostic("compile", Some(template), value);
                         }
                     }
+                    TemplateRegistryError::WarmupAborted { template, message } => error!(
+                        event = "compiler.diagnostic",
+                        context = "startup",
+                        stage = "compile",
+                        template = %template,
+                        diagnostic_message = %message,
+                        "template `{template}`: {message}"
+                    ),
                 }
             }
             error!(
@@ -165,7 +176,14 @@ pub(crate) async fn run_serve(
     packages.use_watch_context();
 
     let _watcher = if watch {
-        match start_template_watcher(loader, registry.clone(), compiler.clone(), log_format) {
+        let watch_executor: Arc<dyn RenderExecutor> = executor.clone();
+        match start_template_watcher(
+            loader,
+            registry.clone(),
+            compiler.clone(),
+            watch_executor,
+            log_format,
+        ) {
             Ok(watcher) => Some(watcher),
             Err(error) => {
                 error!(
@@ -180,7 +198,12 @@ pub(crate) async fn run_serve(
         None
     };
 
-    info!(event = "server.starting", "starting typrest server");
+    info!(
+        event = "server.starting",
+        max_concurrent_renders = config.render_limits.max_concurrent_renders,
+        max_queued_renders = config.render_limits.max_queued_renders,
+        "starting typrest server"
+    );
     if _watcher.is_some() {
         info!(
             event = "template.watch.enabled",
@@ -189,7 +212,7 @@ pub(crate) async fn run_serve(
         );
     }
 
-    let render_service = RenderService::new(registry.clone(), compiler);
+    let render_service = RenderService::new(registry.clone(), compiler, executor);
     let state = AppState::new(registry, render_service, log_format);
     let server_config = ServerConfig::new(port)
         .with_host(hostname)

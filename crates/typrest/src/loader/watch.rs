@@ -6,7 +6,8 @@ use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watche
 use tokio::sync::mpsc;
 use tracing::{error, info, warn};
 use typrest_core::{
-    PdfCompiler, TemplateId, TemplateRegistry, TemplateRegistryError, TemplateRegistryEvent,
+    PdfCompiler, RenderExecutor, TemplateId, TemplateRegistry, TemplateRegistryError,
+    TemplateRegistryEvent,
 };
 
 use crate::args::LogFormat;
@@ -28,6 +29,7 @@ pub(crate) fn start_template_watcher(
     loader: Arc<FilesystemLoader>,
     registry: TemplateRegistry,
     compiler: Arc<dyn PdfCompiler>,
+    executor: Arc<dyn RenderExecutor>,
     log_format: LogFormat,
 ) -> notify::Result<TemplateWatcher> {
     let root = loader.root().to_owned();
@@ -53,7 +55,8 @@ pub(crate) fn start_template_watcher(
                 &root,
                 loader.as_ref(),
                 &registry,
-                compiler.as_ref(),
+                &compiler,
+                executor.as_ref(),
                 log_format,
             )
             .await;
@@ -71,7 +74,8 @@ async fn handle_events(
     root: &Path,
     loader: &FilesystemLoader,
     registry: &TemplateRegistry,
-    compiler: &dyn PdfCompiler,
+    compiler: &Arc<dyn PdfCompiler>,
+    executor: &dyn RenderExecutor,
     log_format: LogFormat,
 ) {
     let mut rebuild_all = false;
@@ -114,12 +118,12 @@ async fn handle_events(
     }
 
     if rebuild_all {
-        reload_all_observed(loader, registry, compiler, log_format).await;
+        reload_all_observed(loader, registry, compiler, executor, log_format).await;
         return;
     }
 
     for template in templates {
-        reload_template_observed(loader, registry, compiler, &template, log_format).await;
+        reload_template_observed(loader, registry, compiler, executor, &template, log_format).await;
     }
 }
 
@@ -145,19 +149,23 @@ fn is_topology_event(event: &Event) -> bool {
 async fn reload_all(
     loader: &FilesystemLoader,
     registry: &TemplateRegistry,
-    compiler: &dyn PdfCompiler,
+    compiler: &Arc<dyn PdfCompiler>,
+    executor: &dyn RenderExecutor,
 ) {
-    reload_all_observed(loader, registry, compiler, LogFormat::Pretty).await;
+    reload_all_observed(loader, registry, compiler, executor, LogFormat::Pretty).await;
 }
 
 async fn reload_all_observed(
     loader: &FilesystemLoader,
     registry: &TemplateRegistry,
-    compiler: &dyn PdfCompiler,
+    compiler: &Arc<dyn PdfCompiler>,
+    executor: &dyn RenderExecutor,
     log_format: LogFormat,
 ) {
     let on_registry_event = |event| log_registry_event(event);
-    match TemplateRegistry::build_with_observer(loader, compiler, &on_registry_event).await {
+    match TemplateRegistry::build_with_observer(loader, compiler, executor, &on_registry_event)
+        .await
+    {
         Ok(build) => {
             let template_count = build.value().ids().len();
             for warning in build.warnings() {
@@ -260,6 +268,14 @@ async fn reload_all_observed(
                             );
                         }
                     }
+                    TemplateRegistryError::WarmupAborted { template, message } => error!(
+                        event = "compiler.diagnostic",
+                        context = "watch",
+                        stage = "compile",
+                        template = %template,
+                        diagnostic_message = %message,
+                        "template `{template}`: {message}"
+                    ),
                 }
             }
             error!(
@@ -283,22 +299,32 @@ async fn reload_all_observed(
 async fn reload_template(
     loader: &FilesystemLoader,
     registry: &TemplateRegistry,
-    compiler: &dyn PdfCompiler,
+    compiler: &Arc<dyn PdfCompiler>,
+    executor: &dyn RenderExecutor,
     template: &TemplateId,
 ) {
-    reload_template_observed(loader, registry, compiler, template, LogFormat::Pretty).await;
+    reload_template_observed(
+        loader,
+        registry,
+        compiler,
+        executor,
+        template,
+        LogFormat::Pretty,
+    )
+    .await;
 }
 
 async fn reload_template_observed(
     loader: &FilesystemLoader,
     registry: &TemplateRegistry,
-    compiler: &dyn PdfCompiler,
+    compiler: &Arc<dyn PdfCompiler>,
+    executor: &dyn RenderExecutor,
     template: &TemplateId,
     log_format: LogFormat,
 ) {
     let on_registry_event = |event| log_registry_event(event);
     match registry
-        .reload_with_observer(loader, compiler, template, &on_registry_event)
+        .reload_with_observer(loader, compiler, executor, template, &on_registry_event)
         .await
     {
         Ok(reload) => {
@@ -375,6 +401,14 @@ async fn reload_template_observed(
                         );
                     }
                 }
+                TemplateRegistryError::WarmupAborted { template, message } => error!(
+                    event = "compiler.diagnostic",
+                    context = "watch",
+                    stage = "compile",
+                    template = %template,
+                    diagnostic_message = %message,
+                    "template `{template}`: {message}"
+                ),
             }
             warn!(
                 event = "template.reload.failed",
@@ -463,14 +497,15 @@ fn is_private_discovery_path(root: &Path, path: &Path) -> bool {
 mod tests {
     use std::fs;
     use std::path::Path;
+    use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
     use async_trait::async_trait;
     use bytes::Bytes;
     use tempfile::tempdir;
     use typrest_core::{
-        CompilationError, Document, PdfCompiler, PreparedTemplate, TemplateId, TemplateRegistry,
-        TemplateSource,
+        CompilationError, Document, InlineExecutor, PdfCompiler, PreparedTemplate, TemplateId,
+        TemplateRegistry, TemplateSource,
     };
 
     use crate::loader::filesystem::FilesystemLoader;
@@ -489,7 +524,7 @@ mod tests {
             Ok(PreparedTemplate::for_test())
         }
 
-        async fn compile_prepared(
+        fn compile_prepared(
             &self,
             _: &PreparedTemplate,
             _: &serde_json::Value,
@@ -574,16 +609,17 @@ mod tests {
         write_template(root.path(), "invoice", "first");
         let loader = FilesystemLoader::new(root.path());
         let registry = TemplateRegistry::default();
-        let compiler = MockCompiler {
+        let compiler = Arc::new(MockCompiler {
             fail: AtomicBool::new(false),
             prepares: AtomicUsize::new(0),
-        };
+        });
+        let dyn_compiler: Arc<dyn PdfCompiler> = compiler.clone();
         let name = TemplateId::new("invoice").unwrap();
-        reload_template(&loader, &registry, &compiler, &name).await;
+        reload_template(&loader, &registry, &dyn_compiler, &InlineExecutor, &name).await;
         let first = registry.get(&name).unwrap();
 
         fs::write(root.path().join("invoice/main.typ"), "second").unwrap();
-        reload_template(&loader, &registry, &compiler, &name).await;
+        reload_template(&loader, &registry, &dyn_compiler, &InlineExecutor, &name).await;
         let second = registry.get(&name).unwrap();
         assert!(!std::sync::Arc::ptr_eq(&first, &second));
 
@@ -592,13 +628,13 @@ mod tests {
             r#"{"schemaVersion":"v1","request":{"body":{}}}"#,
         )
         .unwrap();
-        reload_template(&loader, &registry, &compiler, &name).await;
+        reload_template(&loader, &registry, &dyn_compiler, &InlineExecutor, &name).await;
         let after_conflict = registry.get(&name).unwrap();
         assert!(std::sync::Arc::ptr_eq(&second, &after_conflict));
         fs::remove_file(root.path().join("invoice/schema.json")).unwrap();
 
         fs::write(root.path().join("invoice/schema.yml"), "schemaVersion: [").unwrap();
-        reload_template(&loader, &registry, &compiler, &name).await;
+        reload_template(&loader, &registry, &dyn_compiler, &InlineExecutor, &name).await;
         let after_schema_error = registry.get(&name).unwrap();
         assert!(std::sync::Arc::ptr_eq(&second, &after_schema_error));
         fs::write(
@@ -609,7 +645,7 @@ mod tests {
 
         compiler.fail.store(true, Ordering::SeqCst);
         fs::write(root.path().join("invoice/main.typ"), "#let broken =").unwrap();
-        reload_template(&loader, &registry, &compiler, &name).await;
+        reload_template(&loader, &registry, &dyn_compiler, &InlineExecutor, &name).await;
         let after_failure = registry.get(&name).unwrap();
 
         assert!(std::sync::Arc::ptr_eq(&second, &after_failure));
@@ -622,13 +658,14 @@ mod tests {
         write_template(root.path(), "welcome", "welcome");
         let loader = FilesystemLoader::new(root.path());
         let registry = TemplateRegistry::default();
-        let compiler = MockCompiler {
+        let compiler = Arc::new(MockCompiler {
             fail: AtomicBool::new(false),
             prepares: AtomicUsize::new(0),
-        };
-        reload_all(&loader, &registry, &compiler).await;
+        });
+        let dyn_compiler: Arc<dyn PdfCompiler> = compiler.clone();
+        reload_all(&loader, &registry, &dyn_compiler, &InlineExecutor).await;
         let first_count = compiler.prepares.load(Ordering::SeqCst);
-        reload_all(&loader, &registry, &compiler).await;
+        reload_all(&loader, &registry, &dyn_compiler, &InlineExecutor).await;
 
         assert_eq!(first_count, 2);
         assert_eq!(compiler.prepares.load(Ordering::SeqCst), 4);
@@ -642,16 +679,17 @@ mod tests {
         write_template(root.path(), "financial/report", "report");
         let loader = FilesystemLoader::new(root.path());
         let registry = TemplateRegistry::default();
-        let compiler = MockCompiler {
+        let compiler = Arc::new(MockCompiler {
             fail: AtomicBool::new(false),
             prepares: AtomicUsize::new(0),
-        };
-        reload_all(&loader, &registry, &compiler).await;
+        });
+        let dyn_compiler: Arc<dyn PdfCompiler> = compiler.clone();
+        reload_all(&loader, &registry, &dyn_compiler, &InlineExecutor).await;
         let previous_names = registry.ids();
 
         fs::write(root.path().join("financial/main.typ"), "financial").unwrap();
         compiler.fail.store(true, Ordering::SeqCst);
-        reload_all(&loader, &registry, &compiler).await;
+        reload_all(&loader, &registry, &dyn_compiler, &InlineExecutor).await;
 
         assert_eq!(registry.ids(), previous_names);
     }
@@ -663,11 +701,12 @@ mod tests {
         write_template(root.path(), "financial/report", "report");
         let loader = FilesystemLoader::new(root.path());
         let registry = TemplateRegistry::default();
-        let compiler = MockCompiler {
+        let compiler = Arc::new(MockCompiler {
             fail: AtomicBool::new(false),
             prepares: AtomicUsize::new(0),
-        };
-        reload_all(&loader, &registry, &compiler).await;
+        });
+        let dyn_compiler: Arc<dyn PdfCompiler> = compiler.clone();
+        reload_all(&loader, &registry, &dyn_compiler, &InlineExecutor).await;
         assert_eq!(
             registry
                 .ids()
@@ -678,7 +717,7 @@ mod tests {
         );
 
         fs::write(root.path().join("financial/main.typ"), "financial").unwrap();
-        reload_all(&loader, &registry, &compiler).await;
+        reload_all(&loader, &registry, &dyn_compiler, &InlineExecutor).await;
         assert_eq!(
             registry
                 .ids()
@@ -689,7 +728,7 @@ mod tests {
         );
 
         fs::remove_file(root.path().join("financial/main.typ")).unwrap();
-        reload_all(&loader, &registry, &compiler).await;
+        reload_all(&loader, &registry, &dyn_compiler, &InlineExecutor).await;
         assert_eq!(
             registry
                 .ids()

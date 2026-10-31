@@ -20,7 +20,11 @@ pub use prepared_template::{PreparedTemplate, PreparedTemplateBundle};
 pub trait PdfCompiler: Send + Sync {
     async fn prepare(&self, source: &TemplateSource) -> Result<PreparedTemplate, CompilationError>;
 
-    async fn compile_prepared(
+    /// Compiles a prepared template and exports the PDF.
+    ///
+    /// This is synchronous and CPU-bound. It MUST NOT be called on an async runtime worker;
+    /// request-time and warmup compilation go through `RenderExecutor`.
+    fn compile_prepared(
         &self,
         template: &PreparedTemplate,
         payload: &serde_json::Value,
@@ -62,7 +66,7 @@ impl PdfCompiler for TypstCompiler {
         })
     }
 
-    async fn compile_prepared(
+    fn compile_prepared(
         &self,
         template: &PreparedTemplate,
         payload: &serde_json::Value,
@@ -239,10 +243,8 @@ mod tests {
         .unwrap();
 
         assert_eq!(packages.resolutions.load(Ordering::SeqCst), 2);
-        let first =
-            futures_executor::block_on(compiler.compile_prepared(&prepared, &json!({}))).unwrap();
-        let second =
-            futures_executor::block_on(compiler.compile_prepared(&prepared, &json!({}))).unwrap();
+        let first = compiler.compile_prepared(&prepared, &json!({})).unwrap();
+        let second = compiler.compile_prepared(&prepared, &json!({})).unwrap();
 
         assert!(first.bytes().starts_with(b"%PDF"));
         assert!(second.bytes().starts_with(b"%PDF"));
@@ -264,7 +266,8 @@ mod tests {
 #value"#,
         )))
         .unwrap();
-        let error = futures_executor::block_on(compiler.compile_prepared(&prepared, &json!({})))
+        let error = compiler
+            .compile_prepared(&prepared, &json!({}))
             .unwrap_err();
 
         assert!(

@@ -1,4 +1,5 @@
-use axum::http::StatusCode;
+use axum::http::header::RETRY_AFTER;
+use axum::http::{HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
 use serde::Serialize;
 use thiserror::Error;
@@ -6,6 +7,8 @@ use typrest_core::{
     CompilationDiagnostic, CompilationError, DiagnosticLocation, DiagnosticSeverity,
     RelatedDiagnostic, RenderError, ValidationError,
 };
+
+pub const RENDER_RETRY_AFTER_SECONDS: u32 = 1;
 
 #[derive(Debug, Error)]
 pub enum ServeError {
@@ -17,6 +20,7 @@ pub enum ServeError {
 pub struct ApiError {
     status: StatusCode,
     body: ErrorBody,
+    retry_after: Option<u32>,
 }
 
 impl ApiError {
@@ -30,6 +34,7 @@ impl ApiError {
                 line: None,
                 diagnostics: Vec::new(),
             },
+            retry_after: None,
         }
     }
 
@@ -49,8 +54,23 @@ impl ApiError {
                     line: None,
                     diagnostics: Vec::new(),
                 },
+                retry_after: None,
             },
             RenderError::CompilationError(error) => compilation_error_response(error),
+            RenderError::Overloaded => {
+                let mut error = Self::new(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "render_capacity_exceeded",
+                    "The server is at render capacity; retry shortly",
+                );
+                error.retry_after = Some(RENDER_RETRY_AFTER_SECONDS);
+                error
+            }
+            RenderError::ExecutionFailed { .. } => Self::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "render_execution_failed",
+                "Render execution failed",
+            ),
         }
     }
 }
@@ -74,12 +94,19 @@ fn compilation_error_response(error: CompilationError) -> ApiError {
             line,
             diagnostics,
         },
+        retry_after: None,
     }
 }
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
-        (self.status, Json(self.body)).into_response()
+        let mut response = (self.status, Json(self.body)).into_response();
+        if let Some(seconds) = self.retry_after {
+            response
+                .headers_mut()
+                .insert(RETRY_AFTER, HeaderValue::from(seconds));
+        }
+        response
     }
 }
 
