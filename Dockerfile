@@ -30,8 +30,7 @@ COPY --chown=typrest:typrest examples/minimal/ /project/
 
 USER typrest
 EXPOSE 8080
-# Typrest runs as PID 1 and installs its own SIGTERM/SIGINT handlers, so no init process is needed.
-# On a stop it drains in-flight requests for [server].shutdown_timeout_seconds (default 25 s), so
-# give the container a stop timeout above that (`docker stop -t 30`).
+# PID 1 handles SIGTERM itself, so no init process is needed.
+# The stop grace period is set in docker-compose.yml.
 STOPSIGNAL SIGTERM
 CMD ["typrest", "serve"]

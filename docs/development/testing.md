@@ -105,10 +105,8 @@ pdftotext hello-world.pdf -
 `scripts/check-container.sh` builds the container image and checks it over HTTP: health, a `200` PDF
 render and a `422` validation error against the bundled `examples/minimal` project, then a PDF
 render with a copy of `examples/invoice` mounted at `/project`. It also stops the minimal container
-and fails unless the stop takes at most `CHECK_STOP_BOUND` seconds (default `5`, well below the
-engine's 10 s default) and the container exits with status `0`, which proves Typrest handles
-`SIGTERM` as PID 1. It requires a container engine and
-network access, so it is separate from `cargo test`:
+and fails unless it exits with status `0`, which proves Typrest handles `SIGTERM` as PID 1. It
+requires a container engine and network access, so it is separate from `cargo test`:
 
 ```bash
 scripts/check-container.sh

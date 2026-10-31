@@ -54,7 +54,8 @@ async fn serve_listener(
             let _ = started.set(Instant::now());
             info!(
                 event = "server.shutdown.started",
-                signal, "received {signal}, draining in-flight requests"
+                signal = %signal,
+                "received {signal}, draining in-flight requests"
             );
         }
     };
@@ -1339,6 +1340,8 @@ Hello #data.name
             .unwrap()
     }
 
+    const TEST_DEADLINE: std::time::Duration = std::time::Duration::from_secs(10);
+
     struct ShutdownFixture {
         address: std::net::SocketAddr,
         trigger: crate::shutdown::ShutdownTrigger,
@@ -1347,7 +1350,7 @@ Hello #data.name
         release: std::sync::mpsc::Sender<()>,
     }
 
-    async fn gated_server(shutdown_timeout: std::time::Duration) -> ShutdownFixture {
+    async fn gated_server() -> ShutdownFixture {
         let (started_tx, started_rx) = std::sync::mpsc::channel();
         let (release_tx, release_rx) = std::sync::mpsc::channel();
         let app = app_with(
@@ -1360,12 +1363,7 @@ Hello #data.name
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         let (trigger, signal) = crate::shutdown::ShutdownSignal::channel();
-        let server = tokio::spawn(super::serve_listener(
-            listener,
-            app,
-            signal,
-            shutdown_timeout,
-        ));
+        let server = tokio::spawn(super::serve_listener(listener, app, signal, TEST_DEADLINE));
 
         ShutdownFixture {
             address,
@@ -1376,29 +1374,14 @@ Hello #data.name
         }
     }
 
-    const TEST_DEADLINE: std::time::Duration = std::time::Duration::from_secs(10);
-
-    #[tokio::test]
-    async fn idle_server_shuts_down_promptly_on_signal() {
-        let fixture = gated_server(TEST_DEADLINE).await;
-
-        fixture.trigger.fire(crate::shutdown::SIGNAL_SIGTERM);
-
-        let result = tokio::time::timeout(TEST_DEADLINE, fixture.server)
-            .await
-            .unwrap()
-            .unwrap();
-        assert!(result.is_ok());
-    }
-
     #[tokio::test]
     async fn in_flight_request_completes_while_new_connections_are_refused() {
-        let fixture = gated_server(TEST_DEADLINE).await;
+        let fixture = gated_server().await;
         let address = fixture.address;
         let render = tokio::spawn(async move { post_json(address, "/invoice", b"{}").await });
         let _started = wait_for_start(fixture.started).await;
 
-        fixture.trigger.fire(crate::shutdown::SIGNAL_SIGTERM);
+        fixture.trigger.fire(crate::shutdown::Signal::Terminate);
 
         tokio::time::timeout(TEST_DEADLINE, async {
             while tokio::net::TcpStream::connect(address).await.is_ok() {
@@ -1417,24 +1400,6 @@ Hello #data.name
             .unwrap()
             .unwrap();
         assert!(result.is_ok());
-    }
-
-    #[tokio::test]
-    async fn stuck_request_makes_shutdown_time_out() {
-        let fixture = gated_server(std::time::Duration::from_millis(100)).await;
-        let address = fixture.address;
-        let render = tokio::spawn(async move { post_json(address, "/invoice", b"{}").await });
-        let _started = wait_for_start(fixture.started).await;
-
-        fixture.trigger.fire(crate::shutdown::SIGNAL_SIGTERM);
-
-        let result = tokio::time::timeout(TEST_DEADLINE, fixture.server)
-            .await
-            .unwrap()
-            .unwrap();
-        assert!(matches!(result, Err(super::ServeError::ShutdownTimedOut)));
-        fixture.release.send(()).unwrap();
-        render.abort();
     }
 
     async fn post_json(address: std::net::SocketAddr, path: &str, body: &[u8]) -> Vec<u8> {

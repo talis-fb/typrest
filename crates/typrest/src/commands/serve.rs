@@ -95,7 +95,7 @@ pub(crate) async fn run_serve(
             info!(
                 event = "server.shutdown.started",
                 context = "startup",
-                signal,
+                signal = %signal,
                 "received {signal} during startup, aborting"
             );
             return false;

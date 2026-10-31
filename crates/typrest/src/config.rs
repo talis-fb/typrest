@@ -532,18 +532,10 @@ mod tests {
 
             assert_eq!(config.shutdown_timeout, Duration::from_secs(seconds));
         }
-    }
 
-    #[test]
-    fn shutdown_timeout_rejects_invalid_values() {
-        for server in [
-            "[server]\nshutdown_timeout_seconds = 0\n",
-            "[server]\nshutdown_timeout_seconds = -1\n",
-            "[server]\nshutdown_timeout_seconds = 3601\n",
-            "[server]\nshutdown_timeout_seconds = 1.5\n",
-            "[server]\nshutdown_timeout_seconds = \"25\"\n",
-        ] {
-            let error = load_with_server_table(server).unwrap_err();
+        for value in ["0", "-1", "3601", "1.5", "\"25\""] {
+            let server = format!("[server]\nshutdown_timeout_seconds = {value}\n");
+            let error = load_with_server_table(&server).unwrap_err();
 
             assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput, "{server}");
         }

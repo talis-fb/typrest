@@ -1,26 +1,41 @@
+use std::fmt;
 use std::io;
 
 use tokio::sync::watch;
 use tracing::warn;
 
-pub(crate) const SIGNAL_SIGINT: &str = "SIGINT";
-pub(crate) const SIGNAL_SIGTERM: &str = "SIGTERM";
 const FORCED_EXIT_STATUS: i32 = 1;
+
+/// The operating-system signal that requested the shutdown.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Signal {
+    Interrupt,
+    Terminate,
+}
+
+impl fmt::Display for Signal {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Interrupt => "SIGINT",
+            Self::Terminate => "SIGTERM",
+        })
+    }
+}
 
 /// Cloneable handle that resolves once the process receives its first shutdown signal.
 #[derive(Debug, Clone)]
 pub(crate) struct ShutdownSignal {
-    receiver: watch::Receiver<Option<&'static str>>,
+    receiver: watch::Receiver<Option<Signal>>,
 }
 
 /// Fires a [`ShutdownSignal`] without an operating-system signal.
 #[derive(Debug)]
 pub(crate) struct ShutdownTrigger {
-    sender: watch::Sender<Option<&'static str>>,
+    sender: watch::Sender<Option<Signal>>,
 }
 
 impl ShutdownTrigger {
-    pub(crate) fn fire(&self, signal: &'static str) {
+    pub(crate) fn fire(&self, signal: Signal) {
         self.sender.send_replace(Some(signal));
     }
 }
@@ -42,7 +57,7 @@ impl ShutdownSignal {
             let second = signals.next().await;
             warn!(
                 event = "server.shutdown.forced",
-                signal = second,
+                signal = %second,
                 "received {second} during shutdown, exiting immediately"
             );
             std::process::exit(FORCED_EXIT_STATUS);
@@ -51,28 +66,25 @@ impl ShutdownSignal {
         Ok(signal)
     }
 
-    /// Resolves with the name of the first signal. Never resolves if the trigger is dropped
-    /// without firing.
-    pub(crate) async fn wait(&self) -> &'static str {
+    /// Resolves with the first signal. Never resolves if the trigger is dropped without firing.
+    pub(crate) async fn wait(&self) -> Signal {
         let mut receiver = self.receiver.clone();
-        let signal = receiver
-            .wait_for(Option::is_some)
-            .await
-            .map(|signal| *signal);
-        match signal {
-            Ok(signal) => signal.unwrap_or(SIGNAL_SIGTERM),
-            Err(_) => std::future::pending().await,
+        loop {
+            if let Some(signal) = *receiver.borrow_and_update() {
+                return signal;
+            }
+            if receiver.changed().await.is_err() {
+                std::future::pending().await
+            }
         }
     }
 }
 
-#[cfg(unix)]
 struct OsSignals {
     sigint: tokio::signal::unix::Signal,
     sigterm: tokio::signal::unix::Signal,
 }
 
-#[cfg(unix)]
 impl OsSignals {
     fn new() -> io::Result<Self> {
         use tokio::signal::unix::{SignalKind, signal};
@@ -83,27 +95,10 @@ impl OsSignals {
         })
     }
 
-    async fn next(&mut self) -> &'static str {
+    async fn next(&mut self) -> Signal {
         tokio::select! {
-            _ = self.sigint.recv() => SIGNAL_SIGINT,
-            _ = self.sigterm.recv() => SIGNAL_SIGTERM,
-        }
-    }
-}
-
-#[cfg(not(unix))]
-struct OsSignals;
-
-#[cfg(not(unix))]
-impl OsSignals {
-    fn new() -> io::Result<Self> {
-        Ok(Self)
-    }
-
-    async fn next(&mut self) -> &'static str {
-        match tokio::signal::ctrl_c().await {
-            Ok(()) => SIGNAL_SIGINT,
-            Err(_) => std::future::pending().await,
+            _ = self.sigint.recv() => Signal::Interrupt,
+            _ = self.sigterm.recv() => Signal::Terminate,
         }
     }
 }
@@ -112,17 +107,17 @@ impl OsSignals {
 mod tests {
     use std::time::Duration;
 
-    use super::{SIGNAL_SIGTERM, ShutdownSignal};
+    use super::{ShutdownSignal, Signal};
 
     #[tokio::test]
     async fn wait_resolves_with_the_fired_signal() {
         let (trigger, signal) = ShutdownSignal::channel();
         let clone = signal.clone();
 
-        trigger.fire(SIGNAL_SIGTERM);
+        trigger.fire(Signal::Terminate);
 
-        assert_eq!(signal.wait().await, SIGNAL_SIGTERM);
-        assert_eq!(clone.wait().await, SIGNAL_SIGTERM);
+        assert_eq!(signal.wait().await, Signal::Terminate);
+        assert_eq!(clone.wait().await, Signal::Terminate);
     }
 
     #[tokio::test]
