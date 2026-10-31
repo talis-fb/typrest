@@ -40,6 +40,14 @@ impl ApiError {
         }
     }
 
+    pub fn payload_too_large() -> Self {
+        Self::new(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "payload_too_large",
+            "Request body exceeds the configured maximum size",
+        )
+    }
+
     pub fn from_render_error(error: RenderError) -> Self {
         match error {
             RenderError::TemplateNotFound(name) => Self::new(

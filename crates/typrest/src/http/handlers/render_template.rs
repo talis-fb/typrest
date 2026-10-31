@@ -1,6 +1,7 @@
 use std::time::Instant;
 
 use axum::body::{Body, Bytes};
+use axum::extract::rejection::{BytesRejection, FailedToBufferBody};
 use axum::extract::{Path, State};
 use axum::http::header::CONTENT_TYPE;
 use axum::http::{HeaderMap, HeaderValue, Method, StatusCode};
@@ -18,7 +19,7 @@ pub async fn render_template(
     Path(template_id): Path<String>,
     method: Method,
     headers: HeaderMap,
-    body: Bytes,
+    body: Result<Bytes, BytesRejection>,
 ) -> Result<Response, ApiError> {
     let template = TemplateId::new(template_id).map_err(|error| {
         ApiError::new(
@@ -37,6 +38,7 @@ pub async fn render_template(
         ));
     }
 
+    let body = body.map_err(body_read_error)?;
     let payload = if body.is_empty() {
         Value::Object(serde_json::Map::new())
     } else {
@@ -104,6 +106,21 @@ pub async fn render_template(
             );
             Err(ApiError::from_render_error(error))
         }
+    }
+}
+
+/// Maps a failed body read to the error envelope. Only the length limit has a dedicated code; any
+/// other read failure, such as a client that disconnects mid-body, is reported as unreadable input.
+fn body_read_error(rejection: BytesRejection) -> ApiError {
+    match rejection {
+        BytesRejection::FailedToBufferBody(FailedToBufferBody::LengthLimitError(_)) => {
+            ApiError::payload_too_large()
+        }
+        _ => ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "invalid_json",
+            "failed to read request body",
+        ),
     }
 }
 

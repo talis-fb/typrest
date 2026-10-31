@@ -225,6 +225,7 @@ pub(crate) async fn run_serve(
         event = "server.starting",
         max_concurrent_renders = config.render_limits.max_concurrent_renders,
         max_queued_renders = config.render_limits.max_queued_renders,
+        max_body_bytes = config.max_body_bytes,
         "starting typrest server"
     );
     if let Some(watcher) = watcher {
@@ -244,7 +245,8 @@ pub(crate) async fn run_serve(
     let state = AppState::new(registry, render_service, log_format);
     let server_config = ServerConfig::new(port)
         .with_host(hostname)
-        .with_web_ui(config.web_ui);
+        .with_web_ui(config.web_ui)
+        .with_max_body_bytes(config.max_body_bytes);
 
     match crate::http::serve(server_config, state, shutdown, config.shutdown_timeout).await {
         Ok(()) => true,
