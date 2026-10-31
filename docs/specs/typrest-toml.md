@@ -27,6 +27,7 @@ web_ui = false
 [server]
 max_concurrent_renders = 4
 max_queued_renders = 8
+shutdown_timeout_seconds = 25
 ```
 
 | Field | Type | Required | Default |
@@ -36,6 +37,7 @@ max_queued_renders = 8
 | `web_ui` | boolean | no | `false` |
 | `[server].max_concurrent_renders` | integer | no | the process's available parallelism (`std::thread::available_parallelism`), or `1` when it cannot be determined |
 | `[server].max_queued_renders` | integer | no | `2 × max_concurrent_renders`, capped at `1024` |
+| `[server].shutdown_timeout_seconds` | integer | no | `25` |
 
 - **REQ-CFG-001:** The file MUST be named exactly `typrest.toml` and live at the project root.
 - **REQ-CFG-002:** Invalid TOML, or a field with the wrong type, MUST be a configuration load error.
@@ -88,9 +90,10 @@ templates_root = "../shared-templates"
 
 <a id="server"></a>
 
-The `[server]` table sets render capacity. The behavior it controls is defined in
-[HTTP API](http-api.md#render-capacity) (`REQ-HTTP-070` to `REQ-HTTP-074`). Ports and hostnames
-remain `serve` options.
+The `[server]` table sets render capacity and the shutdown drain deadline. The behavior it controls
+is defined in [HTTP API](http-api.md#render-capacity) (`REQ-HTTP-070` to `REQ-HTTP-074`) and
+[CLI](cli.md#shutdown) (`REQ-CLI-045` to `REQ-CLI-048`). Ports and hostnames remain `serve`
+options.
 
 - **REQ-CFG-050:** The `[server]` table MUST be optional. Omitting it, or any field in it, MUST use
   the defaults in the table above.
@@ -100,9 +103,14 @@ remain `serve` options.
   range MUST be a configuration load error. `0` MUST mean that a render is rejected whenever no
   slot is free.
 - **REQ-CFG-053:** Unknown keys inside `[server]` MUST be ignored, consistent with `REQ-CFG-003`.
-- **REQ-CFG-054:** The `[server]` settings MUST affect only request-time rendering in
-  `typrest serve`. `typrest check` MAY use them to size its executor, but its result MUST NOT
-  depend on them.
+- **REQ-CFG-054:** The `[server]` settings MUST affect only `typrest serve` (request-time rendering
+  and shutdown). `typrest check` MAY use the render limits to size its executor, but its result MUST
+  NOT depend on them.
+- **REQ-CFG-056:** `shutdown_timeout_seconds` MUST be an integer from `1` to `3600`: the maximum time
+  `serve` drains in-flight requests after `SIGTERM` or `SIGINT`. A value outside that range, or a
+  non-integer, MUST be a configuration load error. Operators SHOULD keep it at or above any render
+  timeout and below the container stop timeout (Docker `stop_grace_period`, Kubernetes
+  `terminationGracePeriodSeconds`).
 
 Typst also parallelizes inside one compilation, so `max_concurrent_renders` bounds concurrent
 compilations, not total CPU threads. Container operators should set it explicitly when CPU quotas
@@ -128,7 +136,7 @@ requirements they follow.
 
 This format does not define ports, hostnames, watch settings, package policy or cache paths, store
 backends, authentication, per-template overrides, or environment-specific configuration. The only
-server settings are the render capacity limits in `[server]`. Package
+server settings are the render capacity limits and the shutdown timeout in `[server]`. Package
 support is automatic and always uses `<project>/.typrest/packages`. Update this specification before
 adding any related fields.
 

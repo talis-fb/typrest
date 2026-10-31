@@ -14,6 +14,8 @@ pub const RENDER_RETRY_AFTER_SECONDS: u32 = 1;
 pub enum ServeError {
     #[error("server I/O failed: {0}")]
     Io(#[from] std::io::Error),
+    #[error("graceful shutdown timed out with requests still in flight")]
+    ShutdownTimedOut,
 }
 
 #[derive(Debug)]

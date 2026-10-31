@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Builds the Typrest container image and checks it over HTTP.
 #
-# Phase 1 runs the image's bundled examples/minimal project.
+# Phase 1 runs the image's bundled examples/minimal project and checks that a stop is prompt and
+# exits with status 0 (Typrest runs as PID 1 and must handle SIGTERM itself).
 # Phase 2 mounts a temporary copy of examples/invoice at /project.
 #
 # Environment:
@@ -9,11 +10,13 @@
 #   CHECK_IMAGE       image tag to build (default typrest:check)
 #   CHECK_PORT        host port on 127.0.0.1 (default: a free port)
 #   CHECK_TIMEOUT     seconds to wait for /_healthz (default 60)
+#   CHECK_STOP_BOUND  maximum seconds a container stop may take (default 5)
 set -euo pipefail
 
 ENGINE="${CONTAINER_ENGINE:-docker}"
 IMAGE="${CHECK_IMAGE:-typrest:check}"
 TIMEOUT="${CHECK_TIMEOUT:-60}"
+STOP_BOUND="${CHECK_STOP_BOUND:-5}"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
@@ -101,6 +104,18 @@ stop_container() {
     "$ENGINE" rm -f "$1" >/dev/null 2>&1 || true
 }
 
+# check_graceful_stop <container>: stops a running container and checks it exits 0 promptly.
+check_graceful_stop() {
+    local container="$1" start elapsed exit_code
+    start=$SECONDS
+    "$ENGINE" stop "$container" >/dev/null
+    elapsed=$((SECONDS - start))
+    exit_code="$("$ENGINE" inspect -f '{{.State.ExitCode}}' "$container")"
+    ((elapsed <= STOP_BOUND)) || fail "stopping $container took ${elapsed}s, expected at most ${STOP_BOUND}s"
+    [[ "$exit_code" == "0" ]] || fail "$container exited with status $exit_code after stop, expected 0"
+    pass "$container stopped in ${elapsed}s with exit status 0"
+}
+
 echo "==> Building $IMAGE with $ENGINE"
 "$ENGINE" build -t "$IMAGE" .
 
@@ -110,6 +125,7 @@ run_container "$MINIMAL"
 wait_healthy "$MINIMAL"
 post_json /hello "@examples/minimal/templates/hello/payload.json" 200 pdf
 post_json /hello '{"greeting":"Hi"}' 422
+check_graceful_stop "$MINIMAL"
 stop_container "$MINIMAL"
 
 echo "==> Phase 2: mounted examples/invoice project"

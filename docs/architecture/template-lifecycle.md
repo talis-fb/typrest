@@ -105,6 +105,10 @@ after newer changes and overwrite them.
 - Template compilation and actual missing-package installation progress are tracing events on
   stdout. Successful full rebuilds emit a refreshed ready count.
 
+- On `SIGTERM` or `SIGINT`, `serve` stops the watcher before it stops accepting connections, so no
+  reload starts or swaps an entry during the drain (`REQ-CLI-045`). A reload in progress is aborted
+  at its next `.await`; a warmup compile already on a blocking thread is left to finish detached.
+
 Watch management emits reload outcomes where they occur and delegates only compiler diagnostic
 formatting to `logging/compiler_diagnostics.rs`. It has no dependency on HTTP code.
 

@@ -64,6 +64,13 @@ rendered over HTTP with payload validation and structured diagnostics.
 - [x] Startup, `check`, and watch warmups share the executor with `Background` admission
 - [x] `[server]` table in `typrest.toml` with `max_concurrent_renders` and `max_queued_renders`
 
+### Graceful Shutdown
+
+- [x] `SIGTERM`/`SIGINT` stop `serve` with a bounded drain (`[server].shutdown_timeout_seconds`)
+- [x] Exit status `0` on a clean drain, `1` on timeout, second signal, or a signal during startup
+- [x] Explicit runtime that exits without waiting for detached compilations
+- [x] Compose `stop_grace_period`, `STOPSIGNAL`, and a stop assertion in the container check
+
 ### Container Image
 
 - [x] Container image serving the bundled `examples/minimal` project through `typrest.toml` discovery

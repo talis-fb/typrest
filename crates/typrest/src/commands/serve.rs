@@ -8,12 +8,14 @@ use typrest_core::{
 
 use crate::args::{ColorChoice, LogFormat};
 use crate::http::config::ServerConfig;
+use crate::http::errors::ServeError;
 use crate::http::state::AppState;
 use crate::loader::filesystem::FilesystemLoader;
 use crate::loader::watch::start_template_watcher;
 use crate::logging::compiler_diagnostics;
 use crate::package::universal_package::UniversePackageRepository;
 use crate::render_executor::BlockingRenderExecutor;
+use crate::shutdown::ShutdownSignal;
 
 use crate::config::load_config;
 
@@ -24,6 +26,17 @@ pub(crate) async fn run_serve(
     hostname: std::net::Ipv4Addr,
     watch: bool,
 ) -> bool {
+    let shutdown = match ShutdownSignal::install() {
+        Ok(shutdown) => shutdown,
+        Err(error) => {
+            error!(
+                event = "server.failed",
+                error = %error,
+                "failed to install signal handlers: {error}"
+            );
+            return false;
+        }
+    };
     let Some(config) = load_config() else {
         return false;
     };
@@ -71,14 +84,24 @@ pub(crate) async fn run_serve(
             "failed to compile template `{template}`"
         ),
     };
-    let registry_build = match TemplateRegistry::build_with_observer(
-        loader.as_ref(),
-        &compiler,
-        executor.as_ref(),
-        &registry_observer,
-    )
-    .await
-    {
+    let build = tokio::select! {
+        build = TemplateRegistry::build_with_observer(
+            loader.as_ref(),
+            &compiler,
+            executor.as_ref(),
+            &registry_observer,
+        ) => build,
+        signal = shutdown.wait() => {
+            info!(
+                event = "server.shutdown.started",
+                context = "startup",
+                signal,
+                "received {signal} during startup, aborting"
+            );
+            return false;
+        }
+    };
+    let registry_build = match build {
         Ok(build) => build,
         Err(error) => {
             for warning in error.warnings() {
@@ -175,7 +198,7 @@ pub(crate) async fn run_serve(
 
     packages.use_watch_context();
 
-    let _watcher = if watch {
+    let watcher = if watch {
         let watch_executor: Arc<dyn RenderExecutor> = executor.clone();
         match start_template_watcher(
             loader,
@@ -204,12 +227,17 @@ pub(crate) async fn run_serve(
         max_queued_renders = config.render_limits.max_queued_renders,
         "starting typrest server"
     );
-    if _watcher.is_some() {
+    if let Some(watcher) = watcher {
         info!(
             event = "template.watch.enabled",
             templates_dir = %config.templates_root.display(),
             "template watch mode enabled"
         );
+        let shutdown = shutdown.clone();
+        tokio::spawn(async move {
+            shutdown.wait().await;
+            drop(watcher);
+        });
     }
 
     let render_service = RenderService::new(registry.clone(), compiler, executor);
@@ -218,8 +246,9 @@ pub(crate) async fn run_serve(
         .with_host(hostname)
         .with_web_ui(config.web_ui);
 
-    match crate::http::serve(server_config, state).await {
+    match crate::http::serve(server_config, state, shutdown, config.shutdown_timeout).await {
         Ok(()) => true,
+        Err(ServeError::ShutdownTimedOut) => false,
         Err(error) => {
             error!(
                 event = "server.failed",

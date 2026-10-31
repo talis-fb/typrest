@@ -79,6 +79,14 @@ user.
 template edits on the host reload without restarting the container. Both commands publish the port
 on the loopback interface only, because the development Web UI is unauthenticated.
 
+Typrest handles `SIGTERM` and `SIGINT` itself: it stops accepting connections and lets in-flight
+requests finish for `[server].shutdown_timeout_seconds` (default `25`) before exiting. A drain that
+completes exits with status `0`; a timeout or a second signal exits with `1`. Give the container a
+stop timeout above that value: Compose sets `stop_grace_period: 30s`, and `docker stop` needs
+`-t 30` (or `docker run --stop-timeout 30`). On Kubernetes, set `terminationGracePeriodSeconds`
+above the timeout and add a short `preStop` `sleep` so endpoints are removed before the listener
+closes.
+
 ## Project and Template Layout
 
 `typrest init` creates a project containing `typrest.toml` and a templates root:
