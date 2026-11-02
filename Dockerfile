@@ -30,7 +30,4 @@ COPY --chown=typrest:typrest examples/minimal/ /project/
 
 USER typrest
 EXPOSE 8080
-# PID 1 handles SIGTERM itself, so no init process is needed.
-# The stop grace period is set in docker-compose.yml.
-STOPSIGNAL SIGTERM
 CMD ["typrest", "serve"]
