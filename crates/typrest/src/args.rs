@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand, ValueEnum};
 
 #[derive(Debug, Parser)]
-#[command(name = "typrest")]
+#[command(name = "typrest", version)]
 #[command(about = "HTTP server for server-side PDF generation with Typst")]
 pub struct Args {
     /// Output format for diagnostics and operational logs.
@@ -114,6 +114,17 @@ mod tests {
         };
 
         assert_eq!(hostname, Ipv4Addr::new(127, 0, 0, 1));
+    }
+
+    #[test]
+    fn version_flag_prints_package_version() {
+        let error = Args::try_parse_from(["typrest", "--version"]).unwrap_err();
+
+        assert_eq!(error.kind(), clap::error::ErrorKind::DisplayVersion);
+        assert_eq!(
+            error.to_string().trim(),
+            format!("typrest {}", env!("CARGO_PKG_VERSION"))
+        );
     }
 
     #[test]

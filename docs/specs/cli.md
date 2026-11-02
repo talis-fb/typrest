@@ -15,6 +15,7 @@ all templates with `typrest check`, and starts the HTTP server with `typrest ser
 
 ```text
 typrest [--log-format <pretty|json>] [--color <auto|always|never>] <command>
+typrest --version
 
 typrest init [path]
 typrest check
@@ -27,6 +28,8 @@ typrest serve [--port <port>] [--hostname <ipv4>] [--watch]
   successfully. A `serve` stopped by `SIGTERM` or `SIGINT` that drains in time completes
   successfully.
 - **REQ-CLI-004:** CLI errors MUST be emitted as structured tracing events, not ad hoc panic text.
+- **REQ-CLI-005:** `typrest --version` MUST print `typrest <version>` using the package version and
+  exit successfully.
 
 ### Project model and discovery
 
