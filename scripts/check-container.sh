@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Builds the Typrest container image and checks it over HTTP.
 #
-# Phase 1 runs the image's bundled examples/minimal project.
+# Phase 1 runs the image's bundled examples/minimal project and checks that a stop exits with
+# status 0 (Typrest runs as PID 1 and must handle SIGTERM itself).
 # Phase 2 mounts a temporary copy of examples/invoice at /project.
 #
 # Environment:
@@ -101,6 +102,16 @@ stop_container() {
     "$ENGINE" rm -f "$1" >/dev/null 2>&1 || true
 }
 
+# check_graceful_stop <container>: stops a running container and checks it exits with status 0.
+# Without a SIGTERM handler, PID 1 ignores the signal and the engine kills it, giving 137.
+check_graceful_stop() {
+    local container="$1" exit_code
+    "$ENGINE" stop "$container" >/dev/null
+    exit_code="$("$ENGINE" inspect -f '{{.State.ExitCode}}' "$container")"
+    [[ "$exit_code" == "0" ]] || fail "$container exited with status $exit_code after stop, expected 0"
+    pass "$container stopped with exit status 0"
+}
+
 echo "==> Building $IMAGE with $ENGINE"
 "$ENGINE" build -t "$IMAGE" .
 
@@ -110,6 +121,7 @@ run_container "$MINIMAL"
 wait_healthy "$MINIMAL"
 post_json /hello "@examples/minimal/templates/hello/payload.json" 200 pdf
 post_json /hello '{"greeting":"Hi"}' 422
+check_graceful_stop "$MINIMAL"
 stop_container "$MINIMAL"
 
 echo "==> Phase 2: mounted examples/invoice project"

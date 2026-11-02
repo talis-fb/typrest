@@ -86,6 +86,16 @@ JSON Lines records:
 {"timestamp":"2026-08-21T12:48:40.351410Z","level":"INFO","message":"templates ready: 1","event":"templates.ready","context":"startup","template_count":1,"status":"ok","target":"typrest::commands::serve"}
 ```
 
+A signal-initiated shutdown that drains in time (`REQ-CLI-047`):
+
+```json
+{"timestamp":"2026-08-21T12:50:02.100112Z","level":"INFO","message":"received SIGTERM, draining in-flight requests","event":"server.shutdown.started","signal":"SIGTERM","target":"typrest::http"}
+{"timestamp":"2026-08-21T12:50:02.412870Z","level":"INFO","message":"shutdown completed","event":"server.shutdown.completed","duration_ms":312,"target":"typrest::http"}
+```
+
+When requests outlast the deadline, `server.shutdown.completed` is replaced by a `WARN`
+`server.shutdown.timed_out` record with `timeout_ms`.
+
 ## Non-goals
 
 Log shipping, rotation, file output, and metrics.

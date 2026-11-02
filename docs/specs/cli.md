@@ -24,6 +24,7 @@ typrest serve [--port <port>] [--hostname <ipv4>] [--watch]
 - **REQ-CLI-001:** The CLI MUST provide the commands `init`, `check`, and `serve` and no others.
 - **REQ-CLI-002:** Global options MAY appear before or after the subcommand.
 - **REQ-CLI-003:** The process MUST exit successfully only when the selected command completes
+  successfully. A `serve` stopped by `SIGTERM` or `SIGINT` that drains in time completes
   successfully.
 - **REQ-CLI-004:** CLI errors MUST be emitted as structured tracing events, not ad hoc panic text.
 
@@ -131,6 +132,25 @@ typrest init [path]
 
 - **REQ-CLI-044:** `serve` MUST report the effective `max_concurrent_renders`,
   `max_queued_renders`, and `max_body_bytes` as structured fields of the `server.starting` event.
+
+#### Shutdown
+
+The drain deadline is `[server].shutdown_timeout_seconds` in
+[`typrest.toml`](typrest-toml.md#server) (`REQ-CFG-056`); `serve` has no flag for it.
+
+- **REQ-CLI-045:** On the first `SIGTERM` or `SIGINT`, `serve` MUST stop watch mode, stop accepting
+  new connections, close idle connections, and let in-flight requests complete for at most the
+  shutdown timeout.
+- **REQ-CLI-046:** `serve` MUST exit with status `0` when all in-flight requests finish within the
+  shutdown timeout, and with status `1` when the deadline elapses first or a second signal arrives.
+  A second `SIGTERM` or `SIGINT` MUST cause immediate exit. A signal received before the server
+  binds, during project loading or warm compilation, MUST abort startup with status `1`.
+- **REQ-CLI-047:** Shutdown MUST log `server.shutdown.started` (field `signal`, plus
+  `context = "startup"` when it aborts startup), then `server.shutdown.completed` (field
+  `duration_ms`) or `server.shutdown.timed_out` (field `timeout_ms`), on stdout like every process
+  event (`REQ-LOG-010`). A second signal logs `server.shutdown.forced` before exiting.
+- **REQ-CLI-048:** After the drain completes or its deadline elapses, the process MUST exit without
+  waiting for detached compilations.
 
 ### Diagnostic options
 

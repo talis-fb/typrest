@@ -4,17 +4,27 @@ pub(crate) mod handlers;
 pub(crate) mod router;
 pub(crate) mod state;
 
+use std::future::IntoFuture;
 use std::net::SocketAddr;
+use std::sync::{Arc, OnceLock};
+use std::time::{Duration, Instant};
 
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::http::config::ServerConfig;
 use crate::http::errors::ServeError;
+use crate::shutdown::ShutdownSignal;
 
 use self::router::router;
 use self::state::AppState;
 
-pub(crate) async fn serve(config: ServerConfig, state: AppState) -> Result<(), ServeError> {
+/// Serves until `shutdown` fires, then drains in-flight requests for at most `shutdown_timeout`.
+pub(crate) async fn serve(
+    config: ServerConfig,
+    state: AppState,
+    shutdown: ShutdownSignal,
+    shutdown_timeout: Duration,
+) -> Result<(), ServeError> {
     let app_router = router(state, &config);
 
     let address = SocketAddr::from((config.host, config.port));
@@ -25,9 +35,60 @@ pub(crate) async fn serve(config: ServerConfig, state: AppState) -> Result<(), S
         %address,
         "typrest server listening on {address}"
     );
-    axum::serve(listener, app_router).await?;
 
-    Ok(())
+    serve_listener(listener, app_router, shutdown, shutdown_timeout).await
+}
+
+async fn serve_listener(
+    listener: tokio::net::TcpListener,
+    app_router: axum::Router,
+    shutdown: ShutdownSignal,
+    shutdown_timeout: Duration,
+) -> Result<(), ServeError> {
+    let started = Arc::new(OnceLock::new());
+    let graceful = {
+        let shutdown = shutdown.clone();
+        let started = started.clone();
+        async move {
+            let signal = shutdown.wait().await;
+            let _ = started.set(Instant::now());
+            info!(
+                event = "server.shutdown.started",
+                signal = %signal,
+                "received {signal}, draining in-flight requests"
+            );
+        }
+    };
+    let server = axum::serve(listener, app_router)
+        .with_graceful_shutdown(graceful)
+        .into_future();
+    let deadline = async {
+        shutdown.wait().await;
+        tokio::time::sleep(shutdown_timeout).await;
+    };
+    tokio::pin!(server, deadline);
+
+    tokio::select! {
+        result = &mut server => {
+            result?;
+            if let Some(started) = started.get() {
+                info!(
+                    event = "server.shutdown.completed",
+                    duration_ms = started.elapsed().as_millis() as u64,
+                    "shutdown completed"
+                );
+            }
+            Ok(())
+        }
+        () = &mut deadline => {
+            warn!(
+                event = "server.shutdown.timed_out",
+                timeout_ms = shutdown_timeout.as_millis() as u64,
+                "shutdown timed out with requests still in flight"
+            );
+            Err(ServeError::ShutdownTimedOut)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1383,6 +1444,68 @@ Hello #data.name
             .join("templates")
             .canonicalize()
             .unwrap()
+    }
+
+    const TEST_DEADLINE: std::time::Duration = std::time::Duration::from_secs(10);
+
+    struct ShutdownFixture {
+        address: std::net::SocketAddr,
+        trigger: crate::shutdown::ShutdownTrigger,
+        server: tokio::task::JoinHandle<Result<(), super::ServeError>>,
+        started: std::sync::mpsc::Receiver<()>,
+        release: std::sync::mpsc::Sender<()>,
+    }
+
+    async fn gated_server() -> ShutdownFixture {
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let app = app_with(
+            Arc::new(GatedCompiler {
+                started: started_tx,
+                release: std::sync::Mutex::new(release_rx),
+            }),
+            RenderLimits::new(1, 0),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let (trigger, signal) = crate::shutdown::ShutdownSignal::channel();
+        let server = tokio::spawn(super::serve_listener(listener, app, signal, TEST_DEADLINE));
+
+        ShutdownFixture {
+            address,
+            trigger,
+            server,
+            started: started_rx,
+            release: release_tx,
+        }
+    }
+
+    #[tokio::test]
+    async fn in_flight_request_completes_while_new_connections_are_refused() {
+        let fixture = gated_server().await;
+        let address = fixture.address;
+        let render = tokio::spawn(async move { post_json(address, "/invoice", b"{}").await });
+        let _started = wait_for_start(fixture.started).await;
+
+        fixture.trigger.fire(crate::shutdown::Signal::Terminate);
+
+        tokio::time::timeout(TEST_DEADLINE, async {
+            while tokio::net::TcpStream::connect(address).await.is_ok() {
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("listener should close after the signal");
+        assert!(!fixture.server.is_finished());
+        fixture.release.send(()).unwrap();
+
+        let response = render.await.unwrap();
+        assert!(String::from_utf8_lossy(&response).starts_with("HTTP/1.1 200 OK"));
+        let result = tokio::time::timeout(TEST_DEADLINE, fixture.server)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(result.is_ok());
     }
 
     async fn post_json(address: std::net::SocketAddr, path: &str, body: &[u8]) -> Vec<u8> {

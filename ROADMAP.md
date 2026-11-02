@@ -65,6 +65,11 @@ rendered over HTTP with payload validation and structured diagnostics.
 - [x] `[server]` table in `typrest.toml` with `max_concurrent_renders` and `max_queued_renders`
 - [x] Configurable request body limit `[server].max_body_bytes` (default 2 MiB) with `413 payload_too_large`
 
+### Graceful Shutdown
+
+- [x] `SIGTERM`/`SIGINT` stop `serve` with a bounded drain (`[server].shutdown_timeout_seconds`), exiting `0` on a clean drain and `1` otherwise
+- [x] Explicit runtime that exits without waiting for detached compilations; Compose `stop_grace_period`, `STOPSIGNAL`, and a stop check in the container check
+
 ### Container Image
 
 - [x] Container image serving the bundled `examples/minimal` project through `typrest.toml` discovery

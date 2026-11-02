@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::{Component, Path, PathBuf};
+use std::time::Duration;
 
 use serde::Deserialize;
 
@@ -12,6 +13,8 @@ use crate::render_executor::{
 
 pub const CONFIG_FILE: &str = "typrest.toml";
 pub const PROJECT_DATA_DIR: &str = ".typrest";
+pub const DEFAULT_SHUTDOWN_TIMEOUT_SECONDS: usize = 25;
+pub const MAX_SHUTDOWN_TIMEOUT_SECONDS: usize = 3600;
 pub const DEFAULT_MAX_BODY_BYTES: usize = 2 * 1024 * 1024;
 pub const MAX_BODY_BYTES_LIMIT: usize = 1024 * 1024 * 1024;
 
@@ -22,6 +25,7 @@ pub struct ProjectConfig {
     pub package_cache_dir: PathBuf,
     pub web_ui: bool,
     pub render_limits: RenderLimits,
+    pub shutdown_timeout: Duration,
     pub max_body_bytes: usize,
 }
 
@@ -39,6 +43,7 @@ struct RawProjectConfig {
 struct RawServerConfig {
     max_concurrent_renders: Option<i64>,
     max_queued_renders: Option<i64>,
+    shutdown_timeout_seconds: Option<i64>,
     max_body_bytes: Option<i64>,
 }
 
@@ -74,6 +79,7 @@ pub fn load_project_config(project_root: &Path) -> std::io::Result<ProjectConfig
 
     let config = parse_project_config(&content)?;
     let render_limits = resolve_render_limits(&config.server)?;
+    let shutdown_timeout = resolve_shutdown_timeout(&config.server)?;
     let max_body_bytes = resolve_max_body_bytes(&config.server)?;
     let templates_root = resolve_templates_root(project_root, &config.templates_root)?;
 
@@ -103,6 +109,7 @@ pub fn load_project_config(project_root: &Path) -> std::io::Result<ProjectConfig
         package_cache_dir: project_root.join(PROJECT_DATA_DIR).join("packages"),
         web_ui: config.web_ui,
         render_limits,
+        shutdown_timeout,
         max_body_bytes,
     })
 }
@@ -161,6 +168,20 @@ fn resolve_render_limits(server: &RawServerConfig) -> std::io::Result<RenderLimi
         max_concurrent_renders,
         max_queued_renders,
     ))
+}
+
+fn resolve_shutdown_timeout(server: &RawServerConfig) -> std::io::Result<Duration> {
+    let seconds = match server.shutdown_timeout_seconds {
+        Some(value) => bounded_setting(
+            "shutdown_timeout_seconds",
+            value,
+            1,
+            MAX_SHUTDOWN_TIMEOUT_SECONDS,
+        )?,
+        None => DEFAULT_SHUTDOWN_TIMEOUT_SECONDS,
+    };
+
+    Ok(Duration::from_secs(seconds as u64))
 }
 
 fn resolve_max_body_bytes(server: &RawServerConfig) -> std::io::Result<usize> {
@@ -225,6 +246,8 @@ fn invalid_config<T>(message: String) -> std::io::Result<T> {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use super::{
         DEFAULT_MAX_BODY_BYTES, MAX_BODY_BYTES_LIMIT, PROJECT_DATA_DIR, find_project_root,
         load_project_config, parse_project_config,
@@ -505,6 +528,33 @@ mod tests {
         let config = load_with_server_table("[server]\nunknown = true\n").unwrap();
 
         assert_eq!(config.render_limits, RenderLimits::default());
+    }
+
+    #[test]
+    fn shutdown_timeout_defaults_to_25_seconds() {
+        let config = load_with_server_table("").unwrap();
+        assert_eq!(config.shutdown_timeout, Duration::from_secs(25));
+
+        let config = load_with_server_table("[server]\nmax_queued_renders = 1\n").unwrap();
+        assert_eq!(config.shutdown_timeout, Duration::from_secs(25));
+    }
+
+    #[test]
+    fn shutdown_timeout_honors_explicit_values_and_bounds() {
+        for (value, seconds) in [(1, 1), (30, 30), (3600, 3600)] {
+            let config =
+                load_with_server_table(&format!("[server]\nshutdown_timeout_seconds = {value}\n"))
+                    .unwrap();
+
+            assert_eq!(config.shutdown_timeout, Duration::from_secs(seconds));
+        }
+
+        for value in ["0", "-1", "3601", "1.5", "\"25\""] {
+            let server = format!("[server]\nshutdown_timeout_seconds = {value}\n");
+            let error = load_with_server_table(&server).unwrap_err();
+
+            assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput, "{server}");
+        }
     }
 
     #[test]

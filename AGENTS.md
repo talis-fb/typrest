@@ -58,6 +58,8 @@ check [`ROADMAP.md`](ROADMAP.md) for scope.
   moving a document.
 - Do not add duplicate sources of truth. Link to the canonical document.
 - Check links with `python3 scripts/check-doc-links.py`.
+- Do not edit `README.md` without the user's explicit approval; see the
+  [README policy](docs/README.md#readme-policy).
 
 ### ADRs and plans
 
