@@ -120,7 +120,7 @@ typrest init [path]
 | Option | Default | Behavior |
 |---|---|---|
 | `--port <port>` | `8080` | TCP port to bind |
-| `--hostname <ipv4>` | `0.0.0.0` | IPv4 bind address; hostnames and IPv6 are not accepted |
+| `--hostname <ipv4>` | `127.0.0.1` | IPv4 bind address; hostnames and IPv6 are not accepted |
 | `--watch` | disabled | Reload changed templates while keeping last known good entries |
 
 - **REQ-CLI-040:** `serve` MUST build and warm-compile the registry before binding its socket.
@@ -154,6 +154,9 @@ The drain deadline is `[server].shutdown_timeout_seconds` in
   event (`REQ-LOG-010`). A second signal logs `server.shutdown.forced` before exiting.
 - **REQ-CLI-048:** After the drain completes or its deadline elapses, the process MUST exit without
   waiting for detached compilations.
+- **REQ-CLI-052:** `serve` MUST bind to loopback by default because the server has no authentication.
+  Exposing it on other interfaces requires an explicit `--hostname`, such as `--hostname 0.0.0.0` in
+  a container.
 
 ### Diagnostic options
 

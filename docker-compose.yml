@@ -13,4 +13,4 @@ services:
       - "127.0.0.1:8080:8080"
     volumes:
       - ./examples/invoice:/project
-    command: ["typrest", "serve", "--watch"]
+    command: ["typrest", "serve", "--hostname", "0.0.0.0", "--watch"]

@@ -76,7 +76,7 @@ A one-template server startup in pretty mode:
 2026-08-21T12:48:40.351410Z  INFO templates ready: 1
 2026-08-21T12:48:40.351703Z  INFO starting typrest server
 2026-08-21T12:48:40.351891Z  INFO template watch mode enabled
-2026-08-21T12:48:40.352471Z  INFO typrest server listening on 0.0.0.0:8080
+2026-08-21T12:48:40.352471Z  INFO typrest server listening on 127.0.0.1:8080
 ```
 
 JSON Lines records:
