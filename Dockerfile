@@ -30,4 +30,4 @@ COPY --chown=typrest:typrest examples/minimal/ /project/
 
 USER typrest
 EXPOSE 8080
-CMD ["typrest", "serve"]
+CMD ["typrest", "serve", "--hostname", "0.0.0.0"]

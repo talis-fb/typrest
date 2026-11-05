@@ -3,6 +3,12 @@ name = "typrest-core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+description = "Domain types, schema validation, template registry, and Typst rendering for Typrest"
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
 
 [features]
 test-util = []

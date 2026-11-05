@@ -68,7 +68,7 @@ rendered over HTTP with payload validation and structured diagnostics.
 ### Graceful Shutdown
 
 - [x] `SIGTERM`/`SIGINT` stop `serve` with a bounded drain (`[server].shutdown_timeout_seconds`), exiting `0` on a clean drain and `1` otherwise
-- [x] Explicit runtime that exits without waiting for detached compilations; Compose `stop_grace_period`, `STOPSIGNAL`, and a stop check in the container check
+- [x] Explicit runtime that exits without waiting for detached compilations, and a graceful-stop check (exit status 0) in the container check
 
 ### Container Image
 

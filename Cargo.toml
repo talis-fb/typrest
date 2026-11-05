@@ -10,6 +10,16 @@ resolver = "2"
 version = "0.1.0"
 edition = "2024"
 license = "Apache-2.0"
+description = "HTTP service that validates JSON payloads, renders Typst templates, and returns PDFs"
+repository = "https://github.com/talis-fb/typrest"
+homepage = "https://github.com/talis-fb/typrest"
+readme = "README.md"
+keywords = ["typst", "pdf", "http", "templates", "server"]
+categories = ["web-programming::http-server", "command-line-utilities"]
+
+[profile.release]
+lto = "thin"
+strip = true
 
 [workspace.dependencies]
 async-trait = "0.1"

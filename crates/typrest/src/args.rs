@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand, ValueEnum};
 
 #[derive(Debug, Parser)]
-#[command(name = "typrest")]
+#[command(name = "typrest", version)]
 #[command(about = "HTTP server for server-side PDF generation with Typst")]
 pub struct Args {
     /// Output format for diagnostics and operational logs.
@@ -30,7 +30,7 @@ pub enum Command {
 
         /// Hostname to bind to.
         #[arg(long)]
-        #[arg(default_value_t = Ipv4Addr::new(0, 0, 0, 0))]
+        #[arg(default_value_t = Ipv4Addr::LOCALHOST)]
         hostname: Ipv4Addr,
 
         /// Watch the templates directory and log template reloads.
@@ -83,7 +83,7 @@ mod tests {
         };
 
         assert_eq!(port, 8080);
-        assert_eq!(hostname, Ipv4Addr::new(0, 0, 0, 0));
+        assert_eq!(hostname, Ipv4Addr::LOCALHOST);
         assert!(!watch);
     }
 
@@ -101,7 +101,7 @@ mod tests {
         };
 
         assert_eq!(port, 9090);
-        assert_eq!(hostname, Ipv4Addr::new(0, 0, 0, 0));
+        assert_eq!(hostname, Ipv4Addr::LOCALHOST);
         assert!(watch);
     }
 
@@ -114,6 +114,28 @@ mod tests {
         };
 
         assert_eq!(hostname, Ipv4Addr::new(127, 0, 0, 1));
+    }
+
+    #[test]
+    fn parses_serve_with_all_interfaces_hostname() {
+        let args = Args::parse_from(["typrest", "serve", "--hostname", "0.0.0.0"]);
+
+        let Command::Serve { hostname, .. } = args.command else {
+            panic!("expected serve command");
+        };
+
+        assert_eq!(hostname, Ipv4Addr::UNSPECIFIED);
+    }
+
+    #[test]
+    fn version_flag_prints_package_version() {
+        let error = Args::try_parse_from(["typrest", "--version"]).unwrap_err();
+
+        assert_eq!(error.kind(), clap::error::ErrorKind::DisplayVersion);
+        assert_eq!(
+            error.to_string().trim(),
+            format!("typrest {}", env!("CARGO_PKG_VERSION"))
+        );
     }
 
     #[test]

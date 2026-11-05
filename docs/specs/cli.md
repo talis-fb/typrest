@@ -15,6 +15,7 @@ all templates with `typrest check`, and starts the HTTP server with `typrest ser
 
 ```text
 typrest [--log-format <pretty|json>] [--color <auto|always|never>] <command>
+typrest --version
 
 typrest init [path]
 typrest check
@@ -27,6 +28,8 @@ typrest serve [--port <port>] [--hostname <ipv4>] [--watch]
   successfully. A `serve` stopped by `SIGTERM` or `SIGINT` that drains in time completes
   successfully.
 - **REQ-CLI-004:** CLI errors MUST be emitted as structured tracing events, not ad hoc panic text.
+- **REQ-CLI-005:** `typrest --version` MUST print `typrest <version>` using the package version and
+  exit successfully.
 
 ### Project model and discovery
 
@@ -117,7 +120,7 @@ typrest init [path]
 | Option | Default | Behavior |
 |---|---|---|
 | `--port <port>` | `8080` | TCP port to bind |
-| `--hostname <ipv4>` | `0.0.0.0` | IPv4 bind address; hostnames and IPv6 are not accepted |
+| `--hostname <ipv4>` | `127.0.0.1` | IPv4 bind address; hostnames and IPv6 are not accepted |
 | `--watch` | disabled | Reload changed templates while keeping last known good entries |
 
 - **REQ-CLI-040:** `serve` MUST build and warm-compile the registry before binding its socket.
@@ -151,6 +154,9 @@ The drain deadline is `[server].shutdown_timeout_seconds` in
   event (`REQ-LOG-010`). A second signal logs `server.shutdown.forced` before exiting.
 - **REQ-CLI-048:** After the drain completes or its deadline elapses, the process MUST exit without
   waiting for detached compilations.
+- **REQ-CLI-052:** `serve` MUST bind to loopback by default because the server has no authentication.
+  Exposing it on other interfaces requires an explicit `--hostname`, such as `--hostname 0.0.0.0` in
+  a container.
 
 ### Diagnostic options
 
