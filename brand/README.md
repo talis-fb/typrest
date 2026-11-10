@@ -15,7 +15,7 @@ brand-red square, the type-dot.
 | `favicon/favicon.ico`, `apple-touch-icon.png`, `icon-192.png`, `icon-512.png` | Raster icons |
 | `social/social-card.png` | 1280×640 social preview (GitHub, Open Graph) |
 | `starlight/typrest.css` | Starlight theme: colors (dark and light), fonts, headings |
-| `daisyui/typrest-themes.css` | daisyUI 5 `light` and `dark` themes for the site and the Web UI |
+| `daisyui/typrest-themes.css` | daisyUI 5 `light` and `dark` themes, the font tokens, and the `font-display-brand` and `type-dot` utilities, for the site and the Web UI |
 | `typst/theme.typ` | Brand tokens and a `typrest-style` show rule for templates and examples |
 
 All text in the SVG logos is converted to outlines, so no font is needed to display them.
@@ -56,7 +56,7 @@ All three are under the SIL Open Font License.
 | Consumer | Files |
 |---|---|
 | Website (`website/`) | `logos/typrest-logo-horizontal*.svg`, `daisyui/typrest-themes.css`, `starlight/typrest.css`, and, copied into `website/public/` at build time by `website/scripts/sync-brand.mjs`, `favicon/favicon.svg`, `favicon.ico`, `apple-touch-icon.png`, `icon-192.png`, `icon-512.png`, and `social/social-card.png` |
-| Web UI (`webui/`) | Planned: `daisyui/typrest-themes.css` and the brand fonts |
+| Web UI (`webui/`) | `daisyui/typrest-themes.css`, `logos/typrest-logo-horizontal*.svg`, and `favicon/favicon.svg`, bundled into `webui/dist` by Vite, plus the brand fonts (latin subsets) from Fontsource |
 | Typst templates | `typst/theme.typ`, for Typrest-branded documents. The examples keep their own designs |
 | GitHub | `social/social-card.png` as the repository's social preview |
 

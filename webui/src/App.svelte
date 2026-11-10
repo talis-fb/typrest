@@ -12,6 +12,8 @@
   import PayloadEditor from "./components/PayloadEditor.svelte";
   import PdfPreview from "./components/PdfPreview.svelte";
   import TemplateList from "./components/TemplateList.svelte";
+  import logo from "../../brand/logos/typrest-logo-horizontal.svg";
+  import logoInverse from "../../brand/logos/typrest-logo-horizontal-inverse.svg";
 
   let templates: TemplateSummary[] = [];
   let selected: TemplateMetadata | null = null;
@@ -132,16 +134,22 @@
   <title>{selected ? `${selected.id} · Typrest` : "Typrest Web UI"}</title>
 </svelte:head>
 
-<header class="sticky top-0 z-30 border-b border-base-300/80 bg-base-100/90 backdrop-blur">
+<header class="sticky top-0 z-30 border-b border-base-300 bg-base-100">
   <div class="mx-auto flex h-16 max-w-[1600px] items-center justify-between px-4 sm:px-6">
-    <button type="button" class="flex items-center gap-3" on:click={closeTemplate} aria-label="Typrest template list">
-      <span class="grid size-9 place-items-center rounded-xl bg-primary font-mono font-bold text-primary-content">T</span>
-      <span>
-        <span class="block text-left font-semibold leading-tight">Typrest</span>
-        <span class="block text-left text-[0.65rem] uppercase tracking-[0.18em] text-base-content/45">Web UI</span>
-      </span>
+    <button
+      type="button"
+      class="flex items-center gap-3 rounded-field p-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+      on:click={closeTemplate}
+      aria-label="Typrest template list"
+    >
+      <img src={logo} alt="" height="28" width="109" class="h-7 w-auto dark:hidden" />
+      <img src={logoInverse} alt="" height="28" width="109" class="hidden h-7 w-auto dark:block" />
+      <span class="h-5 w-px bg-base-300" aria-hidden="true"></span>
+      <span class="text-xs font-medium uppercase tracking-wider text-base-content/60">Web UI</span>
     </button>
-    <span class="badge badge-warning badge-outline">Development only</span>
+    <span class="badge badge-outline gap-2 border-base-300 text-xs text-base-content/70">
+      <span class="type-dot" aria-hidden="true"></span>Development only
+    </span>
   </div>
 </header>
 
@@ -159,7 +167,7 @@
     <div class="mx-auto max-w-2xl px-4 py-16">
       <div class="alert alert-error" role="alert">
         <div>
-          <h1 class="font-semibold">The Web UI could not continue</h1>
+          <h1 class="font-display-brand text-lg">The Web UI could not continue</h1>
           <p class="mt-1 text-sm">{pageError}</p>
           <button type="button" class="btn btn-sm mt-4" on:click={loadTemplates}>Try again</button>
         </div>
@@ -171,10 +179,10 @@
         <div class="flex items-center gap-3">
           <button type="button" class="btn btn-ghost btn-sm" on:click={closeTemplate}>← Templates</button>
           <span class="text-base-content/30">/</span>
-          <h1 class="font-mono text-lg font-semibold">{selected.id}</h1>
-          <span class="badge badge-sm badge-ghost">{selected.schema ? "Schema v1" : "No schema"}</span>
+          <h1 class="font-mono text-lg font-normal">{selected.id}</h1>
+          <span class="badge badge-sm badge-outline border-base-300 text-base-content/70">{selected.schema ? "Schema v1" : "No schema"}</span>
         </div>
-        <code class="rounded-lg bg-base-300/60 px-2 py-1 text-xs">POST /{selected.id}</code>
+        <code class="rounded-field border border-base-300 bg-base-100 px-2 py-1 font-mono text-xs">POST /{selected.id}</code>
       </div>
 
       <div class="workspace-height grid gap-4 lg:grid-cols-[minmax(22rem,0.9fr)_minmax(28rem,1.35fr)]">

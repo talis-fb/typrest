@@ -159,12 +159,12 @@
 
 <svelte:window on:keydown={handleKeydown} />
 
-<section class="card h-full border border-base-300 bg-base-100 shadow-sm">
+<section class="card card-border h-full border-base-300 bg-base-100">
   <div class="card-body gap-4 p-4 sm:p-5">
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div>
-        <h2 class="card-title text-lg">Payload</h2>
-        <p class="text-xs text-base-content/55">Sent unchanged to <code>sys.inputs.data</code></p>
+        <h2 class="font-display-brand text-xl">Payload</h2>
+        <p class="text-xs text-base-content/60">Sent unchanged to <code class="font-mono">sys.inputs.data</code></p>
       </div>
       <div class="tabs tabs-box" role="tablist" aria-label="Payload input mode">
         <button
@@ -219,11 +219,11 @@
             />
           {/each}
 
-          <div class="divider my-4 text-xs text-base-content/50">CUSTOM TEST FIELDS</div>
+          <div class="divider my-4 text-xs font-medium tracking-wider text-base-content/60">CUSTOM TEST FIELDS</div>
 
           {#each customFields as custom (custom.id)}
-            <fieldset class="rounded-xl border border-base-300 p-3">
-              <legend class="px-1 text-xs font-semibold text-base-content/65">Custom field</legend>
+            <fieldset class="rounded-box border border-base-300 p-3">
+              <legend class="px-1 text-xs font-semibold text-base-content/70">Custom field</legend>
               <div class="grid gap-2 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)_auto]">
                 <label class="form-control">
                   <span class="label-text mb-1 text-xs">Key</span>
@@ -256,7 +256,7 @@
             </fieldset>
           {/each}
 
-          <button type="button" class="btn btn-ghost btn-sm border-dashed" on:click={addCustomField}>
+          <button type="button" class="btn btn-ghost btn-sm border-dashed border-base-300" on:click={addCustomField}>
             + Add custom field
           </button>
         </div>
@@ -281,7 +281,7 @@
     </div>
 
     <div class="flex flex-wrap items-center justify-between gap-3 border-t border-base-300 pt-4">
-      <span class="text-xs text-base-content/50">
+      <span class="text-xs text-base-content/60">
         <kbd class="kbd kbd-xs">Ctrl</kbd>/<kbd class="kbd kbd-xs">⌘</kbd>
         <span class="mx-1">+</span><kbd class="kbd kbd-xs">Enter</kbd>
       </span>

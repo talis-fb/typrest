@@ -104,7 +104,7 @@ rendered over HTTP with payload validation and structured diagnostics.
 - [ ] Web Analytics token, then a first manual deployment to `typrest.talison.dev`
 - [ ] Make the repository public, set `SITE_INDEXABLE` to `true`, and redeploy
 - [ ] Repository homepage URL and social preview (`brand/social/social-card.png`)
-- [ ] Web UI on the brand themes and fonts, then a new Web UI screenshot for the site
+- [x] Web UI on the brand themes and fonts, then a new Web UI screenshot for the site
 
 ### Render Execution Follow-ups
 
