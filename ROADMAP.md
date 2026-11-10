@@ -84,7 +84,7 @@ rendered over HTTP with payload validation and structured diagnostics.
   generated from `docs/specs/` and `docs/architecture/` (see
   [`docs/development/website.md`](docs/development/website.md))
 - [x] Pre-rendered example PDFs and previews from `scripts/render-website-examples.sh`
-- [x] CI `website` job, and deployment to Cloudflare Workers from `website-deploy.yml`
+- [x] CI `website` job that validates the site, and manual deployment to Cloudflare Workers
 - [x] Cloudflare Web Analytics without click tracking, and `noindex` until launch
 
 ## Active Follow-up Work
@@ -101,8 +101,7 @@ rendered over HTTP with payload validation and structured diagnostics.
 
 ### Website Launch
 
-- [ ] Cloudflare API token, `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets, and the Web
-  Analytics token, then a first deployment to `typrest.talison.dev`
+- [ ] Web Analytics token, then a first manual deployment to `typrest.talison.dev`
 - [ ] Make the repository public, set `SITE_INDEXABLE` to `true`, and redeploy
 - [ ] Repository homepage URL and social preview (`brand/social/social-card.png`)
 - [ ] Web UI on the brand themes and fonts, then a new Web UI screenshot for the site

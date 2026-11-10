@@ -148,22 +148,26 @@ the brand themes.
 The site is deployed to Cloudflare Workers static assets. `website/wrangler.jsonc` serves `dist/`
 with the custom domain `typrest.talison.dev` and Astro's `404.html` for unknown paths.
 
-`.github/workflows/website-deploy.yml` builds and runs `wrangler deploy` on a push to `main` that
-touches `website/`, `brand/`, `docs/`, or `examples/README.md`, and on manual dispatch. It needs
-the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository secrets; the token must be able
-to deploy Workers and manage the `talison.dev` custom domain.
-
-To check the configuration without deploying:
+Deployment is manual; no workflow deploys the site. Build and deploy from a clean checkout of
+`main`:
 
 ```bash
 cd website
+npm ci
 npm run build
-npx wrangler deploy --dry-run
+npx wrangler deploy
 ```
 
-The CI `website` job (`.github/workflows/ci.yml`) runs `npm ci`, `npm run check`, and `npm run build`
-on every pull request. `.dockerignore` excludes `website/` and `brand/`, so the site never enters
-the container build context.
+`wrangler` asks to log in on first use. Without a login, it reads `CLOUDFLARE_API_TOKEN` and
+`CLOUDFLARE_ACCOUNT_ID` from the environment; the token must be able to deploy Workers and manage
+the `talison.dev` custom domain. `npx wrangler deploy --dry-run` checks the configuration without
+deploying. Redeploy after a change to `website/`, `brand/`, `docs/`, or `examples/README.md`,
+because the site reads all of them.
+
+The CI `website` job (`.github/workflows/ci.yml`) only validates the site: it runs `npm ci`,
+`npm run check`, and `npm run build` on every pull request and push to `main`, and never deploys.
+`.dockerignore` excludes `website/` and `brand/`, so the site never enters the container build
+context.
 
 ## Search engines
 
@@ -198,7 +202,7 @@ only `Analytics.astro` and `config.ts`.
 | One dark-mode mechanism (`data-theme` and the `starlight-theme` key) | The brand themes key on `data-theme`, and a choice made on `/` must carry over to `/docs` |
 | Self-hosted fonts through Fontsource | Brand typefaces under the OFL, with no third-party font requests |
 | Cloudflare Workers static assets | `talison.dev` DNS is already on Cloudflare, static requests are free, and Cloudflare recommends Workers over Pages for new projects. GitHub Pages on GitHub Free needs a public repository |
-| Deploy from GitHub Actions with wrangler | Lives in the repository beside `ci.yml`. Cloudflare's documentation did not confirm Workers Builds for private repositories |
+| Manual deploy with wrangler, CI validates only | The maintainer controls when the site changes, and no Cloudflare credentials live in GitHub |
 | Cloudflare Web Analytics | Free and built into the host |
 | Docs generated from `docs/` | One source of truth: the site never holds a second copy of a specification |
 | Pre-rendered example PDFs and a Web UI screenshot, no live demo | A static site has no server to render with, and the Web UI needs a running Typrest |

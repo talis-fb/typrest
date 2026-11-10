@@ -1,5 +1,5 @@
 // Cloudflare Workers static assets. The site is fully static: the Worker only serves dist/.
-// Deployed by .github/workflows/website-deploy.yml; see docs/development/website.md.
+// Deployed by hand with wrangler; see docs/development/website.md.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "typrest-website",
