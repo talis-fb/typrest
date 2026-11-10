@@ -1,0 +1,32 @@
+---
+// Frequently asked questions as daisyUI collapses. Replaces AstroWind's FAQs markup; native
+// <details> elements, so it works without JavaScript.
+import Headline from '~/components/ui/Headline.astro';
+import WidgetWrapper from '~/components/ui/WidgetWrapper.astro';
+
+export interface Props {
+  id?: string;
+  title?: string;
+  subtitle?: string;
+  tagline?: string;
+  items: { title: string; description: string }[];
+}
+
+const { id, title, subtitle, tagline, items } = Astro.props;
+---
+
+<WidgetWrapper id={id} containerClass="max-w-3xl">
+  <Headline title={title} subtitle={subtitle} tagline={tagline} />
+  <div class="divide-y divide-base-300 border-y border-base-300">
+    {
+      items.map(({ title: itemTitle, description }) => (
+        <details class="collapse collapse-arrow rounded-none">
+          <summary class="collapse-title px-0 text-lg font-medium">{itemTitle}</summary>
+          <div class="collapse-content px-0">
+            <p class="prose-link text-muted" set:html={description} />
+          </div>
+        </details>
+      ))
+    }
+  </div>
+</WidgetWrapper>

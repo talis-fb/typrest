@@ -1,0 +1,26 @@
+---
+// Closing call to action. Adapted from AstroWind's CallToAction widget.
+import Headline from '~/components/ui/Headline.astro';
+import WidgetWrapper from '~/components/ui/WidgetWrapper.astro';
+
+export interface Props {
+  title: string;
+  subtitle?: string;
+  actions: { text: string; href: string; primary?: boolean }[];
+}
+
+const { title, subtitle, actions } = Astro.props;
+---
+
+<WidgetWrapper paper containerClass="max-w-4xl">
+  <Headline title={title} subtitle={subtitle} classes={{ container: 'max-w-3xl text-center mb-8 md:mb-8' }} />
+  <div class="flex flex-col justify-center gap-3 sm:flex-row">
+    {
+      actions.map(({ text, href, primary }) => (
+        <a class:list={['btn', primary ? 'btn-primary' : 'btn-outline']} href={href}>
+          {text}
+        </a>
+      ))
+    }
+  </div>
+</WidgetWrapper>

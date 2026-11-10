@@ -1,0 +1,87 @@
+---
+// Replaces AstroWind's toggle. It cycles auto → light → dark and stores the choice under
+// Starlight's `starlight-theme` key with Starlight's values ('light', 'dark', or '' for auto), so
+// it agrees with the docs' theme select. ThemeScript.astro applies the theme on load.
+import { Icon } from 'astro-icon/components';
+
+export interface Props {
+  class?: string;
+}
+
+const { class: className = 'btn btn-ghost btn-square btn-sm' } = Astro.props;
+---
+
+<tp-theme-toggle>
+  <button type="button" class={className} data-tp-theme-toggle aria-label="Color theme: auto">
+    <Icon name="tabler:device-laptop" class="h-5 w-5" data-theme-icon="auto" />
+    <Icon name="tabler:sun" class="hidden h-5 w-5" data-theme-icon="light" />
+    <Icon name="tabler:moon" class="hidden h-5 w-5" data-theme-icon="dark" />
+  </button>
+</tp-theme-toggle>
+
+<style is:global>
+  tp-theme-toggle {
+    display: contents;
+  }
+</style>
+
+<script>
+  type Theme = 'auto' | 'light' | 'dark';
+
+  const STORAGE_KEY = 'starlight-theme';
+  const ORDER: Theme[] = ['auto', 'light', 'dark'];
+
+  const load = (): Theme => {
+    try {
+      const value = localStorage.getItem(STORAGE_KEY);
+      return value === 'light' || value === 'dark' ? value : 'auto';
+    } catch {
+      return 'auto';
+    }
+  };
+
+  const store = (theme: Theme) => {
+    try {
+      localStorage.setItem(STORAGE_KEY, theme === 'auto' ? '' : theme);
+    } catch {
+      // Storage can be blocked; the choice then lasts for this page only.
+    }
+  };
+
+  const systemTheme = (): 'light' | 'dark' =>
+    matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+
+  class TpThemeToggle extends HTMLElement {
+    private current: Theme = 'auto';
+
+    connectedCallback() {
+      const button = this.querySelector<HTMLButtonElement>('[data-tp-theme-toggle]');
+      this.apply(load());
+      button?.addEventListener('click', () => {
+        const next = ORDER[(ORDER.indexOf(this.current) + 1) % ORDER.length];
+        store(next);
+        this.apply(next);
+        // Lets the reveal-on-scroll controller drop its stagger delay (Intersect.astro).
+        document.dispatchEvent(new CustomEvent('aw:theme-change'));
+      });
+      matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
+        if (this.current === 'auto') this.apply('auto');
+      });
+    }
+
+    private apply(theme: Theme) {
+      this.current = theme;
+      document.documentElement.dataset.theme = theme === 'auto' ? systemTheme() : theme;
+      const button = this.querySelector<HTMLButtonElement>('[data-tp-theme-toggle]');
+      button?.setAttribute('aria-label', `Color theme: ${theme}`);
+      button?.setAttribute('title', `Color theme: ${theme}`);
+      this.querySelectorAll<SVGElement>('[data-theme-icon]').forEach((icon) => {
+        icon.classList.toggle('hidden', icon.dataset.themeIcon !== theme);
+      });
+    }
+  }
+
+  if (!customElements.get('tp-theme-toggle')) {
+    customElements.define('tp-theme-toggle', TpThemeToggle);
+  }
+</script>

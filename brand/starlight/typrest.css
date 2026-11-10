@@ -1,0 +1,97 @@
+/*
+ * Typrest — Starlight theme
+ * Load it last in Starlight's customCss, after the fonts; see "Starlight setup" in
+ * brand/README.md. It is unlayered, so it overrides Starlight's layered defaults in both themes.
+ */
+
+/* Dark (Starlight's default) */
+:root {
+  --sl-font: 'IBM Plex Sans', system-ui, sans-serif;
+  --sl-font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --tp-font-display: 'Fraunces Variable', 'Fraunces', Georgia, serif;
+
+  --sl-color-accent-low: #45110a;
+  --sl-color-accent: #de5638;
+  --sl-color-accent-high: #f0a794;
+  --sl-color-text-accent: #e7765a;
+
+  --sl-color-white: #f4efe6;
+  --sl-color-gray-1: #e6dfd2;
+  --sl-color-gray-2: #cfc6b6;
+  --sl-color-gray-3: #a9a193;
+  --sl-color-gray-4: #6b655c;
+  --sl-color-gray-5: #3a352f;
+  --sl-color-gray-6: #221e1a;
+  --sl-color-black: #1a1714;
+
+  /* Darker than Starlight's gray-5 default so accent links in code keep 4.5:1 (4.97:1) */
+  --sl-color-bg-inline-code: #2c2823;
+
+  /* Asides: note=info, tip=accent, caution=warning, danger=error */
+  --sl-color-blue-low: #17283a;  --sl-color-blue: #5f8fc0;  --sl-color-blue-high: #93b6da;
+  --sl-color-purple-low: #45110a; --sl-color-purple: #de5638; --sl-color-purple-high: #f0a794;
+  --sl-color-orange-low: #2e2614; --sl-color-orange: #c98a1b; --sl-color-orange-high: #e9c77e;
+  --sl-color-red-low: #3a1219;   --sl-color-red: #d0566a;   --sl-color-red-high: #e58595;
+  --sl-color-green-low: #1d2a16; --sl-color-green: #6f9a56; --sl-color-green-high: #a8c98f;
+}
+
+/* Light */
+:root[data-theme='light'] {
+  --sl-color-accent-low: #f8d3c9;
+  --sl-color-accent: #b82c16;
+  --sl-color-accent-high: #6b1a0e;
+  --sl-color-text-accent: #b82c16;
+
+  --sl-color-white: #16130f;
+  --sl-color-gray-1: #2c2823;
+  --sl-color-gray-2: #4a453e;
+  --sl-color-gray-3: #6b655c;
+  --sl-color-gray-4: #a9a193;
+  --sl-color-gray-5: #cfc6b6;
+  --sl-color-gray-6: #e6dfd2;
+  --sl-color-gray-7: #f4efe6;
+  --sl-color-black: #f9f6f0;
+
+  /* Starlight's light default (gray-6), restated because the dark value above is unlayered */
+  --sl-color-bg-inline-code: #e6dfd2;
+
+  --sl-color-blue-low: #e3ebf3;   --sl-color-blue: #2f5d8a;   --sl-color-blue-high: #1f3e5e;
+  --sl-color-purple-low: #fcede9; --sl-color-purple: #b82c16; --sl-color-purple-high: #6b1a0e;
+  --sl-color-orange-low: #f7ecd5; --sl-color-orange: #c98a1b; --sl-color-orange-high: #6e4a0b;
+  --sl-color-red-low: #f6e3e7;    --sl-color-red: #b3243b;    --sl-color-red-high: #7d1a2b;
+  --sl-color-green-low: #eaf0e2;  --sl-color-green: #4f7a3a;  --sl-color-green-high: #34521f;
+}
+
+/* Display type: Fraunces on page titles, headings and the site title */
+h1#_top,
+.sl-markdown-content :is(h1, h2, h3),
+.site-title,
+.hero h1 {
+  font-family: var(--tp-font-display);
+  font-weight: 560;
+  font-variation-settings: 'SOFT' 0, 'WONK' 0;
+  letter-spacing: -0.01em;
+}
+.sl-markdown-content :is(h4, h5, h6) { font-weight: 500; }
+
+/* Square corners echo the type block: small radii only */
+:root { --sl-border-radius: 4px; }
+
+/* The type-dot: brand-red square used as list marker in the sidebar's current item. The item sits
+   on paper instead of Starlight's accent fill, which would hide the red dot. */
+nav.sidebar a[aria-current='page'],
+nav.sidebar a[aria-current='page']:hover,
+nav.sidebar a[aria-current='page']:focus {
+  font-weight: 500;
+  color: var(--sl-color-white);
+  background-color: var(--sl-color-gray-6);
+}
+nav.sidebar a[aria-current='page']::before {
+  content: '';
+  display: inline-block;
+  width: 0.4em;
+  height: 0.4em;
+  margin-inline-end: 0.5em;
+  vertical-align: 0.12em;
+  background: var(--sl-color-text-accent);
+}

@@ -1,0 +1,147 @@
+---
+// Site header. Adapted from AstroWind: dropdowns, RSS, and view-transition persistence removed;
+// the brand logo, daisyUI buttons, and the shared theme toggle added.
+import { Icon } from 'astro-icon/components';
+import Logo from '~/components/Logo.astro';
+import ToggleTheme from '~/components/common/ToggleTheme.astro';
+import ToggleMenu from '~/components/common/ToggleMenu.astro';
+import { REPO_URL } from '~/config';
+import { headerLinks } from '~/navigation';
+
+const trim = (path: string) => '/' + path.replace(/^\/+|\/+$/g, '');
+const currentPath = trim(Astro.url.pathname);
+const isActive = (href: string) => trim(href) === currentPath;
+---
+
+<aw-header>
+  <header
+    class="sticky top-0 z-40 mx-auto w-full flex-none bg-page transition-[opacity] ease-in-out"
+    data-aw-sticky-header
+    id="header"
+  >
+    <div class="relative mx-auto w-full max-w-7xl px-4 py-3 text-default lg:flex lg:justify-between lg:px-6">
+      <div class="flex justify-between">
+        <a class="flex items-center p-1.5" href="/" aria-label="Typrest home">
+          <Logo />
+        </a>
+        <div class="flex items-center lg:hidden">
+          <ToggleMenu />
+        </div>
+      </div>
+      <nav
+        class="hidden w-full items-center overflow-x-hidden overflow-y-auto text-default lg:mx-5 lg:flex lg:w-auto lg:overflow-visible"
+        aria-label="Main navigation"
+      >
+        <ul class="flex w-full flex-col text-xl font-medium lg:w-auto lg:flex-row lg:self-center lg:text-[0.9375rem]">
+          {
+            headerLinks.map(({ text, href }) => (
+              <li>
+                <a
+                  class:list={[
+                    'flex items-center gap-2 whitespace-nowrap px-4 py-3 hover:text-accent',
+                    { 'text-accent': isActive(href) },
+                  ]}
+                  aria-current={isActive(href) ? 'page' : undefined}
+                  href={href}
+                >
+                  {text}
+                </a>
+              </li>
+            ))
+          }
+        </ul>
+      </nav>
+      <div
+        class="fixed bottom-0 left-0 hidden w-full items-center justify-end p-3 lg:static lg:flex lg:w-auto lg:p-0"
+      >
+        <div class="flex w-full items-center justify-between gap-2 lg:w-auto">
+          <div class="flex items-center gap-1">
+            <ToggleTheme />
+            <a class="btn btn-ghost btn-square btn-sm" href={REPO_URL} aria-label="Typrest on GitHub">
+              <Icon name="tabler:brand-github" class="h-5 w-5" />
+            </a>
+          </div>
+          <a class="btn btn-primary btn-sm ml-2" href="/docs/getting-started/">Get started</a>
+        </div>
+      </div>
+    </div>
+  </header>
+</aw-header>
+
+<style is:global>
+  aw-header {
+    display: contents;
+  }
+</style>
+
+<script>
+  class AwHeader extends HTMLElement {
+    private onScroll?: () => void;
+    private mql?: MediaQueryList;
+    private onMqlChange?: () => void;
+
+    connectedCallback() {
+      const header = this.querySelector<HTMLElement>('#header');
+      const toggle = this.querySelector<HTMLElement>('[data-aw-toggle-menu]');
+      const nav = this.querySelector<HTMLElement>('#header nav');
+      const lastChild = this.querySelector<HTMLElement>('#header > div > div:last-child');
+
+      const closeMenu = () => {
+        toggle?.classList.remove('expanded');
+        toggle?.setAttribute('aria-expanded', 'false');
+        document.body.classList.remove('overflow-hidden');
+        header?.classList.remove('h-screen', 'expanded');
+        nav?.classList.add('hidden');
+        lastChild?.classList.add('hidden');
+      };
+
+      // Mobile menu toggle.
+      toggle?.addEventListener('click', () => {
+        const expanded = toggle.classList.toggle('expanded');
+        toggle.setAttribute('aria-expanded', String(expanded));
+        document.body.classList.toggle('overflow-hidden');
+        header?.classList.toggle('h-screen');
+        header?.classList.toggle('expanded');
+        nav?.classList.toggle('hidden');
+        lastChild?.classList.toggle('hidden');
+      });
+
+      // Close the mobile menu when a nav link is clicked.
+      nav?.addEventListener('click', closeMenu);
+
+      // Close it when leaving the mobile/tablet breakpoint (desktop nav starts at `lg`).
+      this.mql = window.matchMedia('(max-width: 1023px)');
+      this.onMqlChange = () => closeMenu();
+      this.mql.addEventListener('change', this.onMqlChange);
+
+      // Sticky header: toggle the `scroll` class past a small threshold.
+      if (header?.hasAttribute('data-aw-sticky-header')) {
+        let ticking = false;
+        const applyStyles = () => {
+          if (window.scrollY > 60) header.classList.add('scroll');
+          else header.classList.remove('scroll');
+          ticking = false;
+        };
+        this.onScroll = () => {
+          if (!ticking) {
+            window.requestAnimationFrame(applyStyles);
+            ticking = true;
+          }
+        };
+        applyStyles();
+        document.addEventListener('scroll', this.onScroll, { passive: true });
+      }
+
+      document.documentElement.classList.add('motion-safe:scroll-smooth');
+    }
+
+    disconnectedCallback() {
+      if (this.onScroll) document.removeEventListener('scroll', this.onScroll);
+      if (this.mql && this.onMqlChange) this.mql.removeEventListener('change', this.onMqlChange);
+    }
+  }
+
+  if (!customElements.get('aw-header')) {
+    customElements.define('aw-header', AwHeader);
+  }
+</script>

@@ -1,0 +1,31 @@
+---
+// Section shell for the landing widgets. Adapted from AstroWind.
+import type { HTMLTag } from 'astro/types';
+import { twMerge } from 'tailwind-merge';
+
+export interface Props {
+  id?: string;
+  containerClass?: string;
+  /** Paints the section on base-200 paper instead of the page background. */
+  paper?: boolean;
+  ['as']?: HTMLTag;
+}
+
+const { id, containerClass = '', paper = false, as = 'section' } = Astro.props;
+
+const WrapperTag = as;
+---
+
+<WrapperTag
+  class:list={['relative scroll-mt-[72px]', { 'border-y border-base-300 bg-base-200': paper }]}
+  {...id ? { id } : {}}
+>
+  <div
+    class={twMerge(
+      'relative mx-auto max-w-7xl px-4 md:px-6 py-12 md:py-16 lg:py-20 text-default intersect-once intersect-quarter intersect-no-queue motion-safe:md:opacity-0 motion-safe:md:intersect:animate-fade',
+      containerClass
+    )}
+  >
+    <slot />
+  </div>
+</WrapperTag>

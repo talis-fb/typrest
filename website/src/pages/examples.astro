@@ -1,0 +1,26 @@
+---
+// The examples gallery. The list and descriptions come from examples/README.md (src/lib/examples.ts).
+import PageLayout from '~/layouts/PageLayout.astro';
+import Headline from '~/components/ui/Headline.astro';
+import WidgetWrapper from '~/components/ui/WidgetWrapper.astro';
+import ExampleCard from '~/components/ExampleCard.astro';
+import { examples } from '~/lib/examples';
+import { REPO_URL, REPO_BRANCH } from '~/config';
+---
+
+<PageLayout
+  title="Examples"
+  description="Complete Typrest projects: invoices, receipts, reports, certificates, letters, and more, with their rendered PDFs."
+>
+  <WidgetWrapper containerClass="max-w-6xl">
+    <Headline
+      tagline="Examples"
+      title="Example projects"
+      subtitle={`Each example is a complete project you can run with <code>typrest serve --watch</code>. The previews are PDFs that Typrest rendered from each template's sample payload. Find them all in the <a href="${REPO_URL}/tree/${REPO_BRANCH}/examples"><code>examples/</code></a> folder.`}
+      classes={{ subtitle: 'text-lg prose-link' }}
+    />
+    <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+      {examples.map((example) => <ExampleCard example={example} detailed />)}
+    </div>
+  </WidgetWrapper>
+</PageLayout>

@@ -1,0 +1,9 @@
+---
+// Icons, manifest, theme color, and social card tags for landing pages. Starlight pages get the
+// same list through the `head` option in astro.config.mjs.
+import { headTags } from '~/lib/head';
+---
+
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+{headTags.map(({ tag: Tag, attrs }) => <Tag {...attrs} />)}
+<meta name="twitter:card" content="summary_large_image" />

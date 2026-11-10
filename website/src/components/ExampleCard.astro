@@ -1,0 +1,59 @@
+---
+// One example project: its first rendered page on paper, what it shows, and links to every
+// rendered PDF and to the source. A flat base-200 card with a 1 px border.
+import { Image } from 'astro:assets';
+import type { Example } from '~/lib/examples';
+
+export interface Props {
+  example: Example;
+  /** Shows the description and every PDF link; the home page shows a compact card. */
+  detailed?: boolean;
+}
+
+const { example, detailed = false } = Astro.props;
+const [preview] = example.renderings;
+const pageCount = (pages: number) => `${pages} ${pages === 1 ? 'page' : 'pages'}`;
+---
+
+<article class="card card-border flex h-full flex-col border-base-300 bg-base-200">
+  <a
+    href={preview?.pdf ?? example.source}
+    class="block border-b border-base-300 p-4"
+    aria-label={preview ? `Open the ${example.name} PDF` : `View the ${example.name} source`}
+  >
+    {
+      preview ? (
+        <div class="flex aspect-[4/3] items-start justify-center overflow-hidden">
+          <Image
+            src={preview.image}
+            alt={`First page of the ${example.name} example`}
+            widths={[320, 480, 640]}
+            sizes="(min-width: 1024px) 360px, (min-width: 640px) 45vw, 90vw"
+            class="max-h-full w-auto border border-base-300 bg-white object-contain object-top"
+          />
+        </div>
+      ) : (
+        <div class="flex aspect-[4/3] items-center justify-center font-mono text-sm text-muted">
+          No PDF: calls a running server
+        </div>
+      )
+    }
+  </a>
+  <div class="card-body gap-3">
+    <h3 class="font-mono text-lg font-normal">{example.name}</h3>
+    {detailed && <p class="text-muted [&_code]:font-mono [&_code]:text-[0.9em]" set:html={example.description} />}
+    <ul class="mt-auto flex flex-wrap gap-x-4 gap-y-1 text-sm">
+      {
+        (detailed ? example.renderings : example.renderings.slice(0, 1)).map(({ template, pdf, pages }) => (
+          <li>
+            <a class="prose-link" href={pdf}>
+              {detailed && example.renderings.length > 1 ? `${template}.pdf` : 'PDF'}
+            </a>
+            <span class="text-muted"> · {pageCount(pages)}</span>
+          </li>
+        ))
+      }
+      <li><a class="prose-link" href={example.source}>Source</a></li>
+    </ul>
+  </div>
+</article>

@@ -4,3 +4,5 @@ Guides explain how to work on Typrest. They define no requirements or requiremen
 
 - [Testing guide](testing.md): validation commands, test placement, and snapshot policy.
 - [Web UI development guide](webui.md): enabling the UI, the Vite workflow, and troubleshooting.
+- [Website development guide](website.md): the public site, docs and brand sync, example previews,
+  deployment, and analytics.

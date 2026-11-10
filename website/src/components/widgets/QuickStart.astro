@@ -1,0 +1,72 @@
+---
+// Numbered quick start steps with Plex Mono command blocks. Adapted from AstroWind's Steps and
+// QuickStart widgets; the copy button is AstroWind's, restyled with daisyUI.
+import { Icon } from 'astro-icon/components';
+import Headline from '~/components/ui/Headline.astro';
+import WidgetWrapper from '~/components/ui/WidgetWrapper.astro';
+
+export interface Props {
+  id?: string;
+  title?: string;
+  subtitle?: string;
+  tagline?: string;
+  steps: { title: string; description?: string; label: string; code: string }[];
+}
+
+const { id, title, subtitle, tagline, steps } = Astro.props;
+---
+
+<WidgetWrapper id={id} containerClass="max-w-4xl">
+  <Headline title={title} subtitle={subtitle} tagline={tagline} />
+  <ol class="space-y-10">
+    {
+      steps.map(({ title: stepTitle, description, label, code }, index) => (
+        <li class="grid gap-4 md:grid-cols-[2.5rem_1fr]">
+          <span
+            class="flex h-10 w-10 items-center justify-center rounded-box border border-base-300 font-display-brand text-lg"
+            aria-hidden="true"
+          >
+            {index + 1}
+          </span>
+          <div class="min-w-0">
+            <h3 class="text-xl text-heading">{stepTitle}</h3>
+            {description && <p class="prose-link mt-1 text-muted" set:html={description} />}
+            <tp-copy class="mt-4 block" data-text={code}>
+              <div class="overflow-hidden rounded-box border border-base-300 bg-base-200">
+                <div class="flex items-center justify-between border-b border-base-300 px-4 py-1.5">
+                  <span class="font-mono text-xs text-muted">{label}</span>
+                  <button type="button" class="btn btn-ghost btn-xs" data-copy hidden>
+                    <Icon name="tabler:copy" class="h-4 w-4" />
+                    <span data-copy-text>Copy</span>
+                  </button>
+                </div>
+                <pre class="overflow-x-auto p-4 font-mono text-sm leading-relaxed"><code>{code}</code></pre>
+              </div>
+            </tp-copy>
+          </div>
+        </li>
+      ))
+    }
+  </ol>
+  <slot />
+</WidgetWrapper>
+
+<script>
+  class TpCopy extends HTMLElement {
+    connectedCallback() {
+      const button = this.querySelector<HTMLButtonElement>('[data-copy]');
+      const label = this.querySelector('[data-copy-text]');
+      if (!button || !label || !navigator.clipboard) return;
+      button.hidden = false;
+      button.addEventListener('click', async () => {
+        await navigator.clipboard.writeText(this.dataset.text ?? '');
+        label.textContent = 'Copied';
+        setTimeout(() => (label.textContent = 'Copy'), 2000);
+      });
+    }
+  }
+
+  if (!customElements.get('tp-copy')) {
+    customElements.define('tp-copy', TpCopy);
+  }
+</script>

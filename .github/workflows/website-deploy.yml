@@ -1,0 +1,48 @@
+name: Deploy website
+
+# Builds website/ and deploys it to Cloudflare Workers static assets. The site also reads brand/,
+# docs/, and examples/README.md, so changes there redeploy it. See docs/development/website.md.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - website/**
+      - brand/**
+      - docs/**
+      - examples/README.md
+      - .github/workflows/website-deploy.yml
+  workflow_dispatch:
+
+concurrency:
+  group: website-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: website
+      url: https://typrest.talison.dev
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+      - run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Deploy to Cloudflare
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: website
+          wranglerVersion: 4.160.0
+          command: deploy

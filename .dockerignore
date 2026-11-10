@@ -4,3 +4,5 @@ target/
 .codex/
 webui/node_modules
 **/.typrest
+brand/
+website/

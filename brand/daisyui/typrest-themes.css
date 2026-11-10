@@ -1,0 +1,82 @@
+/*
+ * Typrest — daisyUI 5 themes (Tailwind CSS 4)
+ * Import after `@plugin "daisyui";`.
+ * The themes are named `light` and `dark` on purpose: Starlight sets
+ * <html data-theme="light|dark">, so its theme toggle also switches daisyUI.
+ * For the Web UI, set data-theme="light" or "dark" on <html> the same way.
+ */
+@plugin "daisyui/theme" {
+  name: "light";
+  default: true;
+  prefersdark: false;
+  color-scheme: light;
+
+  --color-base-100: #f9f6f0;
+  --color-base-200: #f4efe6;
+  --color-base-300: #e6dfd2;
+  --color-base-content: #16130f;
+
+  --color-primary: #16130f;          /* primary actions are ink, not red */
+  --color-primary-content: #f4efe6;
+  --color-secondary: #4a453e;
+  --color-secondary-content: #f4efe6;
+  --color-accent: #b82c16;           /* brand red: links, highlights, the type-dot */
+  --color-accent-content: #ffffff;
+  --color-neutral: #2c2823;
+  --color-neutral-content: #f4efe6;
+
+  --color-info: #2f5d8a;    --color-info-content: #ffffff;
+  --color-success: #4f7a3a; --color-success-content: #ffffff;
+  --color-warning: #c98a1b; --color-warning-content: #16130f;
+  --color-error: #b3243b;   --color-error-content: #ffffff;
+
+  --radius-selector: 0.25rem;
+  --radius-field: 0.25rem;
+  --radius-box: 0.375rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
+@plugin "daisyui/theme" {
+  name: "dark";
+  default: false;
+  prefersdark: true;
+  color-scheme: dark;
+
+  --color-base-100: #1a1714;
+  --color-base-200: #221e1a;
+  --color-base-300: #2c2823;
+  --color-base-content: #ede6da;
+
+  --color-primary: #ede6da;
+  --color-primary-content: #16130f;
+  --color-secondary: #a9a193;
+  --color-secondary-content: #16130f;
+  --color-accent: #e7765a;
+  --color-accent-content: #16130f;
+  --color-neutral: #3a352f;
+  --color-neutral-content: #ede6da;
+
+  --color-info: #93b6da;    --color-info-content: #16130f;
+  --color-success: #a8c98f; --color-success-content: #16130f;
+  --color-warning: #e9c77e; --color-warning-content: #16130f;
+  --color-error: #e58595;   --color-error-content: #16130f;
+
+  --radius-selector: 0.25rem;
+  --radius-field: 0.25rem;
+  --radius-box: 0.375rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
+@theme {
+  --font-sans: "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --font-display: "Fraunces Variable", "Fraunces", Georgia, serif;
+}

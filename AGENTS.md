@@ -15,6 +15,9 @@ prepared, and warm-compiled into an in-memory registry before the server listens
 - `crates/typrest`: the application package, with private modules for CLI commands, project
   loading, package resolution, watch mode, HTTP, and diagnostics;
 - `webui`: optional Svelte development UI and committed production assets;
+- `website`: the public Astro site (landing pages, examples gallery, and docs generated from
+  `docs/`), deployed to `typrest.talison.dev`;
+- `brand`: the brand kit (logos, colors, type, daisyUI and Starlight themes, icons), the only copy;
 - `examples`: complete example projects, each with its own `typrest.toml`; the index is
   [`examples/README.md`](examples/README.md), the only file to update when adding one.
 
@@ -34,6 +37,7 @@ relevant document before changing code:
 | HTTP routes, handlers, or errors | [`docs/specs/http-api.md`](docs/specs/http-api.md), [`docs/specs/diagnostics.md`](docs/specs/diagnostics.md) |
 | Logging or process streams | [`docs/specs/logging.md`](docs/specs/logging.md) |
 | Web UI | [`docs/specs/webui.md`](docs/specs/webui.md), [`docs/development/webui.md`](docs/development/webui.md) |
+| Branding or site design | [`brand/README.md`](brand/README.md), [`docs/development/website.md`](docs/development/website.md) |
 | Tests | [`docs/development/testing.md`](docs/development/testing.md) |
 
 Before a non-trivial change, read the specification and architecture document for the area, and
@@ -131,6 +135,18 @@ npm run build
 
 `webui/dist` is committed and embedded in the application. Any frontend source change is incomplete
 until the production build is regenerated and reviewed. Do not hand-edit generated files.
+
+For website changes, and for documentation changes, which the site publishes:
+
+```bash
+cd website
+npm ci
+npm run check
+npm run build
+```
+
+The build fails on a broken docs link. Rerun `scripts/render-website-examples.sh` when an example
+template or payload changes; see [`docs/development/website.md`](docs/development/website.md).
 
 For documentation changes: `python3 scripts/check-doc-links.py` and `git diff --check`.
 

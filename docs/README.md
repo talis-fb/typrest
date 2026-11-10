@@ -21,6 +21,8 @@ use this page to find the smallest relevant one before changing code or a public
 | Change the Typst integration or upgrade Typst | [Compiler architecture](architecture/compiler.md) |
 | Add or update tests | [Testing guide](development/testing.md) |
 | Use or develop the Web UI | [Web UI development guide](development/webui.md) |
+| Change the public website | [Website development guide](development/website.md) |
+| Apply the brand: logos, colors, type, themes | [Brand kit](../brand/README.md) |
 | Understand why a costly choice was made | [Architectural decision records](adr/README.md) |
 | Plan multi-step work | [Implementation plans](plans/README.md) |
 | Check delivered and planned work | [`ROADMAP.md`](../ROADMAP.md) |

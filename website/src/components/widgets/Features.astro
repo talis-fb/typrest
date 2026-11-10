@@ -1,0 +1,32 @@
+---
+// Feature grid with type-dot markers. Adapted from AstroWind's Features widget.
+import Headline from '~/components/ui/Headline.astro';
+import WidgetWrapper from '~/components/ui/WidgetWrapper.astro';
+
+export interface Props {
+  id?: string;
+  title?: string;
+  subtitle?: string;
+  tagline?: string;
+  items: { title: string; description: string }[];
+}
+
+const { id, title, subtitle, tagline, items } = Astro.props;
+---
+
+<WidgetWrapper id={id} containerClass="max-w-6xl">
+  <Headline title={title} subtitle={subtitle} tagline={tagline} />
+  <ul class="mx-auto grid gap-x-10 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
+    {
+      items.map(({ title: itemTitle, description }) => (
+        <li class="intersect-once motion-safe:md:opacity-0 motion-safe:md:intersect:animate-fade">
+          <h3 class="flex items-baseline gap-3 text-xl text-heading">
+            <span class="type-dot" aria-hidden="true" />
+            {itemTitle}
+          </h3>
+          <p class="prose-link mt-2 pl-[calc(0.45em+0.75rem)] text-muted" set:html={description} />
+        </li>
+      ))
+    }
+  </ul>
+</WidgetWrapper>

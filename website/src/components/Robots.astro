@@ -1,0 +1,7 @@
+---
+// Keeps the site out of search engines until SITE_INDEXABLE is set. robots.txt follows the same
+// flag (src/pages/robots.txt.ts).
+import { SITE_INDEXABLE } from '~/config';
+---
+
+{!SITE_INDEXABLE && <meta name="robots" content="noindex, nofollow" />}
