@@ -1,0 +1,92 @@
+---
+// Home hero: the value proposition in Fraunces, an ink primary action, and the JSON-to-PDF
+// visual. The payload excerpt is built from the invoice example's real payload.json, and the
+// page beside it is that payload's rendered first page.
+import { Image } from 'astro:assets';
+import { Icon } from 'astro-icon/components';
+import invoicePayload from '../../../../examples/invoice/templates/invoice/payload.json';
+import { examples } from '~/lib/examples';
+
+const invoice = examples.find(({ name }) => name === 'invoice')?.renderings[0];
+
+const { number, issue_date, currency, customer, items } = invoicePayload;
+const [firstItem] = items;
+const excerpt = {
+  number,
+  issue_date,
+  currency,
+  customer: { name: customer.name },
+  items: [{ name: firstItem.name, quantity: firstItem.quantity, unit_price: firstItem.unit_price }],
+};
+// Pretty-print, then mark the omitted fields and items with an ellipsis.
+const payloadText = JSON.stringify(excerpt, null, 2)
+  .replace(/\n(\s*)}\n(\s*)]/, '\n$1},\n$1…\n$2]')
+  .replace(/\n}$/, ',\n  …\n}');
+---
+
+<section class="relative">
+  <div class="mx-auto max-w-7xl px-4 sm:px-6">
+    <div class="grid items-center gap-12 py-12 md:py-20 lg:grid-cols-[1fr_1.25fr]">
+      <div class="intersect-once intersect-quarter motion-safe:md:opacity-0 motion-safe:md:intersect:animate-fade">
+        <p class="mb-4 inline-flex items-center gap-2 text-sm font-medium uppercase tracking-wider text-muted">
+          <span class="type-dot" aria-hidden="true"></span>
+          PDF generation over HTTP
+        </p>
+        <h1 class="text-5xl leading-[1.05] text-heading text-balance md:text-6xl">JSON in, PDF out.</h1>
+        <p class="mt-6 max-w-xl text-xl text-muted text-pretty">
+          Typrest validates JSON against your schema, renders a <a class="prose-link" href="https://typst.app/"
+            >Typst</a
+          > template, and returns the PDF. Every template compiles before the server listens, so a broken one stops
+          the deploy instead of a customer's invoice.
+        </p>
+        <div class="mt-8 flex flex-col gap-3 sm:flex-row">
+          <a class="btn btn-primary" href="/docs/getting-started/">Get started</a>
+          <a class="btn btn-outline" href="/examples/">See the examples</a>
+        </div>
+      </div>
+
+      <div
+        class="intersect-once intersect-quarter intersect-no-queue motion-safe:md:opacity-0 motion-safe:md:intersect:animate-fade"
+      >
+        <div class="grid items-center gap-4 sm:grid-cols-[1.5fr_auto_1fr]">
+          <figure class="min-w-0 overflow-hidden rounded-box border border-base-300 bg-base-200">
+            <figcaption
+              class="flex items-center justify-between border-b border-base-300 px-4 py-2 font-mono text-xs text-muted"
+            >
+              <span>POST /invoice</span>
+              <span>application/json</span>
+            </figcaption>
+            <pre class="whitespace-pre-wrap p-4 font-mono text-[0.75rem] leading-relaxed xl:text-[0.8rem]"><code>{payloadText}</code></pre>
+          </figure>
+          <Icon
+            name="tabler:arrow-right"
+            class="mx-auto h-6 w-6 rotate-90 text-muted sm:rotate-0"
+            aria-label="returns"
+          />
+          {
+            invoice && (
+              <figure class="min-w-0">
+                <a
+                  href={invoice.pdf}
+                  class="block overflow-hidden rounded-box border border-base-300 bg-base-200 p-3"
+                  aria-label="Open the rendered invoice PDF"
+                >
+                  <Image
+                    src={invoice.image}
+                    alt="First page of the invoice rendered from this payload"
+                    widths={[320, 480, 640]}
+                    sizes="(min-width: 1024px) 320px, (min-width: 640px) 45vw, 90vw"
+                    loading="eager"
+                    fetchpriority="high"
+                    class="w-full border border-base-300 bg-white"
+                  />
+                </a>
+                <figcaption class="mt-2 text-center font-mono text-xs text-muted">200 · application/pdf</figcaption>
+              </figure>
+            )
+          }
+        </div>
+      </div>
+    </div>
+  </div>
+</section>

@@ -1,0 +1,97 @@
+/*
+ * Landing pages only (src/pages). Adapted from AstroWind's tailwind.css: AstroWind's own palette
+ * and its btn utilities are gone; colors come from the daisyUI brand themes through the --aw-*
+ * variables in CustomStyles.astro, and buttons are daisyUI's.
+ */
+@layer base, starlight, theme, components, utilities;
+
+@import 'tailwindcss/preflight.css' layer(base);
+@import './global.css';
+
+@custom-variant intersect (&:not([no-intersect]));
+
+@theme {
+  --color-heading: var(--aw-color-text-heading);
+  --color-default: var(--aw-color-text-default);
+  --color-muted: var(--aw-color-text-muted);
+  --color-link: var(--aw-color-link);
+
+  --font-heading: var(--aw-font-heading);
+
+  --animate-fade: fadeInUp 0.5s both;
+
+  @keyframes fadeInUp {
+    0% {
+      opacity: 0;
+      transform: translateY(0.75rem);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
+
+@utility bg-page {
+  background-color: var(--aw-color-bg-page);
+}
+
+@utility text-page {
+  color: var(--aw-color-text-default);
+}
+
+@utility text-muted {
+  color: var(--aw-color-text-muted);
+}
+
+/* Display type: Fraunces at the brand weight, as in brand/starlight/typrest.css. */
+@utility font-display-brand {
+  font-family: var(--font-display);
+  font-weight: 560;
+  font-variation-settings:
+    'SOFT' 0,
+    'WONK' 0;
+  letter-spacing: -0.01em;
+}
+
+/* The type-dot: the brand-red square, the site's one decorative motif. */
+@utility type-dot {
+  display: inline-block;
+  flex: none;
+  width: 0.45em;
+  height: 0.45em;
+  background-color: var(--color-accent);
+}
+
+@layer base {
+  :where(h1, h2, h3) {
+    font-family: var(--font-display);
+    font-weight: 560;
+    font-variation-settings:
+      'SOFT' 0,
+      'WONK' 0;
+  }
+
+  /* Links in running text are accent red; nav and buttons opt out by not using .prose-link. */
+  .prose-link a,
+  a.prose-link {
+    color: var(--color-accent);
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
+  }
+}
+
+/* Sticky header: a solid page background and a 1px rule once the page scrolls. Flat style. */
+#header.scroll > div:first-child {
+  background-color: var(--aw-color-bg-page);
+  border-bottom: 1px solid var(--color-base-300);
+}
+
+#header.expanded nav {
+  position: fixed;
+  top: 70px;
+  left: 0;
+  right: 0;
+  bottom: 70px !important;
+  padding: 0 5px;
+}

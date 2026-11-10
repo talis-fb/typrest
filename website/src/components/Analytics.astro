@@ -1,0 +1,19 @@
+---
+// Cloudflare Web Analytics, installed as a manual snippet (automatic injection is off for the
+// hostname, so visits are not counted twice). Loaded by the landing layout and by the Starlight
+// Head override. Swapping providers means changing this file only.
+import { ANALYTICS_TOKEN } from '~/config';
+
+const enabled = import.meta.env.PROD && ANALYTICS_TOKEN !== '';
+---
+
+{
+  enabled && (
+    <script
+      is:inline
+      defer
+      src="https://static.cloudflareinsights.com/beacon.min.js"
+      data-cf-beacon={JSON.stringify({ token: ANALYTICS_TOKEN })}
+    />
+  )
+}

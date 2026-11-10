@@ -1,0 +1,107 @@
+---
+title: Getting started
+description: Build Typrest from source or as a container image, then render your first PDF.
+---
+
+import { Aside, Code, Steps, TabItem, Tabs } from '@astrojs/starlight/components';
+import { REPO_URL, repoFile } from '~/config';
+
+export const clone = `git clone ${REPO_URL}.git
+cd typrest`;
+
+Typrest runs from a clone of the repository: there is no published binary, crate, or container
+image yet. Pick one way to run it, then send it JSON.
+
+<Tabs syncKey="install">
+<TabItem label="From source">
+
+You need a Rust toolchain that supports edition 2024 (Rust 1.85 or newer) and `curl`.
+
+<Steps>
+
+1. Clone the repository and build Typrest:
+
+   <Code lang="bash" code={`${clone}\ncargo build --release`} />
+
+2. Create a project with one template, and check that it compiles:
+
+   ```bash
+   TYPREST_BIN="$PWD/target/release/typrest"
+   "$TYPREST_BIN" init /tmp/typrest-demo
+   cd /tmp/typrest-demo
+   "$TYPREST_BIN" check
+   ```
+
+3. Start the server on the loopback interface:
+
+   ```bash
+   "$TYPREST_BIN" serve --hostname 127.0.0.1
+   ```
+
+4. In another terminal, render the generated `hello-world` template:
+
+   ```bash
+   curl -X POST http://127.0.0.1:8080/hello-world \
+     -H 'Content-Type: application/json' \
+     --data '{"name":"Ada"}' \
+     --output hello-world.pdf
+   ```
+
+</Steps>
+
+</TabItem>
+<TabItem label="With Docker">
+
+You need Docker (or Podman) and `curl`. The image builds Typrest from source and serves the
+bundled `examples/minimal` project.
+
+<Steps>
+
+1. Clone the repository and build the image:
+
+   <Code lang="bash" code={`${clone}\ndocker build -t typrest .`} />
+
+2. Start the container. The port is published on the loopback interface only:
+
+   ```bash
+   docker run --rm -p 127.0.0.1:8080:8080 typrest
+   ```
+
+3. In another terminal, from the repository root, render the `hello` template:
+
+   ```bash
+   curl -X POST http://127.0.0.1:8080/hello \
+     -H 'Content-Type: application/json' \
+     --data @examples/minimal/templates/hello/payload.json \
+     --output hello.pdf
+   ```
+
+</Steps>
+
+To serve your own project, mount the folder that contains `typrest.toml` over `/project`:
+
+```bash
+docker run --rm -p 127.0.0.1:8080:8080 -v "$PWD:/project" typrest
+```
+
+</TabItem>
+</Tabs>
+
+Open the PDF you just wrote. A request that breaks the template's schema gets a `422` with the
+path of each invalid field instead of a PDF; see the
+[HTTP API specification](/docs/specs/http-api/).
+
+<Aside type="caution" title="Keep it on loopback">
+Typrest has no authentication. Bind it to `127.0.0.1`, as above, or put it behind a trusted
+boundary.
+</Aside>
+
+## Next steps
+
+- Write your own templates: the [template layout](/docs/specs/templates/) and
+  [`schema.yml` v1](/docs/specs/schema-v1/) specifications.
+- Browse the [examples](/examples/), each a complete project you can serve.
+- Edit and preview templates live with `serve --watch` and the development Web UI; see the
+  [Web UI specification](/docs/specs/webui/).
+- Read the <a href={repoFile('README.md')}>README</a> for the CLI, the HTTP API, and Docker
+  Compose.

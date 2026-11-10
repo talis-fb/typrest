@@ -1,0 +1,12 @@
+/* Brand typefaces, self-hosted through Fontsource. Loaded first on every page. */
+
+/* The opsz entry carries the optical-size and weight axes; the default entry has weight only. */
+@import '@fontsource-variable/fraunces/opsz.css';
+
+/* 600 is included so <strong> is not synthesized. */
+@import '@fontsource/ibm-plex-sans/400.css';
+@import '@fontsource/ibm-plex-sans/400-italic.css';
+@import '@fontsource/ibm-plex-sans/500.css';
+@import '@fontsource/ibm-plex-sans/600.css';
+
+@import '@fontsource/ibm-plex-mono/400.css';

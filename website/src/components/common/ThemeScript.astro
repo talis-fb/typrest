@@ -1,0 +1,18 @@
+---
+// Applies the color theme before first paint. Mirrors Starlight's ThemeProvider: the same
+// `starlight-theme` key and values, so a choice made on a landing page carries over to /docs and
+// back. An empty or missing value means "auto" and follows prefers-color-scheme.
+---
+
+<script is:inline>
+  (() => {
+    let stored = '';
+    try {
+      stored = localStorage.getItem('starlight-theme') || '';
+    } catch {
+      // Storage can be blocked; fall back to the system preference.
+    }
+    const theme = stored || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+    document.documentElement.dataset.theme = theme === 'light' ? 'light' : 'dark';
+  })();
+</script>

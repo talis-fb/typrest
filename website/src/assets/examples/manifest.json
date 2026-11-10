@@ -1,0 +1,102 @@
+{
+  "certificate": [
+    {
+      "template": "certificate",
+      "pdf": "certificate/certificate.pdf",
+      "image": "certificate/certificate.png",
+      "pages": 1
+    }
+  ],
+  "i18n": [
+    {
+      "template": "statement",
+      "pdf": "i18n/statement.pdf",
+      "image": "i18n/statement.png",
+      "pages": 1
+    }
+  ],
+  "invoice": [
+    {
+      "template": "invoice",
+      "pdf": "invoice/invoice.pdf",
+      "image": "invoice/invoice.png",
+      "pages": 1
+    }
+  ],
+  "letters": [
+    {
+      "template": "letters/formal",
+      "pdf": "letters/letters-formal.pdf",
+      "image": "letters/letters-formal.png",
+      "pages": 1
+    },
+    {
+      "template": "letters/notice",
+      "pdf": "letters/letters-notice.pdf",
+      "image": "letters/letters-notice.png",
+      "pages": 1
+    },
+    {
+      "template": "letters/welcome",
+      "pdf": "letters/letters-welcome.pdf",
+      "image": "letters/letters-welcome.png",
+      "pages": 1
+    }
+  ],
+  "minimal": [
+    {
+      "template": "hello",
+      "pdf": "minimal/hello.pdf",
+      "image": "minimal/hello.png",
+      "pages": 1
+    }
+  ],
+  "packages": [
+    {
+      "template": "sales-chart",
+      "pdf": "packages/sales-chart.pdf",
+      "image": "packages/sales-chart.png",
+      "pages": 1
+    }
+  ],
+  "receipt": [
+    {
+      "template": "receipt",
+      "pdf": "receipt/receipt.pdf",
+      "image": "receipt/receipt.png",
+      "pages": 1
+    }
+  ],
+  "report": [
+    {
+      "template": "report",
+      "pdf": "report/report.pdf",
+      "image": "report/report.png",
+      "pages": 6
+    }
+  ],
+  "resume": [
+    {
+      "template": "resume",
+      "pdf": "resume/resume.pdf",
+      "image": "resume/resume.png",
+      "pages": 1
+    }
+  ],
+  "schema-showcase": [
+    {
+      "template": "schema-demo",
+      "pdf": "schema-showcase/schema-demo.pdf",
+      "image": "schema-showcase/schema-demo.png",
+      "pages": 1
+    }
+  ],
+  "ticket": [
+    {
+      "template": "ticket",
+      "pdf": "ticket/ticket.pdf",
+      "image": "ticket/ticket.png",
+      "pages": 1
+    }
+  ]
+}

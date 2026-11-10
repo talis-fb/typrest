@@ -77,6 +77,16 @@ rendered over HTTP with payload validation and structured diagnostics.
 - [x] Docker and Compose quickstart in `README.md`
 - [x] Container check (`scripts/check-container.sh`) run by the CI `container` job
 
+### Website and Brand
+
+- [x] Brand kit in `brand/`, the only copy of logos, colors, type, themes, and icons
+- [x] Static Astro site in `website/`: landing page, examples gallery, Getting Started, and docs
+  generated from `docs/specs/` and `docs/architecture/` (see
+  [`docs/development/website.md`](docs/development/website.md))
+- [x] Pre-rendered example PDFs and previews from `scripts/render-website-examples.sh`
+- [x] CI `website` job that validates the site, and manual deployment to Cloudflare Workers
+- [x] Cloudflare Web Analytics without click tracking, and `noindex` until launch
+
 ## Active Follow-up Work
 
 ### Documentation Maintenance
@@ -88,6 +98,13 @@ rendered over HTTP with payload validation and structured diagnostics.
   guides, a pruned ADR set, and implementation plans (see [`docs/README.md`](docs/README.md))
 - [ ] Keep specifications and examples synchronized in every future behavior change
 - [x] Run `scripts/check-doc-links.py` in CI, together with the Web UI build and `webui/dist` drift check
+
+### Website Launch
+
+- [ ] Web Analytics token, then a first manual deployment to `typrest.talison.dev`
+- [ ] Make the repository public, set `SITE_INDEXABLE` to `true`, and redeploy
+- [ ] Repository homepage URL and social preview (`brand/social/social-card.png`)
+- [ ] Web UI on the brand themes and fonts, then a new Web UI screenshot for the site
 
 ### Render Execution Follow-ups
 

@@ -1,0 +1,19 @@
+---
+// The horizontal logo. The inverse file is shown on the dark theme, as brand/README.md requires
+// on backgrounds darker than ink-400. Never below 96 px wide.
+import logo from '@brand/logos/typrest-logo-horizontal.svg';
+import logoInverse from '@brand/logos/typrest-logo-horizontal-inverse.svg';
+
+export interface Props {
+  /** Rendered height in pixels. The logo is about 3.9 times as wide as it is tall. */
+  height?: number;
+}
+
+const { height = 32 } = Astro.props;
+const width = Math.round((height * logo.width) / logo.height);
+---
+
+<span class="inline-flex">
+  <img src={logo.src} width={width} height={height} alt="Typrest" class="dark:hidden" />
+  <img src={logoInverse.src} width={width} height={height} alt="Typrest" class="hidden dark:block" />
+</span>

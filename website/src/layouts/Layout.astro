@@ -1,0 +1,52 @@
+---
+// Base layout for landing pages. Adapted from AstroWind: Inter, the AstroWind config
+// integration, astro-seo, and view transitions are gone; the head carries the same icons, social
+// tags, robots, and analytics as Starlight pages.
+import '~/styles/fonts.css';
+import '~/styles/landing.css';
+
+import { SITE_NAME, SITE_DESCRIPTION, SITE_URL } from '~/config';
+import CustomStyles from '~/components/CustomStyles.astro';
+import HeadMeta from '~/components/HeadMeta.astro';
+import ThemeScript from '~/components/common/ThemeScript.astro';
+import Robots from '~/components/Robots.astro';
+import Analytics from '~/components/Analytics.astro';
+import Intersect from '~/components/common/Intersect.astro';
+
+export interface Props {
+  /** Page title; the site name is appended unless this is the home page. */
+  title?: string;
+  description?: string;
+}
+
+const { title, description = SITE_DESCRIPTION } = Astro.props;
+const fullTitle = title ? `${title} | ${SITE_NAME}` : `${SITE_NAME}: JSON in, PDF out`;
+const canonical = new URL(Astro.url.pathname, SITE_URL).href;
+---
+
+<!doctype html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{fullTitle}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <meta property="og:title" content={fullTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:site_name" content={SITE_NAME} />
+    <meta property="og:locale" content="en" />
+    <HeadMeta />
+    <Robots />
+    <ThemeScript />
+    <CustomStyles />
+    <Analytics />
+  </head>
+
+  <body class="flex min-h-screen flex-col bg-page font-sans text-default antialiased">
+    <slot />
+    <Intersect />
+  </body>
+</html>

@@ -1,0 +1,26 @@
+/*
+ * Tailwind, daisyUI, and the brand themes, shared by the landing pages and Starlight.
+ *
+ * Starlight loads this file through `customCss`, so it follows @astrojs/starlight-tailwind's
+ * layout: no Preflight (it would reset Starlight's lists and headings), and Starlight's own
+ * styles sit in a layer between Tailwind's base and its utilities. The landing pages add
+ * Preflight in landing.css.
+ */
+@layer base, starlight, theme, components, utilities;
+
+@import '@astrojs/starlight-tailwind';
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
+
+/*
+ * Only the landing sources emit classes. Prose under src/content (words such as "card",
+ * "collapse", or "table") must not generate daisyUI components that would also match Starlight
+ * markup. The generated docs are gitignored, so Tailwind already skips them.
+ */
+@source not '../content';
+
+@plugin 'daisyui';
+@import '../../../brand/daisyui/typrest-themes.css';
+
+/* Starlight and the landing theme script both set data-theme on <html>. */
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));

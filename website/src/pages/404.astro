@@ -1,0 +1,19 @@
+---
+// Site-wide 404 page; Starlight's own 404 route is disabled in astro.config.mjs.
+import PageLayout from '~/layouts/PageLayout.astro';
+---
+
+<PageLayout title="Page not found">
+  <section class="mx-auto flex max-w-xl flex-col items-center px-4 py-24 text-center">
+    <p class="mb-4 inline-flex items-center gap-2 font-mono text-sm text-muted">
+      <span class="type-dot" aria-hidden="true"></span>
+      404
+    </p>
+    <h1 class="text-4xl text-heading md:text-5xl">This page was not found</h1>
+    <p class="mt-4 text-lg text-muted">The link may be old, or the page may have moved.</p>
+    <div class="mt-8 flex flex-col gap-3 sm:flex-row">
+      <a class="btn btn-primary" href="/">Go to the home page</a>
+      <a class="btn btn-outline" href="/docs/">Read the docs</a>
+    </div>
+  </section>
+</PageLayout>

@@ -1,0 +1,50 @@
+---
+title: Documentation
+description: Start here to run Typrest, then read the specifications and architecture notes.
+editUrl: false
+---
+
+import { LinkCard } from '@astrojs/starlight/components';
+import { REPO_URL, REPO_BRANCH } from '~/config';
+
+Typrest is an HTTP service that validates JSON payloads, renders [Typst](https://typst.app/)
+templates, and returns PDF bytes. New to it? Start with the quick start.
+
+<LinkCard
+  title="Getting started"
+  description="Build Typrest from source or with Docker and render your first PDF."
+  href="/docs/getting-started/"
+/>
+
+## Reference
+
+The **specifications** are the contract: each requirement has a stable ID such as `REQ-HTTP-020`
+that the code and tests cite. The **architecture** pages describe how Typrest is built today.
+Both are published from the <a href={`${REPO_URL}/tree/${REPO_BRANCH}/docs`}><code>docs/</code></a>
+folder of the repository.
+
+<LinkCard
+  title="CLI"
+  description="init, check, serve, project discovery, and global options."
+  href="/docs/specs/cli/"
+/>
+<LinkCard
+  title="Template layout"
+  description="How templates are discovered and bundled, and how they use fonts and packages."
+  href="/docs/specs/templates/"
+/>
+<LinkCard
+  title="schema.yml v1"
+  description="The payload schema format and its validation rules."
+  href="/docs/specs/schema-v1/"
+/>
+<LinkCard
+  title="HTTP API"
+  description="Routes, request and response contracts, and the error envelope."
+  href="/docs/specs/http-api/"
+/>
+<LinkCard
+  title="Architecture overview"
+  description="System boundary, domain vocabulary, and invariants."
+  href="/docs/architecture/overview/"
+/>

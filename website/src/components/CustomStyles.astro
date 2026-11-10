@@ -1,0 +1,27 @@
+---
+// AstroWind's widgets read the --aw-* variables. They point at the daisyUI brand tokens and the
+// brand fonts, so dark mode follows data-theme with no second palette here.
+---
+
+<style is:inline>
+  :root {
+    --aw-font-sans: var(--font-sans);
+    --aw-font-serif: var(--font-display);
+    --aw-font-heading: var(--font-display);
+
+    --aw-color-primary: var(--color-primary);
+    --aw-color-secondary: var(--color-secondary);
+    --aw-color-accent: var(--color-accent);
+    --aw-color-link: var(--color-accent);
+
+    --aw-color-text-heading: var(--color-base-content);
+    --aw-color-text-default: var(--color-base-content);
+    --aw-color-text-muted: color-mix(in oklab, var(--color-base-content) 72%, var(--color-base-100));
+    --aw-color-bg-page: var(--color-base-100);
+  }
+
+  ::selection {
+    background-color: var(--color-base-300);
+    color: var(--color-base-content);
+  }
+</style>
