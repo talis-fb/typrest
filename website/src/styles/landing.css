@@ -1,7 +1,8 @@
 /*
  * Landing pages only (src/pages). Adapted from AstroWind's tailwind.css: AstroWind's own palette
  * and its btn utilities are gone; colors come from the daisyUI brand themes through the --aw-*
- * variables in CustomStyles.astro, and buttons are daisyUI's.
+ * variables in CustomStyles.astro, and buttons are daisyUI's. The `font-display-brand` and
+ * `type-dot` utilities come from brand/daisyui/typrest-themes.css.
  */
 @layer base, starlight, theme, components, utilities;
 
@@ -42,25 +43,6 @@
 
 @utility text-muted {
   color: var(--aw-color-text-muted);
-}
-
-/* Display type: Fraunces at the brand weight, as in brand/starlight/typrest.css. */
-@utility font-display-brand {
-  font-family: var(--font-display);
-  font-weight: 560;
-  font-variation-settings:
-    'SOFT' 0,
-    'WONK' 0;
-  letter-spacing: -0.01em;
-}
-
-/* The type-dot: the brand-red square, the site's one decorative motif. */
-@utility type-dot {
-  display: inline-block;
-  flex: none;
-  width: 0.45em;
-  height: 0.45em;
-  background-color: var(--color-accent);
 }
 
 @layer base {

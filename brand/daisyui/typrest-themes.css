@@ -3,7 +3,9 @@
  * Import after `@plugin "daisyui";`.
  * The themes are named `light` and `dark` on purpose: Starlight sets
  * <html data-theme="light|dark">, so its theme toggle also switches daisyUI.
- * For the Web UI, set data-theme="light" or "dark" on <html> the same way.
+ * The Web UI sets no data-theme, so daisyUI follows the OS color scheme (`prefersdark`).
+ * The file also defines the brand fonts and two shared utilities, `font-display-brand` and
+ * `type-dot`, emitted only where used.
  */
 @plugin "daisyui/theme" {
   name: "light";
@@ -79,4 +81,23 @@
   --font-sans: "IBM Plex Sans", system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
   --font-display: "Fraunces Variable", "Fraunces", Georgia, serif;
+}
+
+/* Display type: Fraunces at the brand weight, as in brand/starlight/typrest.css. */
+@utility font-display-brand {
+  font-family: var(--font-display);
+  font-weight: 560;
+  font-variation-settings:
+    'SOFT' 0,
+    'WONK' 0;
+  letter-spacing: -0.01em;
+}
+
+/* The type-dot: the brand-red square, the brand's one decorative motif. */
+@utility type-dot {
+  display: inline-block;
+  flex: none;
+  width: 0.45em;
+  height: 0.45em;
+  background-color: var(--color-accent);
 }

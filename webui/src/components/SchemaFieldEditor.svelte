@@ -81,7 +81,7 @@
   }
 </script>
 
-<fieldset class="rounded-xl border border-base-300 bg-base-100 p-3">
+<fieldset class="rounded-box border border-base-300 bg-base-100 p-3">
   <legend class="px-1 text-sm font-semibold">
     {name}
     {#if field.required}
@@ -90,7 +90,7 @@
   </legend>
 
   {#if !field.required}
-    <label class="mb-3 flex cursor-pointer items-center gap-2 text-xs text-base-content/65">
+    <label class="mb-3 flex cursor-pointer items-center gap-2 text-xs text-base-content/70">
       <input
         class="checkbox checkbox-primary checkbox-xs"
         type="checkbox"
@@ -137,7 +137,7 @@
         <p class="mt-1 text-xs text-error" role="alert">{scalarError}</p>
       {/if}
     {:else if field.type === "boolean"}
-      <label class="flex cursor-pointer items-center gap-3 rounded-lg bg-base-200 px-3 py-2">
+      <label class="flex cursor-pointer items-center gap-3 rounded-field bg-base-200 px-3 py-2">
         <input
           class="toggle toggle-primary"
           type="checkbox"
@@ -147,7 +147,7 @@
         <span class="text-sm">{value === true ? "true" : "false"}</span>
       </label>
     {:else if field.type === "null"}
-      <div class="rounded-lg bg-base-200 px-3 py-2 font-mono text-sm text-base-content/60">null</div>
+      <div class="rounded-field bg-base-200 px-3 py-2 font-mono text-sm text-base-content/60">null</div>
     {:else if field.type === "object"}
       <div class="space-y-3">
         {#each Object.entries(field.properties ?? {}) as [propertyName, property]}
@@ -163,7 +163,7 @@
           />
         {/each}
         {#if Object.keys(field.properties ?? {}).length === 0}
-          <p class="text-sm text-base-content/55">This object has no declared properties.</p>
+          <p class="text-sm text-base-content/60">This object has no declared properties.</p>
         {/if}
       </div>
     {:else}

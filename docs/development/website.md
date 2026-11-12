@@ -140,8 +140,8 @@ packages on their first run; `clients` has no templates and is skipped.
 
 The output is committed so site builds need no Rust toolchain. Previews can therefore drift from
 the templates: rerun the script and commit the result when a template, payload, or the Web UI
-changes. The screenshot shows the Web UI's current styling, so retake it after the Web UI adopts
-the brand themes.
+changes. The script reuses an existing `target/release/typrest`, which embeds `webui/dist`, so
+rebuild it first after a Web UI change.
 
 ## Deployment
 

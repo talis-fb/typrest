@@ -87,6 +87,21 @@ Responsibilities:
 Use semantic HTML, Tailwind utilities, and DaisyUI classes. Do not add server-side rendering, a
 frontend router, or a Svelte-specific component library.
 
+### Styling
+
+The look comes from the [brand kit](../../brand/README.md), the same as the public site:
+
+- `src/app.css` imports `brand/daisyui/typrest-themes.css`, which holds the `light` and `dark`
+  themes, the font tokens, and the `font-display-brand` and `type-dot` utilities. Do not define
+  local colors or fonts; use theme classes such as `bg-base-100`, `text-accent`, and `btn-primary`.
+- `index.html` sets no `data-theme`, so the UI follows the operating system's color scheme.
+- `App.svelte` imports the horizontal logos and `index.html` the favicon from `brand/` by
+  relative path; Vite fingerprints them into `dist/assets`.
+- `src/main.ts` imports the brand fonts from Fontsource, latin subsets only, to keep the embedded
+  assets small. Other characters fall back to system fonts.
+- `vite.config.ts` aliases `daisyui` to `webui/node_modules/daisyui`, because the brand theme file
+  loads `daisyui/theme` from outside `webui/`, and allows `../brand` in the dev server.
+
 ## Local Development
 
 Install the locked dependencies once:
