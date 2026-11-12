@@ -1,0 +1,66 @@
+name: Docker
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  attestations: write
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Require stable tags to come from main
+        run: |
+          if [[ "$GITHUB_REF_NAME" != *-* ]]; then
+            git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+          fi
+      - name: Build and check the image
+        run: CHECK_IMAGE=typrest:release scripts/check-container.sh
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Compute tags
+        id: tags
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          image="${IMAGE,,}"
+          tags="$image:$version"
+          # Prerelease tags such as 0.1.0-rc.1 push only their exact version.
+          if [[ "$version" != *-* ]]; then
+            tags+=" $image:${version%.*} $image:latest"
+          fi
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "tags=$tags" >> "$GITHUB_OUTPUT"
+      - name: Push
+        id: push
+        env:
+          TAGS: ${{ steps.tags.outputs.tags }}
+        run: |
+          for tag in $TAGS; do
+            docker tag typrest:release "$tag"
+            docker push "$tag"
+          done
+          first="${TAGS%% *}"
+          digest="$(docker inspect --format '{{index .RepoDigests 0}}' "$first")"
+          echo "digest=${digest#*@}" >> "$GITHUB_OUTPUT"
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-name: ${{ steps.tags.outputs.image }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true

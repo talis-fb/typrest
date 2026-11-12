@@ -23,4 +23,6 @@ record a lasting architectural choice in an [ADR](../adr/README.md), after human
 
 ## Active plans
 
-None. Planned work is tracked in GitHub issues.
+- [Public release](public-release.md)
+
+Other planned work is tracked in GitHub issues.
