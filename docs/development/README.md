@@ -6,3 +6,5 @@ Guides explain how to work on Typrest. They define no requirements or requiremen
 - [Web UI development guide](webui.md): enabling the UI, the Vite workflow, and troubleshooting.
 - [Website development guide](website.md): the public site, docs and brand sync, example previews,
   deployment, and analytics.
+- [Releasing guide](releasing.md): version policy, the release pipeline, release candidates, and
+  the first public launch.
