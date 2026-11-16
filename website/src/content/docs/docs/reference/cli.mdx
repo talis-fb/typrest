@@ -1,0 +1,85 @@
+---
+title: Command line
+description: Every typrest command and option.
+sidebar:
+  label: Command line
+---
+
+```text
+typrest [--log-format <pretty|json>] [--color <auto|always|never>] <command>
+
+typrest init [PATH]
+typrest check
+typrest serve [--port <PORT>] [--hostname <IPV4>] [--watch]
+typrest --version
+typrest --help
+```
+
+## `typrest init`
+
+Creates a new project.
+
+```bash
+typrest init            # in the current folder
+typrest init demo       # in a new folder named demo
+```
+
+It writes a `typrest.toml` with the Web UI turned on, and a `hello-world` template with a schema.
+It never overwrites: if the folder already has a `typrest.toml` or a `templates` folder, it stops
+with an error.
+
+## `typrest check`
+
+Checks every template in the project without starting a server.
+
+```bash
+typrest check
+```
+
+It loads the templates, downloads any Typst packages they need, and renders each one with sample
+data. It exits with `0` when all templates work, warnings included, and with `1` when any fails.
+Use it in continuous integration; see [Check and live reload](/docs/development/).
+
+## `typrest serve`
+
+Checks every template, then starts the HTTP server.
+
+```bash
+typrest serve
+typrest serve --watch
+typrest serve --hostname 0.0.0.0 --port 9000
+```
+
+| Option | Default | Meaning |
+|---|---|---|
+| `--port <PORT>` | `8080` | The port to listen on |
+| `--hostname <IPV4>` | `127.0.0.1` | The IPv4 address to listen on. `127.0.0.1` accepts connections from this machine only; `0.0.0.0` accepts them from anywhere. Names such as `localhost` are not accepted |
+| `--watch` | off | Reload templates when their files change |
+
+If any template is broken, `serve` reports it and exits with `1` without opening the port.
+
+To stop the server, press <kbd>Ctrl</kbd>+<kbd>C</kbd> or send `SIGTERM`. Typrest finishes the
+documents in progress and exits with `0`. A second signal stops it immediately.
+
+## Options for every command
+
+These go before or after the command name.
+
+| Option | Default | Meaning |
+|---|---|---|
+| `--log-format <pretty\|json>` | `pretty` | `pretty` is for people; `json` prints one JSON object per line for log collectors |
+| `--color <auto\|always\|never>` | `auto` | Whether `pretty` output uses colors. `auto` uses them when writing to a terminal |
+
+## Finding the project
+
+`check` and `serve` look for `typrest.toml` in the current folder, then in each folder above it.
+You can run them from anywhere inside a project.
+
+## Environment
+
+| Variable | Meaning |
+|---|---|
+| `RUST_LOG` | How much to log. The default is `typrest=info`; `typrest=debug` shows more |
+
+Everything else is set in [`typrest.toml`](/docs/reference/configuration/) or with the options
+above.

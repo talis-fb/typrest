@@ -60,4 +60,4 @@ easily be undone:
    `SITE_INDEXABLE = true` in `website/src/config.ts` (and update the
    [search engine notes](website.md#search-engines)), then run `npm ci`, `npm run build`, and
    `npx wrangler deploy` in `website/` from a clean checkout of `main`.
-5. Apply the approved `README.md` change.
+5. Confirm the `README.md` install command, badges, and site links work anonymously.

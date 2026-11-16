@@ -80,9 +80,8 @@ rendered over HTTP with payload validation and structured diagnostics.
 ### Website and Brand
 
 - [x] Brand kit in `brand/`, the only copy of logos, colors, type, themes, and icons
-- [x] Static Astro site in `website/`: landing page, examples gallery, Getting Started, and docs
-  generated from `docs/specs/` and `docs/architecture/` (see
-  [`docs/development/website.md`](docs/development/website.md))
+- [x] Static Astro site in `website/`: landing page, examples gallery, and a hand-written user
+  guide under `/docs` (see [`docs/development/website.md`](docs/development/website.md))
 - [x] Pre-rendered example PDFs and previews from `scripts/render-website-examples.sh`
 - [x] CI `website` job that validates the site, and manual deployment to Cloudflare Workers
 - [x] Cloudflare Web Analytics without click tracking, and `noindex` until launch

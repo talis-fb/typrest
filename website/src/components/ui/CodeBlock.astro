@@ -1,0 +1,47 @@
+---
+// Labelled Plex Mono code block with a copy button. The button is AstroWind's, restyled with
+// daisyUI; it stays hidden where the clipboard API is unavailable.
+import { Icon } from 'astro-icon/components';
+
+export interface Props {
+  /** Short caption shown above the code, such as `shell` or a file name. */
+  label: string;
+  code: string;
+  class?: string;
+}
+
+const { label, code, class: className } = Astro.props;
+---
+
+<tp-copy class:list={['block', className]} data-text={code}>
+  <div class="overflow-hidden rounded-box border border-base-300 bg-base-200">
+    <div class="flex items-center justify-between border-b border-base-300 px-4 py-1.5">
+      <span class="font-mono text-xs text-muted">{label}</span>
+      <button type="button" class="btn btn-ghost btn-xs" data-copy hidden>
+        <Icon name="tabler:copy" class="h-4 w-4" />
+        <span data-copy-text>Copy</span>
+      </button>
+    </div>
+    <pre class="overflow-x-auto p-4 font-mono text-sm leading-relaxed"><code>{code}</code></pre>
+  </div>
+</tp-copy>
+
+<script>
+  class TpCopy extends HTMLElement {
+    connectedCallback() {
+      const button = this.querySelector<HTMLButtonElement>('[data-copy]');
+      const label = this.querySelector('[data-copy-text]');
+      if (!button || !label || !navigator.clipboard) return;
+      button.hidden = false;
+      button.addEventListener('click', async () => {
+        await navigator.clipboard.writeText(this.dataset.text ?? '');
+        label.textContent = 'Copied';
+        setTimeout(() => (label.textContent = 'Copy'), 2000);
+      });
+    }
+  }
+
+  if (!customElements.get('tp-copy')) {
+    customElements.define('tp-copy', TpCopy);
+  }
+</script>

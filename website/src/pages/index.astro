@@ -4,13 +4,15 @@ import PageLayout from '~/layouts/PageLayout.astro';
 import Hero from '~/components/widgets/Hero.astro';
 import Features from '~/components/widgets/Features.astro';
 import QuickStart from '~/components/widgets/QuickStart.astro';
+import TypstIntro from '~/components/widgets/TypstIntro.astro';
+import Customize from '~/components/widgets/Customize.astro';
 import FAQs from '~/components/widgets/FAQs.astro';
 import CallToAction from '~/components/widgets/CallToAction.astro';
 import Headline from '~/components/ui/Headline.astro';
 import WidgetWrapper from '~/components/ui/WidgetWrapper.astro';
 import ExampleCard from '~/components/ExampleCard.astro';
 import { examples } from '~/lib/examples';
-import { REPO_URL } from '~/config';
+import { RELEASE_ARCHIVE, releaseAsset } from '~/config';
 import webuiScreenshot from '~/assets/webui.png';
 
 const HIGHLIGHTED_EXAMPLES = ['invoice', 'certificate', 'report'];
@@ -23,61 +25,64 @@ const highlighted = HIGHLIGHTED_EXAMPLES.flatMap((name) => examples.filter((exam
   <Features
     id="features"
     tagline="Why Typrest"
-    title="A PDF service you can trust in production"
+    title="The simple way to produce PDFs from your data"
+    subtitle="Every business system ends up needing documents. Typrest gives all of them one small service to ask."
     items={[
       {
-        title: 'Checked before it renders',
+        title: 'Documents that look printed',
         description:
-          'An optional <code>schema.yml</code> validates every payload. Invalid requests get a <code>422</code> listing each bad field, and never take a render slot.',
+          'Real typesetting, with precise pages, tables, fonts, and images. No headless browser, and no fighting HTML and CSS to fit a sheet of paper.',
       },
       {
-        title: 'Broken templates fail at startup',
+        title: 'Works with every language',
         description:
-          'Every template is loaded, prepared, and compiled before the server binds its socket. Run <code>typrest check</code> in CI to catch the same errors earlier.',
+          'Typrest speaks plain HTTP. Anything that can send a request can create a PDF: your backend, a script, a low-code tool.',
       },
       {
-        title: 'Templates are plain Typst',
+        title: 'Running in minutes',
         description:
-          'Write documents in <a href="https://typst.app/">Typst</a>, with its markup, scripting, tables, fonts, and assets. The payload arrives as JSON.',
+          'One small program, or one Docker image. There is no database to set up, no account to create, and nothing else to install.',
       },
       {
-        title: 'Any language, plain HTTP',
+        title: 'Templates are files you own',
         description:
-          'Send JSON, receive <code>application/pdf</code>. Errors share one JSON envelope with stable codes and compiler diagnostics.',
+          'Each document is a folder of plain text files. Keep them in git, review changes like code, and reuse one look across all of them.',
       },
       {
-        title: 'No network at render time',
+        title: 'Mistakes caught early',
         description:
-          'Pinned Typst Universe <code>@preview</code> packages download while templates are prepared. Requests read only memory, never the disk or the network.',
+          'A broken template stops the server from starting, not a customer from getting an invoice. Incomplete data is refused with a clear message.',
       },
       {
-        title: 'Bounded and graceful',
+        title: 'Free, open, and private',
         description:
-          'Set concurrent renders, queue length, and body size in <code>typrest.toml</code>. <code>SIGTERM</code> drains in-flight renders before exiting.',
+          'Typrest is open source and runs on your own machines. Your templates and your customers’ data never leave them.',
       },
     ]}
   />
 
+  <TypstIntro id="typst" />
+
   <QuickStart
     id="quick-start"
     tagline="Quick start"
-    title="From clone to PDF in three steps"
-    subtitle="Typrest builds from source with Rust. Docker works too; see Getting started."
+    title="Your first PDF in three steps"
+    subtitle='These commands are for Linux. For Docker, Cargo, and other systems, see <a href="/docs/install/">Install</a>.'
     steps={[
       {
-        title: 'Build Typrest',
+        title: 'Install Typrest',
+        description: 'Download the release and put the <code>typrest</code> program on your path.',
         label: 'shell',
-        code: `git clone ${REPO_URL}.git\ncd typrest\ncargo build --release`,
+        code: `curl -fLO ${releaseAsset(RELEASE_ARCHIVE)}\ntar -xzf ${RELEASE_ARCHIVE}\ninstall -Dm 755 typrest ~/.local/bin/typrest`,
       },
       {
-        title: 'Create a project and serve it',
-        description:
-          '<code>init</code> writes a <code>typrest.toml</code> and a <code>hello-world</code> template. <code>serve</code> compiles it before it listens.',
+        title: 'Create a project and start the server',
+        description: 'The new project comes with a <code>hello-world</code> template, ready to render.',
         label: 'shell',
-        code: './target/release/typrest init demo\ncd demo\n../target/release/typrest serve --hostname 127.0.0.1',
+        code: 'typrest init demo\ncd demo\ntyprest serve',
       },
       {
-        title: 'Post JSON, get a PDF',
+        title: 'Send JSON, get a PDF',
         description: 'From another terminal:',
         label: 'shell',
         code: `curl -X POST http://127.0.0.1:8080/hello-world \\\n  -H 'Content-Type: application/json' \\\n  --data '{"name":"Ada"}' \\\n  --output hello-world.pdf`,
@@ -85,9 +90,11 @@ const highlighted = HIGHLIGHTED_EXAMPLES.flatMap((name) => examples.filter((exam
     ]}
   >
     <p class="mt-10 text-center">
-      <a class="btn btn-outline" href="/docs/getting-started/">Read Getting started</a>
+      <a class="btn btn-outline" href="/docs/quick-start/">Read the full quick start</a>
     </p>
   </QuickStart>
+
+  <Customize id="customize" />
 
   <WidgetWrapper id="examples" paper containerClass="max-w-6xl">
     <Headline
@@ -105,12 +112,15 @@ const highlighted = HIGHLIGHTED_EXAMPLES.flatMap((name) => examples.filter((exam
 
   <WidgetWrapper id="web-ui" containerClass="max-w-6xl">
     <div class="grid items-center gap-10 lg:grid-cols-[1fr_1.6fr]">
-      <Headline
-        tagline="Web UI"
-        title="Preview while you write"
-        subtitle="Turn on <code>web_ui</code> in <code>typrest.toml</code> and open <code>/_webui/</code>: pick a template, fill a form generated from its schema, and preview the PDF. With <code>serve --watch</code>, edits reload without a restart. It is a development tool with no authentication, so keep it on loopback."
-        classes={{ container: 'text-left mb-0 md:mb-0' }}
-      />
+      <div>
+        <Headline
+          tagline="Web UI"
+          title="See the document while you write it"
+          subtitle="Typrest includes a free page for working on templates. Pick a document, fill in a form built from its fields, and look at the PDF right beside it. It is the quickest way to try an idea or show a draft to a colleague."
+          classes={{ container: 'text-left mb-6 md:mb-6' }}
+        />
+        <a class="btn btn-outline" href="/docs/web-ui/">Learn about the Web UI</a>
+      </div>
       <figure class="overflow-hidden rounded-box border border-base-300 bg-base-200">
         <Image
           src={webuiScreenshot}
@@ -134,9 +144,19 @@ const highlighted = HIGHLIGHTED_EXAMPLES.flatMap((name) => examples.filter((exam
           'No. Typrest is a server you run yourself, next to the applications that need PDFs. Templates live in a project folder on that server.',
       },
       {
-        title: 'Do I need Rust?',
+        title: 'Do I need to know Rust?',
         description:
-          'To build it from source, yes. Otherwise, build the container image with <code>docker build</code>. There is no published binary or image yet.',
+          'No. Typrest is written in Rust, but you install it as a ready-made program or a Docker image and never touch the source.',
+      },
+      {
+        title: 'Do I need to know Typst?',
+        description:
+          'Only to design the documents. Start from one of the <a href="/examples/">examples</a> and change it; the <a href="https://typst.app/docs/tutorial/">Typst tutorial</a> covers the rest. The systems that request PDFs only send JSON.',
+      },
+      {
+        title: 'Which systems does it run on?',
+        description:
+          'There is a ready-made program for 64-bit Linux, and a Docker image that runs anywhere Docker does, including macOS and Windows. See <a href="/docs/install/">Install</a>.',
       },
       {
         title: 'Is Typrest an official Typst project?',
@@ -144,14 +164,9 @@ const highlighted = HIGHLIGHTED_EXAMPLES.flatMap((name) => examples.filter((exam
           'No. Typrest is an independent project that uses the open-source <a href="https://typst.app/">Typst</a> compiler.',
       },
       {
-        title: 'What happens when a payload is invalid?',
-        description:
-          'Typrest answers <code>422</code> with <code>schema_validation_failed</code> and the path of each violation, such as <code>$.customer.name</code>. See the <a href="/docs/specs/http-api/">HTTP API specification</a>.',
-      },
-      {
         title: 'Can I expose it to the internet?',
         description:
-          'Not directly. Typrest has no authentication, so bind it to loopback or put it behind a trusted boundary such as a private network or an authenticating proxy.',
+          'Not directly. Typrest has no login of its own, so run it where only your own systems can reach it, such as a private network. See <a href="/docs/deploy/">Run in production</a>.',
       },
       {
         title: 'How is it licensed?',
@@ -162,9 +177,9 @@ const highlighted = HIGHLIGHTED_EXAMPLES.flatMap((name) => examples.filter((exam
 
   <CallToAction
     title="Render your first PDF"
-    subtitle="Build Typrest, create a project, and send it JSON."
+    subtitle="Install Typrest, create a project, and send it JSON."
     actions={[
-      { text: 'Get started', href: '/docs/getting-started/', primary: true },
+      { text: 'Get started', href: '/docs/quick-start/', primary: true },
       { text: 'Read the docs', href: '/docs/' },
     ]}
   />

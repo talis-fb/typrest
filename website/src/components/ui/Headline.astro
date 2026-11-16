@@ -28,7 +28,7 @@ const {
         </p>
       )}
       {title && <h2 class={twMerge('leading-tight text-heading text-balance', titleClass)} set:html={title} />}
-      {subtitle && <p class={twMerge('mt-4 text-muted text-pretty', subtitleClass)} set:html={subtitle} />}
+      {subtitle && <p class={twMerge('prose-link mt-4 text-muted text-pretty', subtitleClass)} set:html={subtitle} />}
     </div>
   )
 }

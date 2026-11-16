@@ -40,14 +40,23 @@ export default defineConfig({
       // The landing layout provides the site-wide 404 page.
       disable404Route: true,
       sidebar: [
-        { label: 'Start here', items: ['docs', 'docs/getting-started'] },
-        { label: 'Specifications', items: [{ autogenerate: { directory: 'docs/specs' } }] },
-        { label: 'Architecture', items: [{ autogenerate: { directory: 'docs/architecture' } }] },
+        { label: 'Start here', items: ['docs', 'docs/install', 'docs/quick-start'] },
+        {
+          label: 'Build templates',
+          items: ['docs/templates', 'docs/schemas', 'docs/web-ui', 'docs/development'],
+        },
+        { label: 'Integrate', items: ['docs/integrate', 'docs/integrate/clients'] },
+        { label: 'Run it', items: ['docs/deploy'] },
+        {
+          label: 'Reference',
+          items: ['docs/reference/cli', 'docs/reference/configuration', 'docs/reference/http-api'],
+        },
         {
           label: 'Project',
           items: [
+            'docs/architecture',
+            'docs/roadmap',
             { label: 'Examples', link: '/examples/' },
-            { label: 'Roadmap', link: `${REPO_URL}/blob/${REPO_BRANCH}/ROADMAP.md`, attrs: { target: '_blank' } },
             { label: 'Contributing', link: `${REPO_URL}/blob/${REPO_BRANCH}/CONTRIBUTING.md`, attrs: { target: '_blank' } },
             { label: 'License', link: `${REPO_URL}/blob/${REPO_BRANCH}/LICENSE`, attrs: { target: '_blank' } },
           ],
@@ -71,7 +80,7 @@ export default defineConfig({
       },
     },
     server: {
-      // Brand assets and the repository docs live outside website/.
+      // Brand assets live outside website/.
       fs: { allow: ['.', '../brand'] },
     },
   },

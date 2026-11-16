@@ -1,0 +1,134 @@
+---
+title: Validate the data
+description: Describe the data a template expects with schema.yml, so incomplete requests are refused with a clear message.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+A schema says what data a template needs. With one in place, Typrest refuses a request that is
+missing a field or has the wrong kind of value, and tells the caller exactly what to fix.
+
+A schema is a file named `schema.yml` next to `main.typ`. It is optional, but in practice every
+template that reads data should have one: Typrest also uses it to build the sample data it
+[checks the template with at startup](/docs/templates/#templates-are-checked-with-sample-data).
+A template without a schema accepts any JSON and is checked with an empty object.
+
+## A first schema
+
+```yaml
+schemaVersion: v1
+request:
+  body:
+    type: object
+    properties:
+      name:
+        type: string
+        required: true
+      greeting:
+        type: string
+        enum: [Hello, Hi, Welcome]
+        default: Hello
+```
+
+It reads: the request is an object. It must have a `name`, which is text. It may have a
+`greeting`, which is one of three words and is `Hello` when left out.
+
+## What you can say about a field
+
+| Setting | Meaning |
+|---|---|
+| `type` | The kind of value: `string`, `number`, `boolean`, `object`, `array`, or `null` |
+| `required` | `true` when the field must be present. Fields are optional unless you say so |
+| `default` | The value to use when the field is left out |
+| `enum` | The list of allowed values |
+| `properties` | The fields of an `object` |
+| `items` | What each element of an `array` looks like |
+
+Fields you do not describe are passed to the template untouched.
+
+## Nested objects and lists
+
+Objects and lists nest as deep as your data does. This schema describes an order with a customer
+and a list of items:
+
+```yaml
+schemaVersion: v1
+request:
+  body:
+    type: object
+    properties:
+      customer:
+        type: object
+        required: true
+        properties:
+          name:
+            type: string
+            required: true
+          email:
+            type: string
+      items:
+        type: array
+        required: true
+        items:
+          type: object
+          properties:
+            name:
+              type: string
+              required: true
+            quantity:
+              type: number
+              default: 1
+            unit_price:
+              type: number
+              required: true
+      currency:
+        type: string
+        enum: [USD, EUR, BRL]
+        default: USD
+```
+
+Defaults apply inside every list item, so each item without a `quantity` gets `1`.
+
+## What the caller sees
+
+A request that breaks the schema gets no PDF. It gets the status `422` and a list of every
+problem, each with the path of the field:
+
+```json
+{
+  "error": "schema_validation_failed",
+  "message": "Payload validation failed",
+  "violations": [
+    { "field": "$.customer.name", "issue": "required field missing" },
+    { "field": "$.items[0].unit_price", "issue": "expected type number, got string" },
+    { "field": "$.currency", "issue": "invalid enum value \"GBP\"" }
+  ]
+}
+```
+
+`$` is the whole request, so `$.items[0].unit_price` is the `unit_price` of the first item.
+
+## Defaults keep templates simple
+
+When a field has a default, the template can use it without checking whether it exists:
+
+```typst
+#data.greeting, #data.name!
+```
+
+Defaults are also what Typrest uses when it
+[checks a template at startup](/docs/templates/#templates-are-checked-with-sample-data), so
+realistic defaults make that check more meaningful.
+
+<Aside type="note">
+  `required` checks that a field is present, not that it is filled in: an empty string passes.
+  And a default never replaces a value the caller sent, even `null`.
+</Aside>
+
+## The schema powers the Web UI
+
+The [Web UI](/docs/web-ui/) reads the schema to build a form for the template, with a control for
+each field and its default already filled in.
+
+The `schema-showcase` project among the [examples](/examples/) uses every feature on this page,
+with sample requests that pass and fail.

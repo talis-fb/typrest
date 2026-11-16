@@ -15,12 +15,12 @@ themes.
 
 | Path | Holds |
 |---|---|
-| `website/src/config.ts` | Site URL, repository URL, analytics token, and the `SITE_INDEXABLE` flag |
+| `website/src/config.ts` | Site URL, repository URL, the release that install commands point at, analytics token, and the `SITE_INDEXABLE` flag |
 | `website/astro.config.mjs` | Astro and Starlight configuration, sidebar, and head tags |
 | `website/src/pages/` | Landing pages; `robots.txt` is generated from `SITE_INDEXABLE` |
-| `website/src/content/docs/docs/` | Hand-written docs pages (`index.mdx`, `getting-started.mdx`) and the generated folders |
+| `website/src/content/docs/docs/` | The docs pages, hand-written as `.mdx` |
 | `website/src/lib/examples.ts` | Builds the examples gallery from `examples/README.md` |
-| `website/scripts/` | `sync-docs.mjs`, `sync-brand.mjs`, and `capture-webui.mjs` |
+| `website/scripts/` | `sync-brand.mjs` and `capture-webui.mjs` |
 | `website/public/examples/` | Rendered example PDFs, committed |
 | `website/src/assets/` | Example previews, their `manifest.json`, and the Web UI screenshot, committed |
 
@@ -40,29 +40,43 @@ npm run build     # dist/, with link validation and the search index
 npm run preview   # serves dist/
 ```
 
-`dev`, `check`, and `build` first run `npm run sync`, which runs the two sync scripts below. The
-build fails when a link in the docs is broken (`starlight-links-validator`), so a change under
-`docs/` that breaks a link also fails the CI `website` job.
+`dev`, `check`, and `build` first run `npm run sync`, which runs the brand sync below. The build
+fails when a link in a docs page is broken (`starlight-links-validator`). The validator does not
+see the landing pages, so check links to `/docs/...` in `website/src/pages/`,
+`website/src/components/`, and `website/src/navigation.ts` by hand when a docs page moves.
 
 Two build warnings are expected: astro-icon finds no local `src/icons/` folder (the site uses
 Tabler icons only), and Starlight's optional `i18n` collection is empty.
 
-## Docs sync
+## Docs pages
 
-`website/scripts/sync-docs.mjs` publishes `docs/specs/*.md` and `docs/architecture/*.md`, except
-the specification template and index files. It never edits `docs/`; the canonical text stays
-there.
+The docs at `/docs` are a user guide, written by hand for people who use Typrest. They are not a
+copy of `docs/`: the specifications, architecture documents, and ADRs in this repository stay the
+contract for contributors and are not published.
 
-- The H1 becomes the frontmatter `title`, the `Scope` line becomes `description`, and the
-  Status/Scope list is dropped from the page body.
-- Links between published pages become site routes, such as `/docs/specs/http-api/#errors`.
-- Links to anything else in the repository (ADRs, plans, guides, the product vision, source files)
-  become GitHub URLs on the `main` branch.
-- `REQ-*` IDs and all other text stay as written.
+| Sidebar group | Pages under `website/src/content/docs/docs/` |
+|---|---|
+| Start here | `index.mdx`, `install.mdx`, `quick-start.mdx` |
+| Build templates | `templates.mdx`, `schemas.mdx`, `web-ui.mdx`, `development.mdx` |
+| Integrate | `integrate/index.mdx`, `integrate/clients.mdx` |
+| Run it | `deploy.mdx` |
+| Reference | `reference/cli.mdx`, `reference/configuration.mdx`, `reference/http-api.mdx` |
+| Project | `architecture.mdx`, `roadmap.mdx` |
 
-Output goes to `website/src/content/docs/docs/specs/` and `.../architecture/`, which are
-gitignored. To publish another folder, add it to `SECTIONS` in the script and to the sidebar in
-`astro.config.mjs`. Plans and ADRs are deliberately not published.
+The sidebar is listed explicitly in `website/astro.config.mjs`; add a new page there.
+
+Rules for these pages:
+
+- Write for a user, in the second person, task first, with one runnable example per idea. Do not
+  use `REQ-*` IDs or `MUST`/`SHOULD`.
+- The pages restate behavior that the specifications define, so a change to observable behavior
+  updates the matching page in the same change. A reference page may link to its specification on
+  GitHub for the exact contract.
+- Take install commands from the constants in `website/src/config.ts` (`TYPREST_VERSION`,
+  `DOCKER_IMAGE`, `RELEASE_ARCHIVE`, `releaseAsset`), and bump `TYPREST_VERSION` at each release.
+- Run every command and code sample before publishing it. A template sample must compile with the
+  startup sample payload, so it needs a schema when it reads fields.
+- `roadmap.mdx` summarizes [`ROADMAP.md`](../../ROADMAP.md); update it when scope changes.
 
 ## Brand sync
 
@@ -161,8 +175,8 @@ npx wrangler deploy
 `wrangler` asks to log in on first use. Without a login, it reads `CLOUDFLARE_API_TOKEN` and
 `CLOUDFLARE_ACCOUNT_ID` from the environment; the token must be able to deploy Workers and manage
 the `talison.dev` custom domain. `npx wrangler deploy --dry-run` checks the configuration without
-deploying. Redeploy after a change to `website/`, `brand/`, `docs/`, or `examples/README.md`,
-because the site reads all of them.
+deploying. Redeploy after a change to `website/`, `brand/`, or `examples/README.md`, because the
+site reads all of them.
 
 The CI `website` job (`.github/workflows/ci.yml`) only validates the site: it runs `npm ci`,
 `npm run check`, and `npm run build` on every pull request and push to `main`, and never deploys.
@@ -204,7 +218,7 @@ only `Analytics.astro` and `config.ts`.
 | Cloudflare Workers static assets | `talison.dev` DNS is already on Cloudflare, static requests are free, and Cloudflare recommends Workers over Pages for new projects. GitHub Pages on GitHub Free needs a public repository |
 | Manual deploy with wrangler, CI validates only | The maintainer controls when the site changes, and no Cloudflare credentials live in GitHub |
 | Cloudflare Web Analytics | Free and built into the host |
-| Docs generated from `docs/` | One source of truth: the site never holds a second copy of a specification |
+| Docs written by hand as a user guide | Specifications are requirement lists for contributors; users need task-oriented pages. The cost is a second text to keep in step with behavior |
 | Pre-rendered example PDFs and a Web UI screenshot, no live demo | A static site has no server to render with, and the Web UI needs a running Typrest |
 
 No ADR records these choices. A static site is portable, so it does not meet the costly-to-reverse

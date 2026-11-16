@@ -1,0 +1,58 @@
+---
+title: Web UI
+description: Use the built-in Web UI to fill in a template's data and preview the PDF while you write it.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+import { Image } from 'astro:assets';
+import webui from '~/assets/webui.png';
+
+Typrest comes with a page for trying templates in the browser. You pick a template, fill in its
+data, and see the PDF beside it. It is free, it is part of the same program, and there is nothing
+extra to install.
+
+<Image src={webui} alt="The Typrest Web UI with the invoice template's form beside its rendered PDF" />
+
+## Turn it on
+
+The Web UI is controlled by one line in `typrest.toml`:
+
+```toml
+web_ui = true
+```
+
+Projects created with `typrest init` already have it. Start the server and open
+`http://127.0.0.1:8080/_webui/`:
+
+```bash
+typrest serve --watch
+```
+
+To turn it off, set `web_ui = false` or remove the line, then restart Typrest.
+
+## What you can do
+
+- **Browse your templates.** The list shows every template the server has loaded.
+- **Fill in a form.** When a template has a [schema](/docs/schemas/), the Web UI builds a form
+  from it, with the right control for each field and the defaults filled in.
+- **Edit raw JSON.** Switch to the **Raw JSON** tab to paste a real request from your application, or to
+  work with a template that has no schema.
+- **Render and preview.** Press **Render PDF**, or <kbd>Ctrl</kbd>+<kbd>Enter</kbd>
+  (<kbd>Cmd</kbd>+<kbd>Enter</kbd> on macOS), and the PDF appears next to the form.
+- **Download the PDF** to share it or look closer.
+- **Read errors.** When the data is invalid or the template has a mistake, the message appears
+  where the PDF would be.
+
+## A good way to work
+
+1. Start Typrest with `typrest serve --watch` so template edits are picked up without a restart.
+2. Keep the Web UI open beside your editor.
+3. Edit the template, save, and render again.
+
+If you add or remove a template, refresh the page to update the list.
+
+<Aside type="caution" title="For your own machine">
+  The Web UI is a tool for writing templates, and it has no login. Anyone who can reach it can
+  render any template. Use it on your own computer, and turn it off on servers that others can
+  reach. See [Run in production](/docs/deploy/).
+</Aside>

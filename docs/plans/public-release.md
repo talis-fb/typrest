@@ -129,7 +129,7 @@ fork the repository. Do 9 to 13 in one sitting.
       [`docs/development/website.md`](../development/website.md#search-engines).
     - From a clean checkout of `main`, run `npm ci`, `npm run build`, and `npx wrangler deploy` in
       `website/`.
-    - Apply the approved `README.md` change below.
+    - Confirm the `README.md` install command, badges, and site links work anonymously.
 
 ### After v0.1.0
 
@@ -141,43 +141,14 @@ fork the repository. Do 9 to 13 in one sitting.
 
 ## Open questions
 
-- Does the maintainer approve this `README.md` wording? The [README policy](../README.md#readme-policy)
-  asks for wording first, and it applies only once v0.1.0 exists, because the commands fail before
-  then.
-
-  In the Docker quickstart, the build steps become:
-
-  ````markdown
-  Prerequisites: Docker (or Podman) and `curl`. The published image serves the bundled
-  [`examples/minimal`](examples/minimal/README.md) project from `/project`:
-
-  ```bash
-  docker run --rm -p 127.0.0.1:8080:8080 ghcr.io/talis-fb/typrest:0.1
-  ```
-  ````
-
-  The "serve your own project" command uses the same image name. A new section goes before
-  "Quickstart from Source":
-
-  ````markdown
-  ## Install
-
-  Linux x86_64 only. Download the binary, check it, and put it in your `PATH`:
-
-  ```bash
-  curl -fLO https://github.com/talis-fb/typrest/releases/download/v0.1.0/typrest-v0.1.0-x86_64-linux.tar.gz
-  curl -fLO https://github.com/talis-fb/typrest/releases/download/v0.1.0/typrest-v0.1.0-x86_64-linux.tar.gz.sha256
-  sha256sum -c typrest-v0.1.0-x86_64-linux.tar.gz.sha256
-  tar -xzf typrest-v0.1.0-x86_64-linux.tar.gz
-  install -m 755 typrest ~/.local/bin/typrest
-  ```
-
-  The binary is statically linked and installs nothing else. Other platforms can use Docker.
-  ````
+- `README.md` was rewritten as a short presentation that links to the website for details. It
+  already uses the published commands (`docker run ghcr.io/talis-fb/typrest:latest`, and the
+  install guide for the Linux binary and Cargo), so no further wording is pending. Those commands
+  and the release badge work only once v0.1.0 exists and the repository and GHCR package are
+  public.
 
 ## Documents to update on completion
 
-- `README.md`, with the approved wording
 - [`ROADMAP.md`](../../ROADMAP.md)
 - [`docs/README.md`](../README.md) and [`docs/development/README.md`](../development/README.md)
 - This file: delete it when the work lands, and update the [plans index](README.md).

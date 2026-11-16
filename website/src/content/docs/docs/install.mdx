@@ -1,0 +1,93 @@
+---
+title: Install
+description: Install Typrest with Docker, as a Linux program, with Cargo, or from source.
+---
+
+import { Aside, Code, TabItem, Tabs } from '@astrojs/starlight/components';
+import { DOCKER_IMAGE, RELEASE_ARCHIVE, REPO_URL, TYPREST_VERSION, releaseAsset } from '~/config';
+
+Pick the way that suits your machine. All of them give you the same `typrest` program.
+
+| Your system | Recommended |
+|---|---|
+| Linux (64-bit Intel or AMD) | The Linux program, or Docker |
+| macOS | Docker, or Cargo |
+| Windows | Docker, or the Linux program inside WSL |
+
+<Tabs syncKey="install">
+  <TabItem label="Docker">
+    You need [Docker](https://docs.docker.com/get-docker/) or Podman. Nothing else is installed on
+    your machine.
+
+    Start Typrest with the small demo project that ships inside the image:
+
+    <Code code={`docker run --rm -p 127.0.0.1:8080:8080 ${DOCKER_IMAGE}`} lang="bash" />
+
+    To serve your own project, run the command from the folder that holds its `typrest.toml`:
+
+    <Code
+      code={`docker run --rm -p 127.0.0.1:8080:8080 \\\n  --user "$(id -u):$(id -g)" \\\n  -v "$PWD:/project" \\\n  ${DOCKER_IMAGE}`}
+      lang="bash"
+    />
+
+    You can run any `typrest` command the same way. For example, to create a new project in the
+    current, empty folder:
+
+    <Code
+      code={`docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/project" \\\n  ${DOCKER_IMAGE} typrest init`}
+      lang="bash"
+    />
+
+    `--user` makes the files that Typrest writes belong to you. Typrest keeps downloaded Typst
+    packages in a `.typrest` folder inside the project, so the folder must be writable.
+
+  </TabItem>
+  <TabItem label="Linux program">
+    Download the release, check it, and put `typrest` in a folder on your `PATH`:
+
+    <Code
+      code={`curl -fLO ${releaseAsset(RELEASE_ARCHIVE)}\ncurl -fLO ${releaseAsset(`${RELEASE_ARCHIVE}.sha256`)}\nsha256sum -c ${RELEASE_ARCHIVE}.sha256\ntar -xzf ${RELEASE_ARCHIVE}\ninstall -Dm 755 typrest ~/.local/bin/typrest`}
+      lang="bash"
+    />
+
+    The program has no dependencies, so it runs on any 64-bit Intel or AMD Linux distribution. If
+    your shell cannot find `typrest` afterwards, add `~/.local/bin` to your `PATH`.
+
+  </TabItem>
+  <TabItem label="Cargo">
+    You need a [Rust toolchain](https://rustup.rs/), version 1.85 or newer. Cargo downloads the
+    source, builds it, and installs `typrest` into `~/.cargo/bin`:
+
+    <Code code={`cargo install --locked --git ${REPO_URL} --tag v${TYPREST_VERSION} typrest`} lang="bash" />
+
+    The build takes a few minutes. Linux is the tested system; other Unix systems such as macOS
+    are expected to build, and Windows is not supported.
+
+  </TabItem>
+  <TabItem label="From source">
+    Use this to try the latest unreleased changes or to work on Typrest itself. You need a
+    [Rust toolchain](https://rustup.rs/), version 1.85 or newer.
+
+    <Code code={`git clone ${REPO_URL}.git\ncd typrest\ncargo build --release`} lang="bash" />
+
+    The program is written to `target/release/typrest`. Copy it to a folder on your `PATH`, or run
+    it from there.
+
+  </TabItem>
+</Tabs>
+
+## Check that it works
+
+<Code code={`typrest --version`} lang="bash" />
+
+It prints <code>typrest {TYPREST_VERSION}</code>. With Docker, the server is ready when
+`http://127.0.0.1:8080/_healthz` answers `{"status":"ok"}`.
+
+<Aside type="caution" title="Keep it private">
+  Typrest has no login. The commands on this page make it reachable from your own machine only.
+  Before you run it anywhere else, read [Run in production](/docs/deploy/).
+</Aside>
+
+## Next step
+
+Follow the [quick start](/docs/quick-start/) to create a project and render your first PDF.

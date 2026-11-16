@@ -1,0 +1,130 @@
+---
+title: HTTP API
+description: The routes Typrest serves, what they return, and every error.
+sidebar:
+  label: HTTP API
+---
+
+import { repoFile } from '~/config';
+
+## Render a template
+
+```http
+POST /{template}
+Content-Type: application/json
+```
+
+`{template}` is the template's folder path, such as `invoice` or `letters/welcome`. The body is
+the JSON data for the document.
+
+**Answer:** `200` with `Content-Type: application/pdf` and the PDF as the body.
+
+```bash
+curl -X POST http://127.0.0.1:8080/letters/welcome \
+  -H 'Content-Type: application/json' \
+  --data '{"name":"Ada"}' \
+  --output welcome.pdf
+```
+
+Details worth knowing:
+
+- An empty body counts as `{}`.
+- `GET /{template}` also works and renders the template with `{}`, which is handy for a quick
+  look in the browser.
+- The data can be any JSON value. Most templates expect an object.
+- When the template has a [schema](/docs/schemas/), the data is checked, and defaults are filled
+  in, before the template runs.
+
+## Health check
+
+```http
+GET /_healthz
+```
+
+**Answer:** `200` with `{"status":"ok"}`. It answers at once, even when the server is busy
+rendering.
+
+## Errors
+
+Every error has a JSON body with an `error` code and a `message`. Some carry more detail.
+
+| Status | `error` | When | Extra fields |
+|---|---|---|---|
+| `400` | `invalid_template_id` | The path is not a valid template name | |
+| `400` | `invalid_json` | The body is not valid JSON, or the `Content-Type` is not `application/json` | `line`, when known |
+| `404` | `template_not_found` | No template has that path | |
+| `413` | `payload_too_large` | The body is larger than `max_body_bytes` | |
+| `422` | `schema_validation_failed` | The data does not match the schema | `violations` |
+| `500` | `compilation_failed` | The template failed with this data | `diagnostics`, `line` |
+| `500` | `render_execution_failed` | An unexpected failure while rendering | |
+| `503` | `render_capacity_exceeded` | Too many requests are already rendering or waiting. Sent with `Retry-After: 1` | |
+
+### Invalid data
+
+```json
+{
+  "error": "schema_validation_failed",
+  "message": "Payload validation failed",
+  "violations": [
+    { "field": "$.customer.name", "issue": "required field missing" },
+    { "field": "$.items[0].amount", "issue": "expected type number, got string" }
+  ]
+}
+```
+
+Each violation names a field by its path from the top of the data (`$`).
+
+### A template that fails
+
+```json
+{
+  "error": "compilation_failed",
+  "message": "unknown variable: amunt",
+  "line": 14,
+  "diagnostics": [
+    {
+      "severity": "error",
+      "message": "unknown variable: amunt",
+      "location": {
+        "path": "main.typ",
+        "range": {
+          "start": { "line": 14, "column": 12 },
+          "end": { "line": 14, "column": 17 }
+        }
+      }
+    }
+  ]
+}
+```
+
+A diagnostic may also have `hints` and a `trace`. Paths are relative to the template; error
+answers never contain template source or paths from the server's disk.
+
+### A busy server
+
+```json
+{
+  "error": "render_capacity_exceeded",
+  "message": "The server is at render capacity; retry shortly"
+}
+```
+
+Wait a moment and send the request again. See
+[Handle a busy server](/docs/integrate/#handle-a-busy-server).
+
+## Reserved paths
+
+Paths that start with `_` belong to Typrest, which is why a template folder cannot start with
+`_`.
+
+| Path | Purpose |
+|---|---|
+| `/_healthz` | The health check |
+| `/_webui/` | The [Web UI](/docs/web-ui/), when it is turned on. `/` redirects there |
+| `/_api/...` | Used by the Web UI to list templates and read their schemas. It may change between versions, so do not build on it |
+
+## The exact contract
+
+This page describes the API for people who use it. The precise rules, kept in step with the tests,
+are in the <a href={repoFile('docs/specs/http-api.md')}>HTTP API specification</a> in the
+repository.

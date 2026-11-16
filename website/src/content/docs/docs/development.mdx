@@ -1,0 +1,110 @@
+---
+title: Check and live reload
+description: Catch template mistakes with typrest check, edit with live reload, and read the errors Typrest reports.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Two tools make writing templates quicker and safer: `typrest check` finds mistakes without
+starting a server, and `typrest serve --watch` picks up your edits as you save.
+
+## Check a project
+
+Run this anywhere inside a project:
+
+```bash
+typrest check
+```
+
+Typrest loads every template, downloads any packages it needs, and renders each one with sample
+data. When everything works, it lists the templates and finishes successfully:
+
+```text
+INFO compiled template `hello-world`
+INFO templates ready: 1
+INFO template ready: `hello-world`
+```
+
+When a template has a mistake, it shows the file, the line, and the exact spot:
+
+```text
+ERROR failed to compile template `hello-world`
+error: dictionary does not contain key "nme"
+  ┌─ /home/you/demo/templates/hello-world/main.typ:3:15
+  │
+3 │ = Hello #data.nme
+  │               ^^^
+```
+
+### Use it before you ship
+
+`typrest check` exits with a failure code when any template is broken, which makes it a ready-made
+test for your pipeline. Run it in continuous integration and a broken template never reaches
+production:
+
+```yaml
+# .github/workflows/templates.yml
+- name: Check templates
+  run: typrest check
+```
+
+`typrest serve` runs the same check when it starts and refuses to start if it fails, so a bad
+deploy stops before it takes any requests.
+
+## Live reload
+
+Add `--watch` while you write:
+
+```bash
+typrest serve --watch
+```
+
+Typrest now watches the templates folder. When you save a file, it reloads the template that
+changed. A change to `_shared/`, or adding and removing template folders, reloads everything.
+
+If an edit breaks a template, Typrest reports the error and keeps serving the last version that
+worked, so one typo does not take your documents down while you fix it.
+
+<Aside type="note">
+  Changes to `typrest.toml` need a restart. Watch mode is meant for writing templates; in
+  production, templates are loaded once at startup.
+</Aside>
+
+## When a request fails
+
+A template can also fail for one particular request, for example when it divides by a quantity
+that happens to be zero. The caller then gets an error that points at the line:
+
+```json
+{
+  "error": "compilation_failed",
+  "message": "unknown variable: amunt",
+  "line": 14,
+  "diagnostics": [
+    {
+      "severity": "error",
+      "message": "unknown variable: amunt",
+      "location": {
+        "path": "main.typ",
+        "range": {
+          "start": { "line": 14, "column": 12 },
+          "end": { "line": 14, "column": 17 }
+        }
+      }
+    }
+  ]
+}
+```
+
+The same error appears in the server's log and in the [Web UI](/docs/web-ui/). A
+[schema](/docs/schemas/) prevents most of these by refusing unusable data before the template
+runs.
+
+## See more detail
+
+Typrest prints what it is doing to the terminal. Set `RUST_LOG` to see more, such as which
+packages came from the local cache:
+
+```bash
+RUST_LOG=typrest=debug typrest check
+```

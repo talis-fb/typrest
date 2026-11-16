@@ -7,7 +7,7 @@
     "node": ">=22.23.4"
   },
   "scripts": {
-    "sync": "node scripts/sync-brand.mjs && node scripts/sync-docs.mjs",
+    "sync": "node scripts/sync-brand.mjs",
     "dev": "npm run sync && astro dev",
     "build": "npm run sync && astro build",
     "preview": "astro preview",
