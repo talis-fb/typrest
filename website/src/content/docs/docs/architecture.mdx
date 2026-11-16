@@ -1,0 +1,70 @@
+---
+title: Architecture
+description: A short tour of how Typrest is built and why.
+---
+
+import { repoFile } from '~/config';
+
+You do not need this page to use Typrest. It is here for the curious, and for anyone deciding
+whether Typrest's design fits their system.
+
+## The idea
+
+Most PDF services start a browser or another program for each document. Typrest instead includes
+the [Typst](https://typst.app/) compiler as a library, inside one program written in Rust. There
+is no browser, no separate Typst install, and no process started per request.
+
+## Prepare first, then serve
+
+Typrest does its slow and risky work once, before it accepts any request:
+
+1. **Load.** Read every template folder, with its shared files, images, fonts, and schema.
+2. **Prepare.** Download the Typst packages the templates import and parse the sources.
+3. **Check.** Render every template once with sample data built from its schema.
+4. **Publish.** Keep the prepared templates in memory, then open the port.
+
+A request then only does the quick part:
+
+1. Find the prepared template for the path.
+2. Check the data against the schema and fill in defaults.
+3. Render the PDF and send it back.
+
+This order is where Typrest's main guarantees come from:
+
+- A broken template is found at startup, never by a customer.
+- A request reads only memory. It does not touch the disk or the network, so it cannot be slowed
+  by either.
+- Invalid data is refused before any rendering work is spent on it.
+
+## Bounded work
+
+Rendering is processor work, so Typrest runs it on a fixed number of worker threads, apart from
+the threads that handle network traffic. Extra requests wait in a short line, and beyond that the
+server answers "busy" at once. Under heavy load Typrest gets slower in a predictable way instead
+of falling over, and the health check keeps answering.
+
+## Two parts
+
+The code is split in two so that the document logic can be tested without a network or a disk:
+
+| Part | What it holds |
+|---|---|
+| `typrest-core` | Templates, schema validation, the in-memory registry, rendering, and the only code that talks to Typst |
+| `typrest` | The command line, `typrest.toml`, reading folders, the package cache, watch mode, the HTTP server, and the embedded Web UI |
+
+Keeping Typst behind one boundary means a new Typst version changes one corner of Typrest, not
+your integration.
+
+## What Typrest leaves out
+
+Typrest stays small on purpose. It does not include logins, a template store with versions and
+tags, client libraries, or cloud storage. Templates are files that you deploy with the server,
+and access control belongs to the network or proxy in front of it.
+
+## Go deeper
+
+The repository has the full design documents:
+
+- <a href={repoFile('docs/architecture/overview.md')}>Architecture overview</a>
+- <a href={repoFile('docs/architecture/template-lifecycle.md')}>Template lifecycle</a>
+- <a href={repoFile('docs/adr/README.md')}>Decision records</a>

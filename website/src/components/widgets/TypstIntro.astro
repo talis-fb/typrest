@@ -1,0 +1,59 @@
+---
+// A short introduction to Typst for visitors who have not met it, beside a small template.
+import CodeBlock from '~/components/ui/CodeBlock.astro';
+import Headline from '~/components/ui/Headline.astro';
+import WidgetWrapper from '~/components/ui/WidgetWrapper.astro';
+
+export interface Props {
+  id?: string;
+}
+
+const { id } = Astro.props;
+
+const template = `#let data = json(bytes(sys.inputs.data))
+
+= Invoice #data.number
+
+Billed to *#data.customer.name*
+
+#table(
+  columns: (1fr, auto, auto),
+  [Item], [Qty], [Price],
+  ..data.items.map(item => (
+    item.name,
+    str(item.quantity),
+    str(item.unit_price),
+  )).flatten(),
+)`;
+---
+
+<WidgetWrapper id={id} paper containerClass="max-w-6xl">
+  <div class="grid items-center gap-10 lg:grid-cols-2">
+    <div>
+      <Headline
+        tagline="Built on Typst"
+        title="Documents written like text, laid out like print"
+        classes={{ container: 'text-left mb-6 md:mb-6' }}
+      />
+      <div class="prose-link space-y-4 text-lg text-muted">
+        <p>
+          <a href="https://typst.app/">Typst</a> is a modern, open-source typesetting system. You write a document in
+          a short, readable markup, and Typst handles the layout: pages, tables, fonts, images, headers, and page
+          numbers.
+        </p>
+        <p>
+          It also has a small scripting language, so a template can loop over line items, add up totals, or show a
+          section only when the data calls for it. If you have used Markdown or LaTeX, it will feel familiar within
+          an hour.
+        </p>
+        <p>Typrest runs Typst for you. Your template reads the JSON you send and becomes a PDF.</p>
+      </div>
+      <div class="mt-8 flex flex-col gap-3 sm:flex-row">
+        <a class="btn btn-outline" href="https://typst.app/docs/tutorial/">Learn Typst</a>
+        <a class="btn btn-ghost" href="/docs/templates/">How Typrest templates work</a>
+      </div>
+      <p class="mt-6 text-sm text-muted">Typrest is an independent project, not an official Typst product.</p>
+    </div>
+    <CodeBlock label="main.typ" code={template} class="min-w-0" />
+  </div>
+</WidgetWrapper>

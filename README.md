@@ -1,196 +1,119 @@
-# Typrest
+<p align="center">
+  <a href="https://typrest.talison.dev">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="brand/logos/typrest-logo-horizontal-inverse.svg">
+      <img src="brand/logos/typrest-logo-horizontal.svg" alt="Typrest" width="300">
+    </picture>
+  </a>
+</p>
 
-Typrest is an HTTP service for server-side PDF generation with [Typst](https://typst.app/).
-Applications in any language send JSON over HTTP; Typrest validates the payload when a schema is
-present, compiles the selected template, and returns PDF bytes.
+<p align="center">
+  <strong>Send JSON, get a PDF.</strong><br>
+  An HTTP service that renders <a href="https://typst.app/">Typst</a> templates into PDFs, for applications in any language.
+</p>
 
-The current release supports filesystem mode. Templates are loaded from a project directory,
-prepared and warm-compiled before startup completes, and retained in memory for rendering. Store
-backends, template publishing, tags, and authentication are not implemented.
+<p align="center">
+  <a href="https://github.com/talis-fb/typrest/actions/workflows/ci.yml"><img src="https://github.com/talis-fb/typrest/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/talis-fb/typrest/releases"><img src="https://img.shields.io/github/v/release/talis-fb/typrest?color=D9381E" alt="Latest release"></a>
+  <a href="https://github.com/talis-fb/typrest/pkgs/container/typrest"><img src="https://img.shields.io/badge/ghcr.io-typrest-16130F?logo=docker&logoColor=white" alt="Container image"></a>
+  <a href="https://typrest.talison.dev/docs/"><img src="https://img.shields.io/badge/docs-typrest.talison.dev-D9381E" alt="Documentation"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-16130F" alt="License: Apache-2.0"></a>
+</p>
 
-## Quickstart from Source
+<p align="center">
+  <a href="https://typrest.talison.dev">Website</a> ·
+  <a href="https://typrest.talison.dev/docs/quick-start/">Quick start</a> ·
+  <a href="https://typrest.talison.dev/docs/">Documentation</a> ·
+  <a href="https://typrest.talison.dev/examples/">Examples</a>
+</p>
 
-Prerequisites: a Rust toolchain compatible with edition 2024 and `curl`.
+---
 
-Build Typrest and create a temporary project:
+Design a document once as a Typst template, run Typrest next to your applications, and any of them
+can get a finished PDF by posting the document's data as JSON. It is built for invoices, receipts,
+reports, letters, certificates, and tickets.
+
+- **One folder per template.** The folder name is the route: `templates/invoice/` answers on
+  `/invoice`.
+- **Validated payloads.** An optional `schema.yml` rejects bad data with a clear error before the
+  template runs.
+- **Checked before it serves.** Every template is compiled at startup, so a broken one stops the
+  deploy, not a request.
+- **Live reload and a Web UI.** Edit a template, fill in a form, and see the PDF beside it.
+- **A single binary.** No runtime, no headless browser, no network access at render time.
+
+<p align="center">
+  <img src="website/src/assets/webui.png" alt="The Typrest Web UI: a payload form on the left and the rendered PDF on the right" width="820">
+</p>
+
+## Install
+
+With Docker, this starts Typrest with a small demo project:
 
 ```bash
-cargo build
-TYPREST_BIN="$PWD/target/debug/typrest"
-"$TYPREST_BIN" init /tmp/typrest-demo
-cd /tmp/typrest-demo
-"$TYPREST_BIN" check
+docker run --rm -p 127.0.0.1:8080:8080 ghcr.io/talis-fb/typrest:latest
 ```
 
-Start the server on the loopback interface:
+A Linux binary, `cargo install`, and building from source are covered in the
+[install guide](https://typrest.talison.dev/docs/install/).
+
+## Quick start
+
+Create a project and start the server:
 
 ```bash
-"$TYPREST_BIN" serve --hostname 127.0.0.1
+typrest init demo
+cd demo
+typrest serve --watch
 ```
 
-In another terminal, render the generated template:
+Then ask for a PDF from another terminal:
 
 ```bash
-curl -X POST \
-  http://127.0.0.1:8080/hello-world \
+curl -X POST http://127.0.0.1:8080/hello-world \
   -H 'Content-Type: application/json' \
   --data '{"name":"Ada"}' \
   --output hello-world.pdf
 ```
 
-Check the server and inspect prepared templates:
-
-```bash
-curl http://127.0.0.1:8080/_healthz
-curl http://127.0.0.1:8080/_api/templates
-```
-
-## Quickstart with Docker
-
-Prerequisites: Docker (or Podman) and `curl`. The image builds Typrest from source and serves the
-bundled [`examples/minimal`](examples/minimal/README.md) project from `/project`:
-
-```bash
-docker build -t typrest .
-docker run --rm -p 127.0.0.1:8080:8080 typrest
-```
-
-In another terminal, render the `hello` template:
-
-```bash
-curl -X POST \
-  http://127.0.0.1:8080/hello \
-  -H 'Content-Type: application/json' \
-  --data @examples/minimal/templates/hello/payload.json \
-  --output hello.pdf
-```
-
-To serve your own project, mount the directory containing `typrest.toml` over `/project`:
-
-```bash
-docker run --rm -p 127.0.0.1:8080:8080 -v "$PWD:/project" typrest
-```
-
-The mount must be writable: Typrest downloads `@preview` packages into `/project/.typrest`. The
-container runs as uid/gid 1000; add `--user "$(id -u):$(id -g)"` if your files belong to another
-user.
-
-`docker compose up` serves [`examples/invoice`](examples/invoice/README.md) with `--watch`, so
-template edits on the host reload without restarting the container. Both commands publish the port
-on the loopback interface only, because the development Web UI is unauthenticated.
-
-## Project and Template Layout
-
-`typrest init` creates a project containing `typrest.toml` and a templates root:
-
-```text
-my-project/
-  typrest.toml
-  templates/
-    financial/
-      invoice/
-        main.typ
-        schema.yml
-        assets/
-          logo.svg
-    welcome/
-      main.typ
-    _shared/
-      brand.typ
-```
-
-Every template requires `main.typ`. A `schema.yml` file is optional. Legacy `schema.json` remains
-accepted, but a template cannot contain both formats. Without a schema, any valid JSON value is
-passed directly to Typst without payload validation. Files under `_shared/` are available to every
-template. Directories without `main.typ` group route segments; the first directory containing
-`main.typ` defines the template ID and stops route discovery below it. Directories beginning with
-`_` are skipped during discovery but remain ordinary source when they are below an active template.
-
-Templates read the request payload from `sys.inputs.data`:
+The template behind that route is `templates/hello-world/main.typ`:
 
 ```typst
 #let data = json(bytes(sys.inputs.data))
 
-= Welcome, #data.name
+= Hello #data.name
 ```
 
-Templates may also import literal, fully versioned packages from Typst Universe:
+Open `http://127.0.0.1:8080/_webui/` to try templates in the browser. The
+[quick start](https://typrest.talison.dev/docs/quick-start/) walks through each step.
 
-```typst
-#import "@preview/cetz:0.5.2"
+> [!WARNING]
+> Typrest has no authentication. Keep it on a private network and read
+> [Run in production](https://typrest.talison.dev/docs/deploy/) before deploying it.
+
+## Documentation
+
+| | |
+|---|---|
+| [Write templates](https://typrest.talison.dev/docs/templates/) | Layout, shared files, fonts, images, and Typst packages |
+| [Validate the data](https://typrest.talison.dev/docs/schemas/) | Describe what each template expects with `schema.yml` |
+| [Integrate with your system](https://typrest.talison.dev/docs/integrate/) | Call Typrest from your own code |
+| [Run in production](https://typrest.talison.dev/docs/deploy/) | Deploy and secure the service |
+| [Reference](https://typrest.talison.dev/docs/reference/cli/) | The CLI, `typrest.toml`, and the HTTP API |
+| [Examples](examples/README.md) | Complete projects: invoice, report, resume, certificate, and more |
+
+## Contributing
+
+Contributions are welcome. You need a Rust toolchain, version 1.85 or newer:
+
+```bash
+git clone https://github.com/talis-fb/typrest.git
+cd typrest
+cargo build --locked
+cargo test --workspace
 ```
 
-`check`, startup, and watch preparation download missing `@preview` packages into the project-local
-`.typrest/packages` cache. Prepared package files remain in memory, so render requests do not read
-the cache or access the network. Other namespaces and dynamic package import expressions are not
-yet supported; generated `.typrest/` content should not be committed.
-
-See the [template layout](docs/specs/templates.md), [`schema.yml` v1](docs/specs/schema-v1.md), and
-[`typrest.toml`](docs/specs/typrest-toml.md) specifications.
-
-## CLI
-
-```text
-typrest init [path]
-typrest check
-typrest serve [--hostname <ipv4>] [--port <port>] [--watch]
-```
-
-`check` and `serve` search the current directory and its ancestors for the nearest
-`typrest.toml`. Both load, prepare, compile, and PDF-export every template; `serve` binds its socket
-only after this startup validation succeeds.
-
-Global diagnostic options are available before or after a subcommand:
-
-```text
---log-format <pretty|json>
---color <auto|always|never>
-```
-
-See the [CLI specification](docs/specs/cli.md) for exact behavior.
-
-## HTTP API
-
-| Method | Route | Purpose |
-|---|---|---|
-| `POST`, `GET` | `/{*template_id}` | Render a template and return `application/pdf` |
-| `GET` | `/_healthz` | Health check, `{"status":"ok"}` |
-| `GET` | `/_api/templates` | List prepared templates |
-| `GET` | `/_api/templates/{*template_id}` | Template ID and parsed schema |
-
-`POST` requires `Content-Type: application/json`. Errors use a structured JSON envelope:
-
-```json
-{
-  "error": "schema_validation_failed",
-  "message": "Payload validation failed",
-  "violations": [
-    { "field": "$.name", "issue": "required field missing" }
-  ]
-}
-```
-
-See the [HTTP API specification](docs/specs/http-api.md) for the complete contract, status codes,
-and security notes.
-
-## Development Web UI
-
-The optional Web UI can inspect prepared templates, edit test payloads, preview PDFs, and download
-the latest render. Enable its static routes in `typrest.toml`:
-
-```toml
-schema_version = "v1"
-templates_root = "templates"
-web_ui = true
-```
-
-Run on loopback and open `http://127.0.0.1:8080/_webui`. The UI has no authentication and must not
-be exposed directly to an untrusted network. See the [Web UI guide](docs/development/webui.md) and
-[Web UI specification](docs/specs/webui.md).
-
-## Development
-
-The standard Rust validation pass is:
+Before opening a pull request, run the checks that CI runs:
 
 ```bash
 cargo fmt --all -- --check
@@ -198,9 +121,10 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
 
-Start with the [documentation index](docs/README.md), [architecture overview](docs/architecture/overview.md),
-and [testing guide](docs/development/testing.md). See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the contribution workflow. AI coding agents should also read [`AGENTS.md`](AGENTS.md).
+[`CONTRIBUTING.md`](CONTRIBUTING.md) has the workflow, and the [`docs/`](docs/README.md) folder
+holds the specifications and architecture notes. See [`ROADMAP.md`](ROADMAP.md) for what is planned,
+and report vulnerabilities privately as described in [`SECURITY.md`](SECURITY.md).
 
-Copyright 2026 Talison Fabio.
+## License
 
-Licensed under the [Apache License, Version 2.0](LICENSE).
+Copyright 2026 Talison Fabio. Licensed under the [Apache License, Version 2.0](LICENSE).

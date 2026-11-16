@@ -1,0 +1,53 @@
+---
+title: Configuration
+description: Every setting in typrest.toml, with its default and allowed values.
+sidebar:
+  label: Configuration
+---
+
+A project is configured by one file, `typrest.toml`, in the project's top folder.
+
+```toml
+schema_version = "v1"
+templates_root = "templates"
+web_ui = true
+
+[server]
+max_concurrent_renders = 4
+max_queued_renders = 8
+shutdown_timeout_seconds = 25
+max_body_bytes = 2097152
+```
+
+Only the first two lines are required. Typrest reads the file when it starts, so restart it after
+a change.
+
+## Project settings
+
+| Setting | Required | Default | Meaning |
+|---|---|---|---|
+| `schema_version` | yes | | The format of this file. Always `"v1"` |
+| `templates_root` | yes | | The folder that holds your templates, relative to this file. It must exist and be inside the project |
+| `web_ui` | no | `false` | Set to `true` to serve the [Web UI](/docs/web-ui/) at `/_webui/` |
+
+## Server limits
+
+These go under a `[server]` heading. All of them are optional.
+
+| Setting | Default | Allowed | Meaning |
+|---|---|---|---|
+| `max_concurrent_renders` | One per processor core | 1 to 256 | How many documents render at the same time |
+| `max_queued_renders` | Twice `max_concurrent_renders`, at most 1024 | 0 to 1024 | How many requests may wait for a free slot. Beyond this, callers get a `503` and should retry. `0` means nobody waits |
+| `shutdown_timeout_seconds` | `25` | 1 to 3600 | How long Typrest waits for documents in progress when it is asked to stop |
+| `max_body_bytes` | `2097152` (2 MiB) | 1 to 1073741824 | The largest request body. Larger requests get a `413` |
+
+When Typrest starts, it logs the limits it is using.
+
+## Not in this file
+
+- **Port and address** are options of [`typrest serve`](/docs/reference/cli/#typrest-serve).
+- **Live reload** is the `--watch` option of `typrest serve`.
+- **The package cache** is always the `.typrest` folder inside the project.
+
+Settings that Typrest does not know are ignored. A setting with the wrong kind of value, such as
+text where a number belongs, is an error at startup.

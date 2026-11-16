@@ -15,8 +15,8 @@ prepared, and warm-compiled into an in-memory registry before the server listens
 - `crates/typrest`: the application package, with private modules for CLI commands, project
   loading, package resolution, watch mode, HTTP, and diagnostics;
 - `webui`: optional Svelte development UI and committed production assets;
-- `website`: the public Astro site (landing pages, examples gallery, and docs generated from
-  `docs/`), deployed to `typrest.talison.dev`;
+- `website`: the public Astro site (landing pages, examples gallery, and a hand-written user
+  guide under `/docs`), deployed to `typrest.talison.dev`;
 - `brand`: the brand kit (logos, colors, type, daisyUI and Starlight themes, icons), the only copy;
 - `examples`: complete example projects, each with its own `typrest.toml`; the index is
   [`examples/README.md`](examples/README.md), the only file to update when adding one.
@@ -57,6 +57,9 @@ check [`ROADMAP.md`](ROADMAP.md) for scope.
 
 - A change to observable behavior updates its specification, including requirement IDs, in the
   same change. IDs are stable: never renumber or reuse one; mark a removed one `(removed)`.
+- A change to user-visible behavior, the CLI, configuration, or install steps also updates the
+  matching user guide page under `website/src/content/docs/docs/`; see
+  [`docs/development/website.md`](docs/development/website.md#docs-pages).
 - A structural change updates the architecture document. A scope or status change updates
   [`ROADMAP.md`](ROADMAP.md). Update the [`docs/README.md`](docs/README.md) index when adding or
   moving a document.
@@ -136,7 +139,7 @@ npm run build
 `webui/dist` is committed and embedded in the application. Any frontend source change is incomplete
 until the production build is regenerated and reviewed. Do not hand-edit generated files.
 
-For website changes, and for documentation changes, which the site publishes:
+For website changes:
 
 ```bash
 cd website
@@ -145,7 +148,7 @@ npm run check
 npm run build
 ```
 
-The build fails on a broken docs link. Rerun `scripts/render-website-examples.sh` when an example
+The build fails on a broken link in a site docs page. Rerun `scripts/render-website-examples.sh` when an example
 template or payload changes; see [`docs/development/website.md`](docs/development/website.md).
 
 For documentation changes: `python3 scripts/check-doc-links.py` and `git diff --check`.

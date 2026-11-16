@@ -1,0 +1,120 @@
+---
+title: Quick start
+description: Create a Typrest project, start the server, and render your first PDF in a few minutes.
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+This guide takes you from nothing to a PDF. It assumes `typrest` is [installed](/docs/install/);
+if you use Docker, the install page shows the matching command for each step.
+
+<Steps>
+
+1. **Create a project.**
+
+   ```bash
+   typrest init demo
+   cd demo
+   ```
+
+   The new folder holds a settings file and one template:
+
+   ```text
+   demo/
+     typrest.toml
+     templates/
+       hello-world/
+         main.typ
+         schema.yml
+   ```
+
+2. **Start the server.**
+
+   ```bash
+   typrest serve
+   ```
+
+   Typrest checks every template first, then listens on `http://127.0.0.1:8080`:
+
+   ```text
+   INFO compiled template `hello-world`
+   INFO templates ready: 1
+   INFO typrest server listening on 127.0.0.1:8080
+   ```
+
+3. **Ask for a PDF.** In another terminal, send the template some data:
+
+   ```bash
+   curl -X POST http://127.0.0.1:8080/hello-world \
+     -H 'Content-Type: application/json' \
+     --data '{"name":"Ada"}' \
+     --output hello-world.pdf
+   ```
+
+   Open `hello-world.pdf`. It says "Hello Ada".
+
+4. **Try it in the browser.** Open `http://127.0.0.1:8080/_webui/`.
+   The [Web UI](/docs/web-ui/) lists your templates, gives you a form for the data, and shows the
+   PDF beside it.
+
+</Steps>
+
+## What just happened
+
+The template is the file `templates/hello-world/main.typ`:
+
+```typst
+#let data = json(bytes(sys.inputs.data))
+
+= Hello #data.name
+```
+
+The first line reads the JSON you sent. The second is a heading that uses its `name` field. The
+folder name, `hello-world`, became the address you posted to.
+
+The file next to it, `schema.yml`, describes the data the template expects. Here it says `name` is
+text and falls back to `World` when you leave it out. Send a number instead and Typrest refuses the
+request and tells you why:
+
+```json
+{
+  "error": "schema_validation_failed",
+  "message": "Payload validation failed",
+  "violations": [{ "field": "$.name", "issue": "expected type string, got number" }]
+}
+```
+
+## Change the template
+
+Stop the server with <kbd>Ctrl</kbd>+<kbd>C</kbd> and start it again with live reload:
+
+```bash
+typrest serve --watch
+```
+
+Now edit `main.typ`, for example:
+
+```typst
+#let data = json(bytes(sys.inputs.data))
+
+#set page(paper: "a5")
+#set text(size: 14pt)
+
+= Hello #data.name
+
+Welcome to *Typrest*. Today is #datetime.today().display().
+```
+
+Save the file and send the request again. The new PDF reflects your change without a restart.
+
+<Aside type="tip">
+  New to Typst? Its [tutorial](https://typst.app/docs/tutorial/) teaches the language in under an
+  hour.
+</Aside>
+
+## Next steps
+
+- [Write templates](/docs/templates/): add your own documents, share a theme, use images and fonts.
+- [Validate the data](/docs/schemas/): describe what each template needs.
+- [Integrate with your system](/docs/integrate/): call Typrest from your own code.
+- Browse the [examples](/examples/) for finished invoices, reports, and more.

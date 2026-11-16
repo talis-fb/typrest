@@ -34,13 +34,12 @@ const payloadText = JSON.stringify(excerpt, null, 2)
         </p>
         <h1 class="text-5xl leading-[1.05] text-heading text-balance md:text-6xl">JSON in, PDF out.</h1>
         <p class="mt-6 max-w-xl text-xl text-muted text-pretty">
-          Typrest validates JSON against your schema, renders a <a class="prose-link" href="https://typst.app/"
-            >Typst</a
-          > template, and returns the PDF. Every template compiles before the server listens, so a broken one stops
-          the deploy instead of a customer's invoice.
+          Send your data to Typrest and get a finished PDF back. Invoices, reports, certificates, and tickets are
+          designed once as <a class="prose-link" href="https://typst.app/">Typst</a> templates, then filled in by any
+          system that can make an HTTP request.
         </p>
         <div class="mt-8 flex flex-col gap-3 sm:flex-row">
-          <a class="btn btn-primary" href="/docs/getting-started/">Get started</a>
+          <a class="btn btn-primary" href="/docs/quick-start/">Get started</a>
           <a class="btn btn-outline" href="/examples/">See the examples</a>
         </div>
       </div>

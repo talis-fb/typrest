@@ -1,0 +1,248 @@
+---
+title: Client examples
+description: Working examples that request a PDF from Typrest in curl, Node, Python, Go, Java, PHP, Ruby, and C#.
+---
+
+import { TabItem, Tabs } from '@astrojs/starlight/components';
+import { REPO_URL, REPO_BRANCH } from '~/config';
+
+Each example does the same thing: it sends `{"name": "Ada"}` to the `hello-world` template from
+the [quick start](/docs/quick-start/), saves the answer as `hello-world.pdf`, and reports the
+error when Typrest refuses the request. None of them needs a Typrest library.
+
+To adapt one, change the address to your template and the data to what it expects.
+
+<Tabs syncKey="client">
+  <TabItem label="curl">
+    Prints the status code. On `200`, `hello-world.pdf` is the document; on anything else, the file holds the JSON error.
+
+    ```bash title="render.sh"
+    curl -sS -X POST http://127.0.0.1:8080/hello-world \
+      -H 'Content-Type: application/json' \
+      --data '{"name":"Ada"}' \
+      --output hello-world.pdf \
+      --write-out '%{http_code}\n'
+    ```
+
+  </TabItem>
+  <TabItem label="Node">
+    Node 18 or newer, no packages needed.
+
+    ```js title="render.mjs"
+    import { writeFile } from 'node:fs/promises';
+
+    const response = await fetch('http://127.0.0.1:8080/hello-world', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Ada' }),
+    });
+
+    if (!response.ok) {
+      const problem = await response.json();
+      throw new Error(`${response.status} ${problem.error}: ${problem.message}`);
+    }
+
+    await writeFile('hello-world.pdf', Buffer.from(await response.arrayBuffer()));
+    ```
+
+    Run it with `node render.mjs`.
+
+  </TabItem>
+  <TabItem label="Python">
+    Uses [Requests](https://requests.readthedocs.io/): `pip install requests`.
+
+    ```python title="render.py"
+    import requests
+
+    response = requests.post(
+        "http://127.0.0.1:8080/hello-world",
+        json={"name": "Ada"},
+        timeout=30,
+    )
+
+    if response.status_code != 200:
+        problem = response.json()
+        raise SystemExit(f"{response.status_code} {problem['error']}: {problem['message']}")
+
+    with open("hello-world.pdf", "wb") as file:
+        file.write(response.content)
+    ```
+
+    Run it with `python3 render.py`.
+
+  </TabItem>
+  <TabItem label="Go">
+    Standard library only.
+
+    ```go title="main.go"
+    package main
+
+    import (
+    	"bytes"
+    	"encoding/json"
+    	"fmt"
+    	"io"
+    	"net/http"
+    	"os"
+    )
+
+    func main() {
+    	payload, _ := json.Marshal(map[string]any{"name": "Ada"})
+
+    	response, err := http.Post(
+    		"http://127.0.0.1:8080/hello-world",
+    		"application/json",
+    		bytes.NewReader(payload),
+    	)
+    	if err != nil {
+    		panic(err)
+    	}
+    	defer response.Body.Close()
+
+    	body, err := io.ReadAll(response.Body)
+    	if err != nil {
+    		panic(err)
+    	}
+
+    	if response.StatusCode != http.StatusOK {
+    		fmt.Fprintf(os.Stderr, "%d %s\n", response.StatusCode, body)
+    		os.Exit(1)
+    	}
+
+    	if err := os.WriteFile("hello-world.pdf", body, 0o644); err != nil {
+    		panic(err)
+    	}
+    }
+    ```
+
+    Run it with `go run main.go`.
+
+  </TabItem>
+  <TabItem label="Java">
+    Java 11 or newer, standard library only.
+
+    ```java title="Render.java"
+    import java.net.URI;
+    import java.net.http.HttpClient;
+    import java.net.http.HttpRequest;
+    import java.net.http.HttpResponse;
+    import java.nio.file.Files;
+    import java.nio.file.Path;
+
+    public class Render {
+        public static void main(String[] args) throws Exception {
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("http://127.0.0.1:8080/hello-world"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString("{\"name\":\"Ada\"}"))
+                .build();
+
+            HttpResponse<byte[]> response = HttpClient.newHttpClient()
+                .send(request, HttpResponse.BodyHandlers.ofByteArray());
+
+            if (response.statusCode() != 200) {
+                throw new RuntimeException(response.statusCode() + " " + new String(response.body()));
+            }
+
+            Files.write(Path.of("hello-world.pdf"), response.body());
+        }
+    }
+    ```
+
+    Run it with `java Render.java`.
+
+  </TabItem>
+  <TabItem label="PHP">
+    Uses the cURL extension that ships with PHP.
+
+    ```php title="render.php"
+    <?php
+
+    $request = curl_init('http://127.0.0.1:8080/hello-world');
+    curl_setopt_array($request, [
+        CURLOPT_POST => true,
+        CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+        CURLOPT_POSTFIELDS => json_encode(['name' => 'Ada']),
+        CURLOPT_RETURNTRANSFER => true,
+    ]);
+
+    $body = curl_exec($request);
+    $status = curl_getinfo($request, CURLINFO_RESPONSE_CODE);
+
+    if ($body === false) {
+        throw new RuntimeException(curl_error($request));
+    }
+
+    if ($status !== 200) {
+        $problem = json_decode($body, true);
+        throw new RuntimeException("$status {$problem['error']}: {$problem['message']}");
+    }
+
+    file_put_contents('hello-world.pdf', $body);
+    ```
+
+    Run it with `php render.php`.
+
+  </TabItem>
+  <TabItem label="Ruby">
+    Standard library only.
+
+    ```ruby title="render.rb"
+    require 'json'
+    require 'net/http'
+
+    uri = URI('http://127.0.0.1:8080/hello-world')
+    response = Net::HTTP.post(uri, { name: 'Ada' }.to_json, 'Content-Type' => 'application/json')
+
+    unless response.code == '200'
+      problem = JSON.parse(response.body)
+      abort "#{response.code} #{problem['error']}: #{problem['message']}"
+    end
+
+    File.binwrite('hello-world.pdf', response.body)
+    ```
+
+    Run it with `ruby render.rb`.
+
+  </TabItem>
+  <TabItem label="C#">
+    .NET 6 or newer, in a console project created with `dotnet new console`.
+
+    ```csharp title="Program.cs"
+    using System.Net.Http.Json;
+
+    using var client = new HttpClient();
+
+    var response = await client.PostAsJsonAsync(
+        "http://127.0.0.1:8080/hello-world",
+        new { name = "Ada" });
+
+    if (!response.IsSuccessStatusCode)
+    {
+        var problem = await response.Content.ReadAsStringAsync();
+        throw new Exception($"{(int)response.StatusCode} {problem}");
+    }
+
+    await File.WriteAllBytesAsync("hello-world.pdf", await response.Content.ReadAsByteArrayAsync());
+    ```
+
+    Run it with `dotnet run`.
+
+  </TabItem>
+</Tabs>
+
+## Other languages
+
+Any language with an HTTP client works the same way:
+
+1. Send a `POST` request to `http://<your-typrest-server>/<template>`.
+2. Set the `Content-Type` header to `application/json` and put the data in the body.
+3. If the status is `200`, the response body is the PDF.
+4. Otherwise, the body is a JSON object with an `error` code and a `message`.
+
+[Integrate with your system](/docs/integrate/) explains each error and how to handle it.
+
+## Complete programs
+
+The repository has longer versions of the curl, Node, and Python clients, with full error
+reporting, in <a href={`${REPO_URL}/tree/${REPO_BRANCH}/examples/clients`}><code>examples/clients</code></a>.

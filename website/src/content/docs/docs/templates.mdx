@@ -1,0 +1,210 @@
+---
+title: Write templates
+description: How a Typrest project is laid out, how a template reads its data, and how to share themes, images, fonts, and packages.
+---
+
+import { Aside, FileTree } from '@astrojs/starlight/components';
+
+A template is a folder that describes one kind of document. This page shows how to lay out a
+project and what a template can use.
+
+## The project folder
+
+A project is a folder with a `typrest.toml` file and a templates folder:
+
+<FileTree>
+
+- my-documents/
+  - typrest.toml
+  - templates/
+    - _shared/
+      - theme.typ
+    - invoice/
+      - main.typ
+      - schema.yml
+      - assets/
+        - logo.svg
+    - letters/
+      - welcome/
+        - main.typ
+      - notice/
+        - main.typ
+
+</FileTree>
+
+`typrest.toml` tells Typrest where the templates are:
+
+```toml
+schema_version = "v1"
+templates_root = "templates"
+web_ui = true
+```
+
+`typrest init` writes this for you. The [configuration reference](/docs/reference/configuration/)
+lists every setting.
+
+## Folders become addresses
+
+Any folder that contains a `main.typ` file is a template, and its path is its address:
+
+| Folder | Request |
+|---|---|
+| `templates/invoice/` | `POST /invoice` |
+| `templates/letters/welcome/` | `POST /letters/welcome` |
+| `templates/letters/notice/` | `POST /letters/notice` |
+
+Folders without a `main.typ`, like `letters/`, only group other templates. Folder names may use
+letters, digits, `-`, and `_`, and may not start with `_`.
+
+## Read the data
+
+Every template starts by reading the JSON from the request:
+
+```typst
+#let data = json(bytes(sys.inputs.data))
+```
+
+From there, `data` is an ordinary Typst value. Use its fields anywhere in the document:
+
+```typst
+#let data = json(bytes(sys.inputs.data))
+
+= Invoice #data.number
+
+Billed to *#data.customer.name*
+
+#table(
+  columns: (1fr, auto, auto),
+  [Item], [Qty], [Price],
+  ..data.items.map(item => (
+    item.name,
+    str(item.quantity),
+    str(item.unit_price),
+  )).flatten(),
+)
+
+#if data.notes != "" [
+  _Notes:_ #data.notes
+]
+```
+
+A request for it looks like this:
+
+```json
+{
+  "number": "INV-0142",
+  "customer": { "name": "Lumen Robotics" },
+  "items": [{ "name": "Workshop", "quantity": 16, "unit_price": 150 }]
+}
+```
+
+### Describe the data
+
+A template that reads fields needs a `schema.yml` beside it that says which fields exist. Typrest
+uses it to refuse incomplete requests, to fill in defaults such as `notes` below, and to
+[check the template at startup](#templates-are-checked-with-sample-data).
+
+```yaml
+schemaVersion: v1
+request:
+  body:
+    type: object
+    properties:
+      number:
+        type: string
+        required: true
+      customer:
+        type: object
+        required: true
+        properties:
+          name:
+            type: string
+            required: true
+      items:
+        type: array
+        required: true
+        items:
+          type: object
+          properties:
+            name:
+              type: string
+              required: true
+            quantity:
+              type: number
+              default: 1
+            unit_price:
+              type: number
+              required: true
+      notes:
+        type: string
+        default: ""
+```
+
+[Validate the data](/docs/schemas/) explains the format.
+
+## Share a look across templates
+
+Put anything that several templates need in `templates/_shared/`: a theme, a letterhead, helper
+functions, a logo. Every template can import from it:
+
+```typst
+#import "/_shared/theme.typ": *
+```
+
+Change the shared file and every document that uses it follows.
+
+## Images and other files
+
+A template can use any file inside its own folder, with a path relative to `main.typ`:
+
+```typst
+#image("assets/logo.svg", width: 3cm)
+```
+
+You can also split a long template into several `.typ` files and `#import` them.
+
+## Fonts
+
+Typst's standard fonts, such as Libertinus Serif and New Computer Modern, are always available.
+To use your own, place `.ttf` or `.otf` files anywhere in the template's folder, or in `_shared/`
+to offer them to every template:
+
+```typst
+#set text(font: "Inter")
+```
+
+Fonts installed on the computer are deliberately ignored, so a document looks the same on your
+laptop and on the server.
+
+## Typst packages
+
+Templates can use packages from [Typst Universe](https://typst.app/universe/), for charts, QR
+codes, and much more. Import one with its exact version:
+
+```typst
+#import "@preview/cetz:0.4.2"
+```
+
+Typrest downloads the package when it starts, or when you run `typrest check`, and keeps it in a
+`.typrest` folder inside your project. Rendering a document never uses the network. Add `.typrest/`
+to your `.gitignore`.
+
+## Templates are checked with sample data
+
+Before it accepts requests, Typrest renders every template once with sample data built from its
+schema: each field's default, or else an empty value such as `""`, `0`, or an empty list. This is
+how a typo in a template is caught at startup instead of in front of a customer.
+
+It has two consequences for how you write templates:
+
+- **A template that reads fields needs a schema.** Without one, the sample data is an empty
+  object, so `data.number` fails and Typrest refuses to start. Only a template that uses no data
+  at all can go without.
+- **A template must cope with empty values.** Give fields sensible defaults in the
+  [schema](/docs/schemas/), and guard anything that cannot work on an empty value, for example
+  `#if data.items.len() > 0 [...]` before reading the first item.
+
+<Aside type="tip">
+  The [examples](/examples/) cover most of what this page describes: shared themes, bundled fonts,
+  packages, grouped addresses, and translations.
+</Aside>

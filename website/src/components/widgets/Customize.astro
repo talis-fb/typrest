@@ -1,0 +1,123 @@
+---
+// Shows the two sides of a Typrest setup: the templates folder you shape, and the HTTP call any
+// system makes. The language tabs are daisyUI radio tabs, so they work without JavaScript.
+import CodeBlock from '~/components/ui/CodeBlock.astro';
+import Headline from '~/components/ui/Headline.astro';
+import WidgetWrapper from '~/components/ui/WidgetWrapper.astro';
+
+export interface Props {
+  id?: string;
+}
+
+const { id } = Astro.props;
+
+const project = `my-documents/
+  typrest.toml
+  templates/
+    _shared/
+      theme.typ        colors and fonts for every template
+    invoice/           POST /invoice
+      main.typ
+      schema.yml
+      assets/logo.svg
+    letters/
+      welcome/         POST /letters/welcome
+        main.typ`;
+
+const clients = [
+  {
+    name: 'curl',
+    code: `curl -X POST http://127.0.0.1:8080/invoice \\
+  -H 'Content-Type: application/json' \\
+  --data @order.json \\
+  --output invoice.pdf`,
+  },
+  {
+    name: 'Node',
+    code: `const response = await fetch('http://127.0.0.1:8080/invoice', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(order),
+});
+const pdf = Buffer.from(await response.arrayBuffer());`,
+  },
+  {
+    name: 'Python',
+    code: `import requests
+
+response = requests.post(
+    "http://127.0.0.1:8080/invoice",
+    json=order,
+)
+pdf = response.content`,
+  },
+];
+
+const points = [
+  {
+    title: 'One folder per document',
+    description: 'Add a folder with a <code>main.typ</code> and it becomes a new address on your server.',
+  },
+  {
+    title: 'Your brand, defined once',
+    description: 'Logos, fonts, colors, and layout helpers live in a shared folder that every template can use.',
+  },
+  {
+    title: 'Your rules for the data',
+    description:
+      'A schema says which fields a document needs, so a missing customer name is reported instead of printed blank.',
+  },
+];
+---
+
+<WidgetWrapper id={id} containerClass="max-w-6xl">
+  <Headline
+    tagline="Make it yours"
+    title="Your templates, one call from any system"
+    subtitle="Shape the documents to fit your business, then connect whatever you already run: a web app, a back-office job, a spreadsheet script. If it can send an HTTP request, it can produce your PDFs."
+  />
+  <div class="grid gap-10 lg:grid-cols-2">
+    <div class="min-w-0">
+      <h3 class="text-xl text-heading">Design the documents</h3>
+      <ul class="mt-4 space-y-4">
+        {
+          points.map(({ title, description }) => (
+            <li>
+              <p class="flex items-baseline gap-3 font-medium text-heading">
+                <span class="type-dot" aria-hidden="true" />
+                {title}
+              </p>
+              <p class="mt-1 pl-[calc(0.45em+0.75rem)] text-muted" set:html={description} />
+            </li>
+          ))
+        }
+      </ul>
+      <CodeBlock class="mt-6" label="project folder" code={project} />
+    </div>
+    <div class="min-w-0">
+      <h3 class="text-xl text-heading">Call it from your code</h3>
+      <p class="mt-4 text-muted">
+        Send the data as JSON and the response is the PDF. There is no SDK to install and nothing to learn beyond the
+        HTTP client you already use.
+      </p>
+      <div class="tabs tabs-border mt-6">
+        {
+          clients.map(({ name, code }, index) => (
+            <>
+              <input type="radio" name="customize-client" class="tab" aria-label={name} checked={index === 0} />
+              <div class="tab-content pt-4">
+                <CodeBlock label={name} code={code} />
+              </div>
+            </>
+          ))
+        }
+      </div>
+      <p class="prose-link mt-6 text-muted">
+        The integration guide has complete examples for Node, Python, Go, Java, PHP, Ruby, and C#.
+      </p>
+      <p class="mt-6">
+        <a class="btn btn-outline" href="/docs/integrate/">Integrate with your system</a>
+      </p>
+    </div>
+  </div>
+</WidgetWrapper>

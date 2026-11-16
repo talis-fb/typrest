@@ -1,0 +1,160 @@
+---
+title: Run in production
+description: Run Typrest with Docker or as a program, keep it private, set its limits, and watch it.
+---
+
+import { Aside, Code } from '@astrojs/starlight/components';
+import { DOCKER_IMAGE } from '~/config';
+
+Typrest is one program with no database and nothing to migrate. Running it in production comes
+down to four things: ship your templates with it, keep it private, set limits that fit your
+machine, and watch the health check.
+
+## Keep it private
+
+<Aside type="caution">
+  Typrest has no login and no access control. Anyone who can reach it can render any template.
+</Aside>
+
+Run Typrest where only your own applications can reach it:
+
+- on the same machine, listening on `127.0.0.1` (the default);
+- on a private network or inside a container network, without publishing its port to the
+  internet;
+- behind a proxy or gateway that checks who is calling, if other networks need it.
+
+Also turn the [Web UI](/docs/web-ui/) off on shared servers by setting `web_ui = false`.
+
+## Run with Docker
+
+The simplest setup is to mount your project into the official image:
+
+<Code
+  code={`docker run -d --name typrest \\\n  -p 127.0.0.1:8080:8080 \\\n  --user "$(id -u):$(id -g)" \\\n  -v "$PWD:/project" \\\n  ${DOCKER_IMAGE}`}
+  lang="bash"
+/>
+
+Inside a container Typrest listens on every interface so that Docker can reach it. The
+`127.0.0.1:` in front of the port is what keeps it private on the host.
+
+### Docker Compose
+
+Other services in the same Compose file reach Typrest at `http://typrest:8080`, and nothing is
+published outside:
+
+<Code
+  code={`services:
+  typrest:
+    image: ${DOCKER_IMAGE}
+    user: "1000:1000"
+    volumes:
+      - ./documents:/project
+    restart: unless-stopped
+    stop_grace_period: 30s
+
+  app:
+    build: .
+    environment:
+      TYPREST_URL: http://typrest:8080
+    depends_on:
+      - typrest`}
+  lang="yaml"
+  title="docker-compose.yml"
+/>
+
+The project folder must be writable by the container's user, because Typrest stores downloaded
+Typst packages in `.typrest` inside it.
+
+### Build your templates into an image
+
+For deployments where nothing is mounted, put the templates in your own image. Checking them
+during the build downloads their packages and proves they work before the image exists. Use a
+folder of your own, as below, because `/project` already holds the image's demo template:
+
+<Code
+  code={`FROM ${DOCKER_IMAGE}
+WORKDIR /documents
+COPY --chown=typrest:typrest . .
+RUN typrest check`}
+  lang="dockerfile"
+  title="Dockerfile"
+/>
+
+## Run as a program
+
+On a Linux server, [install the program](/docs/install/) and start it from the project folder:
+
+```bash
+cd /srv/documents
+typrest --log-format json serve --hostname 127.0.0.1 --port 8080
+```
+
+`--hostname` takes an IPv4 address. Use `0.0.0.0` only when the network around the server is
+already private.
+
+A systemd unit keeps it running:
+
+```ini title="/etc/systemd/system/typrest.service"
+[Unit]
+Description=Typrest PDF server
+After=network.target
+
+[Service]
+User=typrest
+WorkingDirectory=/srv/documents
+ExecStart=/usr/local/bin/typrest --log-format json serve
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+```
+
+## Deploy new templates
+
+In production, templates are loaded once, when Typrest starts. To release a change:
+
+1. Run `typrest check` in your pipeline. It fails when any template is broken.
+2. Replace the templates, or the image.
+3. Restart Typrest.
+
+Typrest checks every template again as it starts and does not open its port until all of them
+work. If one is broken, the new process exits with an error and never takes a request, so your
+orchestrator can keep the old one running.
+
+## Set the limits
+
+Rendering a PDF uses a processor core. Typrest limits how many documents render at once, lets a
+few more wait, and refuses the rest with a `503` so callers can retry. The defaults fit most
+machines; change them in `typrest.toml` when you need to:
+
+```toml
+[server]
+max_concurrent_renders = 4      # default: one per processor core
+max_queued_renders = 8          # default: twice the above
+max_body_bytes = 2097152        # largest request body, 2 MiB by default
+shutdown_timeout_seconds = 25   # time to finish work when stopping
+```
+
+The [configuration reference](/docs/reference/configuration/) explains each one.
+
+## Watch it
+
+**Health check.** `GET /_healthz` answers `200` with `{"status":"ok"}` whenever Typrest is running,
+even when it is busy rendering. Point your load balancer or orchestrator at it.
+
+**Logs.** Typrest writes everything to standard output. Add `--log-format json` to get one JSON
+object per line for your log collector:
+
+```json
+{"timestamp":"2026-11-13T21:05:43.983882Z","level":"INFO","message":"compiled template `hello-world`","event":"template.compilation.completed","context":"check","template":"hello-world","warning_count":0,"status":"ok","target":"typrest::commands::check"}
+```
+
+Request data is never written to the logs.
+
+## Stop it gracefully
+
+When Typrest receives `SIGTERM` or <kbd>Ctrl</kbd>+<kbd>C</kbd>, it stops taking new requests,
+finishes the documents it is working on, and then exits. It waits up to `shutdown_timeout_seconds`
+(25 by default). Give your orchestrator a slightly longer grace period than that; Docker's default
+of 10 seconds is shorter, so set `stop_grace_period: 30s` in Compose, as above, or use
+`docker stop -t 30`.

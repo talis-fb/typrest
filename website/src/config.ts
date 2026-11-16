@@ -27,5 +27,17 @@ export const SITE_NAME = 'Typrest';
 export const SITE_DESCRIPTION =
   'Typrest is an HTTP service that validates JSON payloads, renders Typst templates, and returns PDF bytes.';
 
+/** Release the install commands point at. Bump it when a new version is published. */
+export const TYPREST_VERSION = '0.1.0';
+
+/** Container image, tagged with the release's major.minor line. */
+export const DOCKER_IMAGE = `ghcr.io/talis-fb/typrest:${TYPREST_VERSION.split('.').slice(0, 2).join('.')}`;
+
+/** Name of the Linux release archive attached to the GitHub release. */
+export const RELEASE_ARCHIVE = `typrest-v${TYPREST_VERSION}-x86_64-linux.tar.gz`;
+
+/** Download URL of a release asset. */
+export const releaseAsset = (file: string): string => `${REPO_URL}/releases/download/v${TYPREST_VERSION}/${file}`;
+
 /** Link to a file in the repository on GitHub. */
 export const repoFile = (path: string): string => `${REPO_URL}/blob/${REPO_BRANCH}/${path}`;

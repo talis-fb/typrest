@@ -1,0 +1,124 @@
+---
+title: Integrate with your system
+description: How any application requests PDFs from Typrest over HTTP, and how to handle the answers.
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+Typrest has no SDK because it does not need one. Your application sends one HTTP request with the
+document's data and gets the PDF back in the response. Anything that can make an HTTP request can
+do that: a web backend, a scheduled job, a serverless function, a workflow tool.
+
+<LinkCard
+  title="Client examples"
+  description="Copy a working example in curl, Node, Python, Go, Java, PHP, Ruby, or C#."
+  href="/docs/integrate/clients/"
+/>
+
+## The request
+
+```http
+POST /invoice HTTP/1.1
+Host: 127.0.0.1:8080
+Content-Type: application/json
+
+{"number": "INV-0142", "customer": {"name": "Lumen Robotics"}}
+```
+
+- The **path** is the template's folder inside your templates folder: `templates/invoice/` is
+  `/invoice`, and `templates/letters/welcome/` is `/letters/welcome`.
+- The **body** is the JSON data for one document.
+- The **`Content-Type`** header must be `application/json`.
+
+## The answer
+
+When everything is right, the status is `200`, the `Content-Type` is `application/pdf`, and the
+body is the PDF file. What you do with it is up to you:
+
+- save it to disk or to object storage;
+- send it on to the browser as a download;
+- attach it to an email;
+- hand it to a printer queue.
+
+<Aside type="tip">
+  To make a browser download the file with a name of your choosing, add your own
+  `Content-Disposition` header when you pass the PDF on, for example
+  `attachment; filename="invoice-0142.pdf"`.
+</Aside>
+
+## When something is wrong
+
+Every error is a JSON object with the same shape: an `error` code your program can test, and a
+`message` a person can read.
+
+```json
+{
+  "error": "schema_validation_failed",
+  "message": "Payload validation failed",
+  "violations": [{ "field": "$.customer.name", "issue": "required field missing" }]
+}
+```
+
+| Status | `error` | What it means | What to do |
+|---|---|---|---|
+| `400` | `invalid_json` | The body is not valid JSON, or the `Content-Type` is missing | Fix the request |
+| `400` | `invalid_template_id` | The path is not a valid template name | Fix the address |
+| `404` | `template_not_found` | No template lives at that path | Check the template name |
+| `413` | `payload_too_large` | The body is larger than the server allows (2 MiB by default) | Send less data, or raise the limit |
+| `422` | `schema_validation_failed` | The data does not match the template's schema; `violations` lists each field | Fix the data |
+| `500` | `compilation_failed` | The template failed with this data; `diagnostics` says where | Fix the template or the data |
+| `500` | `render_execution_failed` | Something unexpected went wrong while rendering | Report it; the server keeps running |
+| `503` | `render_capacity_exceeded` | The server is busy | Wait and try again |
+
+Test the `error` code, not the message text: codes stay the same between versions.
+
+## Handle a busy server
+
+Typrest renders a limited number of documents at once and lets a few more wait in line. When the
+line is full, it answers `503` straight away with a `Retry-After: 1` header instead of making
+everyone slow.
+
+A well-behaved client waits about a second and tries again, a few times at most:
+
+```js
+async function renderPdf(url, data, attempts = 3) {
+  for (let attempt = 1; ; attempt++) {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (response.ok) return Buffer.from(await response.arrayBuffer());
+    if (response.status !== 503 || attempt === attempts) {
+      const problem = await response.json();
+      throw new Error(`${response.status} ${problem.error}: ${problem.message}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
+  }
+}
+```
+
+You set the limits in [`typrest.toml`](/docs/reference/configuration/#server-limits).
+
+## Good habits
+
+- **Set a timeout.** Most documents render in a fraction of a second; a timeout of 10 to 30
+  seconds protects you from surprises.
+- **Keep Typrest close.** Run it on the same machine or private network as the applications that
+  call it. It has no login, so it should not be reachable from the internet. See
+  [Run in production](/docs/deploy/).
+- **Send only what the document needs.** Build a small JSON object for the document instead of
+  passing along whole database records.
+- **Format in the template.** Send raw numbers and dates, and let the template decide how they
+  look. One template can then serve several systems.
+- **Check that it is up.** `GET /_healthz` answers `{"status":"ok"}` whenever Typrest is running.
+
+## Common setups
+
+- **A web application** calls Typrest when a user clicks "Download invoice" and streams the PDF
+  to the browser.
+- **A background job** renders a month of statements overnight and stores them.
+- **Several services** in different languages share one Typrest and one set of templates, so every
+  document carries the same brand.
+
+The full list of routes and answers is in the [HTTP API reference](/docs/reference/http-api/).

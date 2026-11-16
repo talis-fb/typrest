@@ -1,0 +1,48 @@
+---
+title: Roadmap
+description: What Typrest does today, what is being worked on, and what is deliberately left for later.
+---
+
+import { REPO_URL, repoFile } from '~/config';
+
+This is a summary. The <a href={repoFile('ROADMAP.md')}>roadmap in the repository</a> is the
+detailed, current list.
+
+## Available today
+
+- **Templates from a folder**, with addresses taken from folder names, shared files, images,
+  fonts, and Typst Universe packages.
+- **Data validation** with `schema.yml`: types, required fields, defaults, allowed values, nested
+  objects and lists.
+- **Checks before serving**: every template is rendered at startup and by `typrest check`.
+- **A plain HTTP API** with PDFs out and structured errors.
+- **Live reload** while writing templates, keeping the last working version when an edit breaks.
+- **The Web UI** for filling in data and previewing documents.
+- **Production basics**: limits on concurrent work, a request size limit, a health check, JSON
+  logs, and graceful shutdown.
+- **A Docker image** and a ready-made Linux program.
+
+## Being worked on
+
+- The first public release and the launch of this website.
+- Faster startup for projects with many templates, by checking templates in parallel.
+- Steadier memory use on long-running servers.
+- Better default limits, based on measurements.
+- More ways to install: programs for macOS and ARM machines, a Homebrew formula, and crates.io.
+
+## Later, if real use calls for it
+
+- **A template store**: publishing templates separately from the server, with versions, tags, and
+  rollback.
+
+## Not planned for now
+
+- Logins and access control inside Typrest
+- Client libraries (the API is one HTTP call)
+- Cloud storage for templates or PDFs
+- Package sources other than Typst Universe
+
+## Have a say
+
+Ideas and bug reports are welcome on <a href={`${REPO_URL}/issues`}>GitHub</a>. See
+<a href={repoFile('CONTRIBUTING.md')}>Contributing</a> for how to take part.
